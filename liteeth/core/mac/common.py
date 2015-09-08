@@ -1,5 +1,5 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.crossbar import LiteEthCrossbar
+from liteeth.common import *
+from liteeth.crossbar import LiteEthCrossbar
 
 
 class LiteEthMACDepacketizer(Depacketizer):

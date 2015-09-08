@@ -1,9 +1,9 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.core.mac import LiteEthMAC
-from misoclib.com.liteeth.core.arp import LiteEthARP
-from misoclib.com.liteeth.core.ip import LiteEthIP
-from misoclib.com.liteeth.core.udp import LiteEthUDP
-from misoclib.com.liteeth.core.icmp import LiteEthICMP
+from liteeth.common import *
+from liteeth.core.mac import LiteEthMAC
+from liteeth.core.arp import LiteEthARP
+from liteeth.core.ip import LiteEthIP
+from liteeth.core.udp import LiteEthUDP
+from liteeth.core.icmp import LiteEthICMP
 
 
 class LiteEthIPCore(Module, AutoCSR):

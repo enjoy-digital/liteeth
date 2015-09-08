@@ -1,4 +1,4 @@
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 class LiteEthMACGap(Module):
     def __init__(self, dw, ack_on_gap=False):

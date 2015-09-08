@@ -1,5 +1,5 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.core.udp.crossbar import *
+from liteeth.common import *
+from liteeth.core.udp.crossbar import *
 
 
 class LiteEthUDPPacketizer(Packetizer):

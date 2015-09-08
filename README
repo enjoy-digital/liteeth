@@ -66,7 +66,7 @@ devel [AT] lists.m-labs.hk.
   git clone https://github.com/m-labs/misoc --recursive
 
 4. Build and load UDP loopback design (only for KC705 for now):
-  go to misoclib/com/liteeth/example_designs/
+  go to ./example_designs/
   run ./make.py -t udp all load-bitstream
 
 5. Test design (only for KC705 for now):
@@ -83,7 +83,7 @@ devel [AT] lists.m-labs.hk.
   run ./make.py test_etherbone
 
 [> Simulations:
-  Simulations are available in misoclib/com/liteeth/test/:
+  Simulations are available in ./test/:
     - mac_core_tb
     - mac_wishbone_tb
     - arp_tb
@@ -91,7 +91,7 @@ devel [AT] lists.m-labs.hk.
     - icmp_tb
     - udp_tb
   All ethernet layers have their own model tested against real ethernet dumps (dumps.py)
-  To run a simulation, move to misoclib/com/liteeth/test/ and run:
+  To run a simulation, move to ./test/ and run:
     make simulation_name
 
 [> Tests :

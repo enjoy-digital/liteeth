@@ -1,4 +1,4 @@
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 from migen.bank.description import *
 from migen.bank.eventmanager import *

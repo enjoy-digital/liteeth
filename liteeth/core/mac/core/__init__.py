@@ -1,7 +1,7 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.core.mac.core import gap, preamble, crc, padding, last_be
-from misoclib.com.liteeth.phy.sim import LiteEthPHYSim
-from misoclib.com.liteeth.phy.mii import LiteEthPHYMII
+from liteeth.common import *
+from liteeth.core.mac.core import gap, preamble, crc, padding, last_be
+from liteeth.phy.sim import LiteEthPHYSim
+from liteeth.phy.mii import LiteEthPHYMII
 
 
 class LiteEthMACCore(Module, AutoCSR):

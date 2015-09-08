@@ -1,5 +1,5 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.generic import *
+from liteeth.common import *
+from liteeth.generic import *
 
 
 class LiteEthPHYLoopbackCRG(Module, AutoCSR):

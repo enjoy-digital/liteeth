@@ -16,7 +16,9 @@ from mibuild import tools
 from mibuild.xilinx.common import *
 
 from misoclib.soc import cpuif
-from misoclib.com.liteeth.common import *
+liteeth_path = "../"
+sys.path.append(liteeth_path) # XXX
+from liteeth.common import *
 
 
 def _import(default, name):

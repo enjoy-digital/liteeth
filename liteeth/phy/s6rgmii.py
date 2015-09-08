@@ -4,7 +4,7 @@ from migen.genlib.io import DDROutput
 from migen.genlib.misc import WaitTimer
 from migen.genlib.fsm import FSM, NextState
 
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 
 class LiteEthPHYRGMIITX(Module):

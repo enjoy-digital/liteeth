@@ -1,9 +1,9 @@
 import math
 
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.test.common import *
+from liteeth.common import *
+from liteeth.test.common import *
 
-from misoclib.com.liteeth.test.model import ip
+from liteeth.test.model import ip
 
 
 def print_icmp(s):
@@ -84,9 +84,9 @@ class ICMP(Module):
         pass
 
 if __name__ == "__main__":
-    from misoclib.com.liteeth.test.model.dumps import *
-    from misoclib.com.liteeth.test.model.mac import *
-    from misoclib.com.liteeth.test.model.ip import *
+    from liteeth.test.model.dumps import *
+    from liteeth.test.model.mac import *
+    from liteeth.test.model.ip import *
     errors = 0
     # ICMP packet
     packet = MACPacket(ping_request)

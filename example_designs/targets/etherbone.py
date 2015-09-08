@@ -2,10 +2,10 @@ from misoclib.tools.litescope.common import *
 from misoclib.tools.litescope.frontend.la import LiteScopeLA
 from misoclib.tools.litescope.core.port import LiteScopeTerm
 
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 from targets.base import BaseSoC
-from misoclib.com.liteeth.frontend.etherbone import LiteEthEtherbone
+from liteeth.frontend.etherbone import LiteEthEtherbone
 
 
 class EtherboneSoC(BaseSoC):

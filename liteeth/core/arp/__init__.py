@@ -1,4 +1,4 @@
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 _arp_table_layout = [
         ("reply", 1),

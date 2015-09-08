@@ -1,6 +1,6 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.core.ip.checksum import *
-from misoclib.com.liteeth.core.ip.crossbar import *
+from liteeth.common import *
+from liteeth.core.ip.checksum import *
+from liteeth.core.ip.crossbar import *
 
 
 class LiteEthIPV4Packetizer(Packetizer):

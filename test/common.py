@@ -5,7 +5,7 @@ from migen.fhdl.std import *
 from migen.flow.actor import Sink, Source
 from migen.genlib.record import *
 
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 
 def print_with_prefix(s, prefix=""):

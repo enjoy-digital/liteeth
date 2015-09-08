@@ -1,6 +1,6 @@
 from collections import OrderedDict
 
-from misoclib.com.liteeth.common import *
+from liteeth.common import *
 
 class LiteEthCrossbar(Module):
     def __init__(self, master_port, dispatch_param):

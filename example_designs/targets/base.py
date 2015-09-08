@@ -10,9 +10,9 @@ from misoclib.tools.litescope.core.port import LiteScopeTerm
 
 from misoclib.com.uart.bridge import UARTWishboneBridge
 
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.phy import LiteEthPHY
-from misoclib.com.liteeth.core import LiteEthUDPIPCore
+from liteeth.common import *
+from liteeth.phy import LiteEthPHY
+from liteeth.core import LiteEthUDPIPCore
 
 
 class BaseSoC(SoC):

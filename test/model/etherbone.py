@@ -1,10 +1,10 @@
 import math
 import copy
 
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.test.common import *
+from liteeth.common import *
+from liteeth.test.common import *
 
-from misoclib.com.liteeth.test.model import udp
+from liteeth.test.model import udp
 
 
 def print_etherbone(s):

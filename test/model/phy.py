@@ -1,5 +1,5 @@
-from misoclib.com.liteeth.common import *
-from misoclib.com.liteeth.test.common import *
+from liteeth.common import *
+from liteeth.test.common import *
 
 
 def print_phy(s):
