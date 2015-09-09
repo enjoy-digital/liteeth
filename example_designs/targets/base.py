@@ -4,9 +4,9 @@ from migen.fhdl.specials import Keep
 from mibuild.xilinx.vivado import XilinxVivadoToolchain
 
 from misoclib.soc import SoC
-from misoclib.tools.litescope.common import *
-from misoclib.tools.litescope.frontend.la import LiteScopeLA
-from misoclib.tools.litescope.core.port import LiteScopeTerm
+from litescope.common import *
+from litescope.frontend.la import LiteScopeLA
+from litescope.core.port import LiteScopeTerm
 
 from misoclib.com.uart.bridge import UARTWishboneBridge
 
