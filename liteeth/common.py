@@ -5,12 +5,39 @@ from migen.fhdl.std import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.record import *
 from migen.genlib.fsm import FSM, NextState
-from migen.genlib.misc import chooser, reverse_bytes, FlipFlop, Counter, WaitTimer
+from migen.genlib.misc import chooser, WaitTimer
 from migen.flow.actor import *
 from migen.actorlib.structuring import Converter, Pipeline
 from migen.actorlib.fifo import SyncFIFO, AsyncFIFO
 from migen.actorlib.packet import *
 from migen.bank.description import *
+
+
+def reverse_bytes(signal):
+    n = (flen(signal)+7)//8
+    r = []
+    for i in reversed(range(n)):
+        r.append(signal[i*8:min((i+1)*8, flen(signal))])
+    return Cat(*r)
+
+
+@ResetInserter()
+@CEInserter()
+class FlipFlop(Module):
+    def __init__(self, *args, **kwargs):
+        self.d = Signal(*args, **kwargs)
+        self.q = Signal(*args, **kwargs)
+        self.sync += self.q.eq(self.d)
+
+
+@ResetInserter()
+@CEInserter()
+class Counter(Module):
+    def __init__(self, *args, increment=1, **kwargs):
+        self.value = Signal(*args, **kwargs)
+        self.width = flen(self.value)
+        self.sync += self.value.eq(self.value+increment)
+
 
 class Port:
     def connect(self, port):
