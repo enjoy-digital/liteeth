@@ -1,5 +1,6 @@
 from liteeth.common import *
-from liteeth.test.common import *
+
+from test.common import *
 
 
 def print_phy(s):

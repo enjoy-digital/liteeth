@@ -1,7 +1,7 @@
-LEDIR = ../../
+COREDIR = ../
 PYTHON = python3
 
-CMD = PYTHONPATH=$(LEDIR) $(PYTHON)
+CMD = PYTHONPATH=$(COREDIR) $(PYTHON)
 
 model_tb:
 	$(CMD) ./model/mac.py
@@ -37,3 +37,5 @@ example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t udp -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t etherbone -p kc705 -Ob run False build-bitstream
 	cd ../example_designs && $(PYTHON) make.py -t tty -p kc705 -Ob run False build-bitstream
+
+all: model_tb mac_core_tb arp_tb ip_tb udp_tb icmp_tb etherbone_tb example_designs

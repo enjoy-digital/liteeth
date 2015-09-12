@@ -1,7 +1,3 @@
-from litescope.common import *
-from litescope.frontend.la import LiteScopeLA
-from litescope.core.port import LiteScopeTerm
-
 from liteeth.common import *
 
 from targets.base import BaseSoC
@@ -24,6 +20,8 @@ class EtherboneSoCDevel(EtherboneSoC):
     }
     csr_map.update(EtherboneSoC.csr_map)
     def __init__(self, platform):
+        from litescope.frontend.la import LiteScopeLA
+        from litescope.core.port import LiteScopeTerm
         EtherboneSoC.__init__(self, platform)
         debug = (
             # mmap stream from HOST

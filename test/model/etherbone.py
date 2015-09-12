@@ -2,9 +2,9 @@ import math
 import copy
 
 from liteeth.common import *
-from liteeth.test.common import *
 
-from liteeth.test.model import udp
+from test.common import *
+from test.model import udp
 
 
 def print_etherbone(s):

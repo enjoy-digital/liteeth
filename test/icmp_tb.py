@@ -6,12 +6,12 @@ from migen.sim.generic import run_simulation
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore
 
-from liteeth.test.common import *
-from liteeth.test.model.dumps import *
-from liteeth.test.model.mac import *
-from liteeth.test.model.ip import *
-from liteeth.test.model.icmp import *
-from liteeth.test.model import phy, mac, arp, ip, icmp
+from test.common import *
+from test.model.dumps import *
+from test.model.mac import *
+from test.model.ip import *
+from test.model.icmp import *
+from test.model import phy, mac, arp, ip, icmp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd

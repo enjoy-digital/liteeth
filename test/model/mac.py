@@ -2,7 +2,8 @@ import math
 import binascii
 
 from liteeth.common import *
-from liteeth.test.common import *
+
+from test.common import *
 
 
 def print_mac(s):
@@ -134,7 +135,7 @@ class MAC(Module):
                 raise ValueError  # XXX handle this properly
 
 if __name__ == "__main__":
-    from liteeth.test.model.dumps import *
+    from test.model.dumps import *
     errors = 0
     packet = MACPacket(arp_request)
     packet.decode_remove_header()

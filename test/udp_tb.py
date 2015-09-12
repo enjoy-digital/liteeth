@@ -6,8 +6,8 @@ from migen.sim.generic import run_simulation
 from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 
-from liteeth.test.common import *
-from liteeth.test.model import phy, mac, arp, ip, udp
+from test.common import *
+from test.model import phy, mac, arp, ip, udp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd

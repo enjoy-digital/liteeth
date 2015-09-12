@@ -1,7 +1,3 @@
-from litescope.common import *
-from litescope.frontend.la import LiteScopeLA
-from litescope.core.port import LiteScopeTerm
-
 from liteeth.common import *
 
 from targets.base import BaseSoC
@@ -35,6 +31,8 @@ class UDPSoCDevel(UDPSoC):
     }
     csr_map.update(UDPSoC.csr_map)
     def __init__(self, platform):
+        from litescope.frontend.la import LiteScopeLA
+        from litescope.core.port import LiteScopeTerm
         UDPSoC.__init__(self, platform)
         debug = (
             self.loopback_8.sink.stb,

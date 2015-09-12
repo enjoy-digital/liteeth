@@ -4,10 +4,6 @@ from migen.fhdl.specials import Keep
 from mibuild.xilinx.vivado import XilinxVivadoToolchain
 
 from misoclib.soc import SoC
-from litescope.common import *
-from litescope.frontend.la import LiteScopeLA
-from litescope.core.port import LiteScopeTerm
-
 from misoclib.com.uart.bridge import UARTWishboneBridge
 
 from liteeth.common import *
@@ -67,6 +63,8 @@ class BaseSoCDevel(BaseSoC):
     }
     csr_map.update(BaseSoC.csr_map)
     def __init__(self, platform):
+        from litescope.frontend.la import LiteScopeLA
+        from litescope.core.port import LiteScopeTerm
         BaseSoC.__init__(self, platform)
 
         self.core_icmp_rx_fsm_state = Signal(4)

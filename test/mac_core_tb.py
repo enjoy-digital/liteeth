@@ -6,8 +6,8 @@ from migen.sim.generic import run_simulation
 from liteeth.common import *
 from liteeth.core.mac.core import LiteEthMACCore
 
-from liteeth.test.common import *
-from liteeth.test.model import phy, mac
+from test.common import *
+from test.model import phy, mac
 
 
 class TB(Module):
