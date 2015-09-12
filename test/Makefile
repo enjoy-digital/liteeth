@@ -31,3 +31,9 @@ icmp_tb:
 
 etherbone_tb:
 	$(CMD) etherbone_tb.py
+
+example_designs:
+	cd ../example_designs && $(PYTHON) make.py -t base -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t udp -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t etherbone -p kc705 -Ob run False build-bitstream
+	cd ../example_designs && $(PYTHON) make.py -t tty -p kc705 -Ob run False build-bitstream
