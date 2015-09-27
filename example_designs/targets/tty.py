@@ -16,11 +16,11 @@ class TTYSoC(BaseSoC):
 
 class TTYSoCDevel(TTYSoC):
     csr_map = {
-        "la":            20
+        "logic_analyzer":            20
     }
     csr_map.update(TTYSoC.csr_map)
     def __init__(self, platform):
-        from litescope.frontend.la import LiteScopeLA
+        from litescope.frontend.logic_analyzer import LiteScopeLogicAnalyzer
         from litescope.core.port import LiteScopeTerm
         TTYSoC.__init__(self, platform)
         debug = (
@@ -32,10 +32,10 @@ class TTYSoCDevel(TTYSoC):
             self.tty.source.ack,
             self.tty.source.data
         )
-        self.submodules.la = LiteScopeLA(debug, 4096)
-        self.la.trigger.add_port(LiteScopeTerm(self.la.dw))
+        self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 4096)
+        self.logic_analyzer.trigger.add_port(LiteScopeTerm(self.logic_analyzer.dw))
 
     def do_exit(self, vns):
-        self.la.export(vns, "test/la.csv")
+        self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
 
 default_subtarget = TTYSoC
