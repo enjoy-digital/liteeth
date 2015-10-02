@@ -1,5 +1,6 @@
 from liteeth.common import *
 
+
 _arp_table_layout = [
         ("reply", 1),
         ("request", 1),
@@ -7,6 +8,7 @@ _arp_table_layout = [
         ("mac_address", 48)
     ]
 
+# arp tx
 
 class LiteEthARPPacketizer(Packetizer):
     def __init__(self):
@@ -72,6 +74,7 @@ class LiteEthARPTX(Module):
             )
         )
 
+# arp rx
 
 class LiteEthARPDepacketizer(Depacketizer):
     def __init__(self):
@@ -134,6 +137,7 @@ class LiteEthARPRX(Module):
             )
         )
 
+# arp table
 
 class LiteEthARPTable(Module):
     def __init__(self, clk_freq, max_requests=8):
@@ -251,6 +255,7 @@ class LiteEthARPTable(Module):
             )
         )
 
+# arp
 
 class LiteEthARP(Module):
     def __init__(self, mac, mac_address, ip_address, clk_freq):

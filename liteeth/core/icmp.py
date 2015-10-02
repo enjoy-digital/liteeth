@@ -1,32 +1,32 @@
 from liteeth.common import *
-from liteeth.core.udp.crossbar import *
 
+# icmp tx
 
-class LiteEthUDPPacketizer(Packetizer):
+class LiteEthICMPPacketizer(Packetizer):
     def __init__(self):
         Packetizer.__init__(self,
-            eth_udp_description(8),
+            eth_icmp_description(8),
             eth_ipv4_user_description(8),
-            udp_header)
+            icmp_header)
 
 
-class LiteEthUDPTX(Module):
+class LiteEthICMPTX(Module):
     def __init__(self, ip_address):
-        self.sink = sink = Sink(eth_udp_user_description(8))
+        self.sink = sink = Sink(eth_icmp_user_description(8))
         self.source = source = Source(eth_ipv4_user_description(8))
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthUDPPacketizer()
+        self.submodules.packetizer = packetizer = LiteEthICMPPacketizer()
         self.comb += [
             packetizer.sink.stb.eq(sink.stb),
             packetizer.sink.sop.eq(sink.sop),
             packetizer.sink.eop.eq(sink.eop),
             sink.ack.eq(packetizer.sink.ack),
-            packetizer.sink.src_port.eq(sink.src_port),
-            packetizer.sink.dst_port.eq(sink.dst_port),
-            packetizer.sink.length.eq(sink.length + udp_header.length),
-            packetizer.sink.checksum.eq(0),  # Disabled (MAC CRC is enough)
+            packetizer.sink.msgtype.eq(sink.msgtype),
+            packetizer.sink.code.eq(sink.code),
+            packetizer.sink.checksum.eq(sink.checksum),
+            packetizer.sink.quench.eq(sink.quench),
             packetizer.sink.data.eq(sink.data)
         ]
 
@@ -40,31 +40,32 @@ class LiteEthUDPTX(Module):
         )
         fsm.act("SEND",
             Record.connect(packetizer.source, source),
-            source.length.eq(packetizer.sink.length),
-            source.protocol.eq(udp_protocol),
+            source.length.eq(sink.length + icmp_header.length),
+            source.protocol.eq(icmp_protocol),
             source.ip_address.eq(sink.ip_address),
             If(source.stb & source.eop & source.ack,
                 NextState("IDLE")
             )
         )
 
+# icmp rx
 
-class LiteEthUDPDepacketizer(Depacketizer):
+class LiteEthICMPDepacketizer(Depacketizer):
     def __init__(self):
         Depacketizer.__init__(self,
             eth_ipv4_user_description(8),
-            eth_udp_description(8),
-            udp_header)
+            eth_icmp_description(8),
+            icmp_header)
 
 
-class LiteEthUDPRX(Module):
+class LiteEthICMPRX(Module):
     def __init__(self, ip_address):
         self.sink = sink = Sink(eth_ipv4_user_description(8))
-        self.source = source = Source(eth_udp_user_description(8))
+        self.source = source = Source(eth_icmp_user_description(8))
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthUDPDepacketizer()
+        self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer()
         self.comb += Record.connect(sink, depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -78,9 +79,8 @@ class LiteEthUDPRX(Module):
         valid = Signal()
         self.sync += valid.eq(
             depacketizer.source.stb &
-            (sink.protocol == udp_protocol)
+            (sink.protocol == icmp_protocol)
         )
-
         fsm.act("CHECK",
             If(valid,
                 NextState("PRESENT")
@@ -91,10 +91,12 @@ class LiteEthUDPRX(Module):
         self.comb += [
             source.sop.eq(depacketizer.source.sop),
             source.eop.eq(depacketizer.source.eop),
-            source.src_port.eq(depacketizer.source.src_port),
-            source.dst_port.eq(depacketizer.source.dst_port),
+            source.msgtype.eq(depacketizer.source.msgtype),
+            source.code.eq(depacketizer.source.code),
+            source.checksum.eq(depacketizer.source.checksum),
+            source.quench.eq(depacketizer.source.quench),
             source.ip_address.eq(sink.ip_address),
-            source.length.eq(depacketizer.source.length - udp_header.length),
+            source.length.eq(sink.length - icmp_header.length),
             source.data.eq(depacketizer.source.data),
             source.error.eq(depacketizer.source.error)
         ]
@@ -114,18 +116,36 @@ class LiteEthUDPRX(Module):
             )
         )
 
+# icmp echo
 
-class LiteEthUDP(Module):
+class LiteEthICMPEcho(Module):
+    def __init__(self):
+        self.sink = sink = Sink(eth_icmp_user_description(8))
+        self.source = source = Source(eth_icmp_user_description(8))
+
+        # # #
+
+        self.submodules.buffer = Buffer(eth_icmp_user_description(8), 128, 2)
+        self.comb += [
+            Record.connect(sink, self.buffer.sink),
+            Record.connect(self.buffer.source, source),
+            self.source.msgtype.eq(0x0),
+            self.source.checksum.eq(~((~self.buffer.source.checksum)-0x0800))
+        ]
+
+# icmp
+
+class LiteEthICMP(Module):
     def __init__(self, ip, ip_address):
-        self.submodules.tx = tx = LiteEthUDPTX(ip_address)
-        self.submodules.rx = rx = LiteEthUDPRX(ip_address)
-        ip_port = ip.crossbar.get_port(udp_protocol)
+        self.submodules.tx = tx = LiteEthICMPTX(ip_address)
+        self.submodules.rx = rx = LiteEthICMPRX(ip_address)
+        self.submodules.echo = echo = LiteEthICMPEcho()
+        self.comb += [
+            Record.connect(rx.source, echo.sink),
+            Record.connect(echo.source, tx.sink)
+        ]
+        ip_port = ip.crossbar.get_port(icmp_protocol)
         self.comb += [
             Record.connect(tx.source, ip_port.sink),
             Record.connect(ip_port.source, rx.sink)
-        ]
-        self.submodules.crossbar = crossbar = LiteEthUDPCrossbar()
-        self.comb += [
-            Record.connect(crossbar.master.source, tx.sink),
-            Record.connect(rx.source, crossbar.master.sink)
         ]
