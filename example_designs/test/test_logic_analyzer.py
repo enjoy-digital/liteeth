@@ -3,7 +3,7 @@ from litescope.software.driver.logic_analyzer import LiteScopeLogicAnalyzerDrive
 
 
 def main(wb):
-    logic_analyzer = LiteScopeLADriver(wb.regs, "logic_analyzer", debug=True)
+    logic_analyzer = LiteScopeLogicAnalyzerDriver(wb.regs, "logic_analyzer", debug=True)
 
     wb.open()
     regs = wb.regs

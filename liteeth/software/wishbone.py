@@ -1,8 +1,7 @@
 import socket
 
 from litescope.software.driver.reg import *
-
-from liteeth.test.model.etherbone import *
+from liteeth.software.etherbone import *
 
 
 class LiteEthWishboneBridgeDriver:
