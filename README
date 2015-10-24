@@ -3,14 +3,14 @@
               / /__/ / __/ -_) _// __/ _ \
              /____/_/\__/\__/___/\__/_//_/
 
-        Copyright 2012-2015 / EnjoyDigital / M-Labs Ltd
+           Copyright 2012-2015 / EnjoyDigital
 
        A small footprint and configurable Ethernet core
          with UDP/IP hw stack and Etherbone frontend
                   powered by Migen
 
 [> Doc
----------
+-------
 HTML : www.enjoy-digital.fr/liteeth/
 PDF  : www.enjoy-digital.fr/liteeth.pdf
 
@@ -18,7 +18,7 @@ PDF  : www.enjoy-digital.fr/liteeth.pdf
 ---------
 LiteEth provides a small footprint and configurable Ethernet core.
 
-LiteEth is part of MiSoC libraries whose aims are to lower entry level of
+LiteEth is part of EnjoyDigital's libraries whose aims are to lower entry level of
 complex FPGA cores by providing simple, elegant and efficient implementations
 ofcomponents used in today's SoC such as Ethernet, SATA, PCIe, SDRAM Controller...
 
@@ -36,15 +36,26 @@ LiteEth can be used as MiSoC library or can be integrated with your standard
 design flow by generating the verilog rtl that you will use as a standard core.
 
 [> Features
------------
-- Ethernet MAC with various interfaces and various PHYs (GMII, MII, Loopback)
+------------
+- Ethernet MAC with various interfaces and various PHYs (GMII, MII, RGMII, etc)
 - Hardware UDP/IP stack with ARP and ICMP
+- lwIP and uIP TCP/IP stacks ported and tested on lm32 and mor1kx
+
+[> Proven
+----------
+LiteEth is already used by commercial and open-source designs:
+- MiSoC: http://m-labs.hk/gateware.html
+- ARTIQ: http://m-labs.hk/artiq/index.html
+- HDMI2USB: http://hdmi2usb.tv/home/
+- and others commercial designs...
 
 [> Possible improvements
 -------------------------
+- optimize ressources on HW ICMP and Etherbone (parameters buffering)
 - add standardized interfaces (AXI, Avalon-ST)
 - add DMA interface to MAC
 - add RGMII/SGMII PHYs
+- add more documentation
 - ... See below Support and consulting :)
 
 If you want to support these features, please contact us at florent [AT]
@@ -53,7 +64,7 @@ devel [AT] lists.m-labs.hk.
 
 
 [> Getting started
-------------------
+-------------------
 1. Install Python3 and your vendor's software
 
 2. Obtain Migen and install it:
@@ -82,7 +93,8 @@ devel [AT] lists.m-labs.hk.
   go to [..]/example_designs/test/
   run ./make.py test_etherbone
 
-[> Simulations:
+[> Simulations
+---------------
   Simulations are available in ./test/:
     - mac_core_tb
     - mac_wishbone_tb
@@ -91,10 +103,12 @@ devel [AT] lists.m-labs.hk.
     - icmp_tb
     - udp_tb
   All ethernet layers have their own model tested against real ethernet dumps (dumps.py)
-  To run a simulation, move to ./test/ and run:
-    make simulation_name
+  To run a simulation:
+    go to ./test/
+    make <simulation_name>
 
-[> Tests :
+[> Tests
+---------
   An Etherbone example with Wishbone SRAM and an UDP loopback example are provided.
   Please goto to Getting Started section to see how to run the tests.
 
