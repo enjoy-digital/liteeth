@@ -194,8 +194,9 @@ class LiteEthEtherboneRecordReceiver(Module):
         self.submodules += fifo
         self.comb += Record.connect(sink, fifo.sink)
 
-        self.submodules.base_addr = base_addr = FlipFlop(32)
-        self.comb += base_addr.d.eq(fifo.source.data)
+        base_addr = Signal(32)
+        base_addr_update = Signal()
+        self.sync += If(base_addr_update, base_addr.eq(fifo.source.data))
 
         self.submodules.counter = counter = Counter(max=512)
 
@@ -204,7 +205,7 @@ class LiteEthEtherboneRecordReceiver(Module):
             fifo.source.ack.eq(1),
             counter.reset.eq(1),
             If(fifo.source.stb & fifo.source.sop,
-                base_addr.ce.eq(1),
+                base_addr_update.eq(1),
                 If(fifo.source.wcount,
                     NextState("RECEIVE_WRITES")
                 ).Elif(fifo.source.rcount,
@@ -218,7 +219,7 @@ class LiteEthEtherboneRecordReceiver(Module):
             source.eop.eq(counter.value == fifo.source.wcount-1),
             source.count.eq(fifo.source.wcount),
             source.be.eq(fifo.source.byte_enable),
-            source.addr.eq(base_addr.q[2:] + counter.value),
+            source.addr.eq(base_addr[2:] + counter.value),
             source.we.eq(1),
             source.data.eq(fifo.source.data),
             fifo.source.ack.eq(source.ack),
@@ -236,7 +237,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         fsm.act("RECEIVE_BASE_RET_ADDR",
             counter.reset.eq(1),
             If(fifo.source.stb & fifo.source.sop,
-                base_addr.ce.eq(1),
+                base_addr_update.eq(1),
                 NextState("RECEIVE_READS")
             )
         )
@@ -245,7 +246,7 @@ class LiteEthEtherboneRecordReceiver(Module):
             source.sop.eq(counter.value == 0),
             source.eop.eq(counter.value == fifo.source.rcount-1),
             source.count.eq(fifo.source.rcount),
-            source.base_addr.eq(base_addr.q),
+            source.base_addr.eq(base_addr),
             source.addr.eq(fifo.source.data[2:]),
             fifo.source.ack.eq(source.ack),
             If(source.stb & source.ack,
@@ -360,8 +361,9 @@ class LiteEthEtherboneWishboneMaster(Module):
 
         # # #
 
-        self.submodules.data = data = FlipFlop(32)
-        self.comb += data.d.eq(bus.dat_r)
+        data = Signal(32)
+        data_update = Signal()
+        self.sync += If(data_update, data.eq(bus.dat_r))
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -395,7 +397,7 @@ class LiteEthEtherboneWishboneMaster(Module):
             bus.stb.eq(sink.stb),
             bus.cyc.eq(1),
             If(bus.stb & bus.ack,
-                data.ce.eq(1),
+                data_update.eq(1),
                 NextState("SEND_DATA")
             )
         )
@@ -408,7 +410,7 @@ class LiteEthEtherboneWishboneMaster(Module):
             source.count.eq(sink.count),
             source.be.eq(sink.be),
             source.we.eq(1),
-            source.data.eq(data.q),
+            source.data.eq(data),
             If(source.stb & source.ack,
                 sink.ack.eq(1),
                 If(source.eop,

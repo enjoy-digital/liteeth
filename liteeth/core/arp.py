@@ -150,16 +150,30 @@ class LiteEthARPTable(Module):
 
         # # #
 
+        request_pending = Signal()
+        request_pending_clr = Signal()
+        request_pending_set = Signal()
+        self.sync += \
+            If(request_pending_clr,
+                request_pending.eq(0)
+            ).Elif(request_pending_set,
+                request_pending.eq(1)
+            )
+
+        request_ip_address = Signal(32)
+        request_ip_address_reset = Signal()
+        request_ip_address_update = Signal()
+        self.sync += \
+            If(request_ip_address_reset,
+                request_ip_address.eq(0)
+            ).Elif(request_ip_address_update,
+                request_ip_address.eq(request.ip_address)
+            )
+
         request_timer = WaitTimer(clk_freq//10)
         request_counter = Counter(max=max_requests)
-        request_pending = FlipFlop()
-        request_ip_address = FlipFlop(32)
-        self.submodules += request_timer, request_counter, request_pending, request_ip_address
-        self.comb += [
-            request_timer.wait.eq(request_pending.q & ~request_counter.ce),
-            request_pending.d.eq(1),
-            request_ip_address.d.eq(request.ip_address)
-        ]
+        self.submodules += request_timer, request_counter
+        self.comb += request_timer.wait.eq(request_pending & ~request_counter.ce)
 
         # Note: Store only 1 IP/MAC couple, can be improved with a real
         # table in the future to improve performance when packets are
@@ -177,11 +191,11 @@ class LiteEthARPTable(Module):
             # is lost. This is compensated by the protocol (retries)
             If(sink.stb & sink.request,
                 NextState("SEND_REPLY")
-            ).Elif(sink.stb & sink.reply & request_pending.q,
+            ).Elif(sink.stb & sink.reply & request_pending,
                 NextState("UPDATE_TABLE"),
             ).Elif(request_counter.value == max_requests-1,
                 NextState("PRESENT_RESPONSE")
-            ).Elif(request.stb | (request_pending.q & request_timer.done),
+            ).Elif(request.stb | (request_pending & request_timer.done),
                 NextState("CHECK_TABLE")
             )
         )
@@ -195,7 +209,7 @@ class LiteEthARPTable(Module):
             )
         )
         fsm.act("UPDATE_TABLE",
-            request_pending.reset.eq(1),
+            request_pending_clr.eq(1),
             update.eq(1),
             NextState("CHECK_TABLE")
         )
@@ -213,29 +227,29 @@ class LiteEthARPTable(Module):
         found = Signal()
         fsm.act("CHECK_TABLE",
             If(cached_valid,
-                If(request_ip_address.q == cached_ip_address,
-                    request_ip_address.reset.eq(1),
+                If(request_ip_address == cached_ip_address,
+                    request_ip_address_reset.eq(1),
                     NextState("PRESENT_RESPONSE"),
                 ).Elif(request.ip_address == cached_ip_address,
                     request.ack.eq(request.stb),
                     NextState("PRESENT_RESPONSE"),
                 ).Else(
-                    request_ip_address.ce.eq(request.stb),
+                    request_ip_address_update.eq(request.stb),
                     NextState("SEND_REQUEST")
                 )
             ).Else(
-                request_ip_address.ce.eq(request.stb),
+                request_ip_address_update.eq(request.stb),
                 NextState("SEND_REQUEST")
             )
         )
         fsm.act("SEND_REQUEST",
             source.stb.eq(1),
             source.request.eq(1),
-            source.ip_address.eq(request_ip_address.q),
+            source.ip_address.eq(request_ip_address),
             If(source.ack,
                 request_counter.reset.eq(request.stb),
                 request_counter.ce.eq(1),
-                request_pending.ce.eq(1),
+                request_pending_set.eq(1),
                 request.ack.eq(1),
                 NextState("IDLE")
             )
@@ -244,7 +258,7 @@ class LiteEthARPTable(Module):
             If(request_counter == max_requests-1,
                 response.failed.eq(1),
                 request_counter.reset.eq(1),
-                request_pending.reset.eq(1)
+                request_pending_clr.eq(1)
             ),
             response.mac_address.eq(cached_mac_address)
         ]
