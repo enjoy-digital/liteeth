@@ -41,8 +41,8 @@ design flow by generating the verilog rtl that you will use as a standard core.
 - Hardware UDP/IP stack with ARP and ICMP
 - lwIP and uIP TCP/IP stacks ported and tested on lm32 and mor1kx
 
-[> Proven
-----------
+[> FPGA Proven
+---------------
 LiteEth is already used in commercial and open-source designs:
 - MiSoC: http://m-labs.hk/gateware.html
 - ARTIQ: http://m-labs.hk/artiq/index.html
