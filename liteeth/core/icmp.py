@@ -125,6 +125,7 @@ class LiteEthICMPEcho(Module):
 
         # # #
 
+        # TODO: optimize ressources (no need to store parameters as datas)
         self.submodules.buffer = Buffer(eth_icmp_user_description(8), 128, 2)
         self.comb += [
             Record.connect(sink, self.buffer.sink),

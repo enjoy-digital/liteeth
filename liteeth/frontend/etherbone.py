@@ -188,6 +188,7 @@ class LiteEthEtherboneRecordReceiver(Module):
 
         # # #
 
+        # TODO: optimize ressources (no need to store parameters as datas)
         fifo = SyncFIFO(eth_etherbone_record_description(32), buffer_depth,
                         buffered=True)
         self.submodules += fifo
@@ -263,6 +264,7 @@ class LiteEthEtherboneRecordSender(Module):
 
         # # #
 
+        # TODO: optimize ressources (no need to store parameters as datas)
         pbuffer = Buffer(eth_etherbone_mmap_description(32), buffer_depth)
         self.submodules += pbuffer
         self.comb += Record.connect(sink, pbuffer.sink)
