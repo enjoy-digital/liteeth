@@ -1,5 +1,6 @@
 from liteeth.common import *
-from migen.bus import wishbone
+
+from litex.soc.interconnect import wishbone
 
 # etherbone packet
 

@@ -1,31 +1,32 @@
-from migen.bus import wishbone
 from migen.genlib.io import CRG
 from migen.fhdl.specials import Keep
-from mibuild.xilinx.vivado import XilinxVivadoToolchain
 
-from misoclib.soc import SoC
-from misoclib.com.uart.bridge import UARTWishboneBridge
+from litex.build.xilinx.vivado import XilinxVivadoToolchain
+from litex.soc.interconnect import wishbone
+
+from litex.soc.integration.soc_core import SoCCore
+from litex.soc.cores.uart.bridge import UARTWishboneBridge
 
 from liteeth.common import *
 from liteeth.phy import LiteEthPHY
 from liteeth.core import LiteEthUDPIPCore
 
 
-class BaseSoC(SoC):
+class BaseSoC(SoCCore):
     csr_map = {
         "phy":  11,
         "core": 12
     }
-    csr_map.update(SoC.csr_map)
+    csr_map.update(SoCCore.csr_map)
     def __init__(self, platform, clk_freq=166*1000000,
             mac_address=0x10e2d5000000,
             ip_address="192.168.0.42"):
         clk_freq = int((1/(platform.default_clk_period))*1000000000)
-        SoC.__init__(self, platform, clk_freq,
-            cpu_type="none",
-            with_csr=True, csr_data_width=32,
+        SoCCore.__init__(self, platform, clk_freq,
+            cpu_type=None,
+            csr_data_width=32,
             with_uart=False,
-            with_identifier=True,
+            ident="LiteEth Base Design",
             with_timer=False
         )
         self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))

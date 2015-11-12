@@ -46,7 +46,7 @@ class LiteEthPHYMIIRX(Module):
 
         converter = Converter(converter_description(4),
                               converter_description(8))
-        converter = InsertReset(converter)
+        converter = ResetInserter()(converter)
         self.submodules += converter
 
         self.sync += [
@@ -101,6 +101,6 @@ class LiteEthPHYMII(Module, AutoCSR):
     def __init__(self, clock_pads, pads, with_hw_init_reset=True):
         self.dw = 8
         self.submodules.crg = LiteEthPHYMIICRG(clock_pads, pads, with_hw_init_reset)
-        self.submodules.tx = RenameClockDomains(LiteEthPHYMIITX(pads), "eth_tx")
-        self.submodules.rx = RenameClockDomains(LiteEthPHYMIIRX(pads), "eth_rx")
+        self.submodules.tx =  ClockDomainsRenamer("eth_tx")(LiteEthPHYMIITX(pads))
+        self.submodules.rx = ClockDomainsRenamer("eth_tx")(LiteEthPHYMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source

@@ -1,4 +1,7 @@
 from liteeth.common import *
+from functools import reduce
+from operator import xor
+
 
 
 class LiteEthMACCRCEngine(Module):
@@ -67,11 +70,11 @@ class LiteEthMACCRCEngine(Module):
                     xors += [self.last[n]]
                 elif t == "din":
                     xors += [self.data[n]]
-            self.comb += self.next[i].eq(optree("^", xors))
+            self.comb += self.next[i].eq(reduce(xor, xors))
 
 
-@DecorateModule(InsertReset)
-@DecorateModule(InsertCE)
+@ResetInserter()
+@CEInserter()
 class LiteEthMACCRC32(Module):
     """IEEE 802.3 CRC
 
@@ -138,7 +141,7 @@ class LiteEthMACCRCInserter(Module):
 
         # # #
 
-        dw = flen(sink.data)
+        dw = len(sink.data)
         crc = crc_class(dw)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
@@ -219,13 +222,12 @@ class LiteEthMACCRCChecker(Module):
 
         # # #
 
-        dw = flen(sink.data)
+        dw = len(sink.data)
         crc = crc_class(dw)
         self.submodules += crc
         ratio = crc.width//dw
 
-        error = Signal()
-        fifo = InsertReset(SyncFIFO(description, ratio + 1))
+        fifo = ResetInserter()(SyncFIFO(description, ratio + 1))
         self.submodules += fifo
 
         fsm = FSM(reset_state="RESET")

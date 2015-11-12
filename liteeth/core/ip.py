@@ -35,8 +35,8 @@ class LiteEthIPV4Crossbar(LiteEthCrossbar):
 
 # ip checksum
 
-@DecorateModule(InsertReset)
-@DecorateModule(InsertCE)
+@ResetInserter()
+@CEInserter()
 class LiteEthIPV4Checksum(Module):
     def __init__(self, words_per_clock_cycle=1, skip_checksum=False):
         self.header = Signal(ipv4_header.length*8)

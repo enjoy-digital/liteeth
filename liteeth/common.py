@@ -1,23 +1,22 @@
 import math
 from collections import OrderedDict
 
-from migen.fhdl.std import *
+from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.record import *
 from migen.genlib.fsm import FSM, NextState
 from migen.genlib.misc import chooser, WaitTimer
-from migen.flow.actor import *
-from migen.actorlib.structuring import Converter, Pipeline
-from migen.actorlib.fifo import SyncFIFO, AsyncFIFO
-from migen.actorlib.packet import *
-from migen.bank.description import *
+
+from litex.soc.interconnect.stream import *
+from litex.soc.interconnect.packet import *
+from litex.soc.interconnect.csr import *
 
 
 def reverse_bytes(signal):
-    n = (flen(signal)+7)//8
+    n = (len(signal)+7)//8
     r = []
     for i in reversed(range(n)):
-        r.append(signal[i*8:min((i+1)*8, flen(signal))])
+        r.append(signal[i*8:min((i+1)*8, len(signal))])
     return Cat(*r)
 
 
@@ -26,7 +25,7 @@ def reverse_bytes(signal):
 class Counter(Module):
     def __init__(self, *args, increment=1, **kwargs):
         self.value = Signal(*args, **kwargs)
-        self.width = flen(self.value)
+        self.width = len(self.value)
         self.sync += self.value.eq(self.value+increment)
 
 

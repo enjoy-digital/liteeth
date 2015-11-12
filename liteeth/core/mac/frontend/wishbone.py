@@ -1,7 +1,7 @@
 from liteeth.common import *
-from liteeth.core.mac.frontend import sram
+from litex.soc.cores.liteeth_mini.mac.frontend import sram
 
-from migen.bus import wishbone
+from litex.soc.interconnect import wishbone
 from migen.fhdl.simplify import FullMemoryWE
 
 
