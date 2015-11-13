@@ -1,7 +1,7 @@
-from litex.gen.fhdl.std import *
-from litex.gen.bus import wishbone
-from litex.gen.bus.transactions import *
+from litex.gen import *
 from litex.gen.sim.generic import run_simulation
+
+from litex.soc.interconnect import wishbone
 
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore

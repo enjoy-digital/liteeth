@@ -1,9 +1,8 @@
 import random
-import copy
+from copy import deepcopy
 
-from litex.gen.fhdl.std import *
-from litex.gen.flow.actor import Sink, Source
-from litex.gen.genlib.record import *
+from litex.gen import *
+from litex.soc.interconnect.stream import Sink, Source
 
 from liteeth.common import *
 
@@ -49,8 +48,8 @@ def comp(p1, p2):
 
 
 def check(p1, p2):
-    p1 = copy.deepcopy(p1)
-    p2 = copy.deepcopy(p2)
+    p1 = deepcopy(p1)
+    p2 = deepcopy(p2)
     if isinstance(p1, int):
         return 0, 1, int(p1 != p2)
     else:
@@ -94,7 +93,7 @@ class PacketStreamer(Module):
         self.packet.done = True
 
     def send(self, packet):
-        packet = copy.deepcopy(packet)
+        packet = deepcopy(packet)
         self.packets.append(packet)
         return packet
 
