@@ -1,6 +1,7 @@
-from migen import *
-
-from litex.soc.interconnect import wishbone
+from migen.fhdl.std import *
+from migen.bus import wishbone
+from migen.bus.transactions import *
+from migen.sim.generic import run_simulation
 
 from liteeth.common import *
 from liteeth.core.mac import LiteEthMAC
@@ -22,31 +23,36 @@ class TB(Module):
         self.submodules.mac = LiteEthMAC(self.phy_model, dw=8, with_preamble_crc=True)
         self.submodules.arp = LiteEthARP(self.mac, mac_address, ip_address, 100000)
 
+        # use sys_clk for each clock_domain
+        self.clock_domains.cd_eth_rx = ClockDomain()
+        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.comb += [
+            self.cd_eth_rx.clk.eq(ClockSignal()),
+            self.cd_eth_rx.rst.eq(ResetSignal()),
+            self.cd_eth_tx.clk.eq(ClockSignal()),
+            self.cd_eth_tx.rst.eq(ResetSignal()),
+        ]
 
-def main_generator(dut):
-    while (yield dut.arp.table.request.ack) != 1:
-        yield dut.arp.table.request.stb.eq(1)
-        yield dut.arp.table.request.ip_address.eq(0x12345678)
+    def gen_simulation(self, selfp):
+        selfp.cd_eth_rx.rst = 1
+        selfp.cd_eth_tx.rst = 1
         yield
-    yield dut.arp.table.request.stb.eq(0)
-    while (yield dut.arp.table.response.stb) != 1:
-        yield dut.arp.table.response.ack.eq(1)
-        yield
-    print("Received MAC : 0x{:12x}".format((yield dut.arp.table.response.mac_address)))
+        selfp.cd_eth_rx.rst = 0
+        selfp.cd_eth_tx.rst = 0
 
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
+        for i in range(100):
+            yield
+
+        while selfp.arp.table.request.ack != 1:
+            selfp.arp.table.request.stb = 1
+            selfp.arp.table.request.ip_address = 0x12345678
+            yield
+        selfp.arp.table.request.stb = 0
+        while selfp.arp.table.response.stb != 1:
+            selfp.arp.table.response.ack = 1
+            yield
+        print("Received MAC : 0x{:12x}".format(selfp.arp.table.response.mac_address))
+
 
 if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb)],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+    run_simulation(TB(), ncycles=2048, vcd_name="my.vcd", keep_files=True)

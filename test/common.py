@@ -1,12 +1,12 @@
 import random
 import copy
 
-from migen import *
-from litex.soc.interconnect.stream import Sink, Source
+from migen.fhdl.std import *
+from migen.flow.actor import Sink, Source
+from migen.genlib.record import *
 
 from liteeth.common import *
 
-from copy import deepcopy
 
 def print_with_prefix(s, prefix=""):
     if not isinstance(s, str):
@@ -49,8 +49,8 @@ def comp(p1, p2):
 
 
 def check(p1, p2):
-    p1 = deepcopy(p1)
-    p2 = deepcopy(p2)
+    p1 = copy.deepcopy(p1)
+    p2 = copy.deepcopy(p2)
     if isinstance(p1, int):
         return 0, 1, int(p1 != p2)
     else:
@@ -94,7 +94,7 @@ class PacketStreamer(Module):
         self.packet.done = True
 
     def send(self, packet):
-        packet = deepcopy(packet)
+        packet = copy.deepcopy(packet)
         self.packets.append(packet)
         return packet
 
@@ -103,34 +103,32 @@ class PacketStreamer(Module):
         while not packet.done:
             yield
 
-    def generator(self):
-        while True:
-            if len(self.packets) and self.packet.done:
-                self.packet = self.packets.pop(0)
-            if not self.packet.ongoing and not self.packet.done:
-                yield self.source.stb.eq(1)
-                if self.source.description.packetized:
-                    yield self.source.sop.eq(1)
-                yield self.source.data.eq(self.packet.pop(0))
-                self.packet.ongoing = True
-            elif (yield self.source.stb) == 1 and (yield self.source.ack) == 1:
-                if self.source.description.packetized:
-                    yield self.source.sop.eq(0)
-                    if len(self.packet) == 1:
-                        yield self.source.eop.eq(1)
-                        if self.last_be is not None:
-                            yield self.source.last_be.eq(self.last_be)
-                    else:
-                        yield self.source.eop.eq(0)
-                        if self.last_be is not None:
-                            yield self.source.last_be.eq(0)
-                if len(self.packet) > 0:
-                    yield self.source.stb.eq(1)
-                    yield self.source.data.eq(self.packet.pop(0))
+    def do_simulation(self, selfp):
+        if len(self.packets) and self.packet.done:
+            self.packet = self.packets.pop(0)
+        if not self.packet.ongoing and not self.packet.done:
+            selfp.source.stb = 1
+            if self.source.description.packetized:
+                selfp.source.sop = 1
+            selfp.source.data = self.packet.pop(0)
+            self.packet.ongoing = True
+        elif selfp.source.stb == 1 and selfp.source.ack == 1:
+            if self.source.description.packetized:
+                selfp.source.sop = 0
+                if len(self.packet) == 1:
+                    selfp.source.eop = 1
+                    if self.last_be is not None:
+                        selfp.source.last_be = self.last_be
                 else:
-                    self.packet.done = True
-                    yield self.source.stb.eq(0)
-            yield
+                    selfp.source.eop = 0
+                    if self.last_be is not None:
+                        selfp.source.last_be = 0
+            if len(self.packet) > 0:
+                selfp.source.stb = 1
+                selfp.source.data = self.packet.pop(0)
+            else:
+                self.packet.done = True
+                selfp.source.stb = 0
 
 
 class PacketLogger(Module):
@@ -146,21 +144,19 @@ class PacketLogger(Module):
         while not self.packet.done:
             yield
 
-    def generator(self):
-        while True:
-            yield self.sink.ack.eq(1)
-            if (yield self.sink.stb):
-                if self.sink.description.packetized:
-                    if (yield self.sink.sop):
-                        self.packet = Packet()
-                        self.packet.append((yield self.sink.data))
-                    else:
-                        self.packet.append((yield self.sink.data))
-                    if (yield self.sink.eop):
-                        self.packet.done = True
+    def do_simulation(self, selfp):
+        selfp.sink.ack = 1
+        if selfp.sink.stb:
+            if self.sink.description.packetized:
+                if selfp.sink.sop:
+                    self.packet = Packet()
+                    self.packet.append(selfp.sink.data)
                 else:
-                    self.packet.append((yield self.sink.data))
-            yield
+                    self.packet.append(selfp.sink.data)
+                if selfp.sink.eop:
+                    self.packet.done = True
+            else:
+                self.packet.append(selfp.sink.data)
 
 
 class AckRandomizer(Module):
@@ -170,22 +166,20 @@ class AckRandomizer(Module):
         self.sink = Sink(description)
         self.source = Source(description)
 
-        self.ce = Signal(reset=1)
+        self.run = Signal()
 
         self.comb += \
-            If(self.ce,
+            If(self.run,
                 Record.connect(self.sink, self.source)
             ).Else(
                 self.source.stb.eq(0),
                 self.sink.ack.eq(0),
             )
 
-    def generator(self):
-        while True:
-            n = randn(100)
-            if n < self.level:
-                yield self.ce.eq(0)
-            else:
-                yield self.ce.eq(1)
-            yield
+    def do_simulation(self, selfp):
+        n = randn(100)
+        if n < self.level:
+            selfp.run = 0
+        else:
+            selfp.run = 1
 

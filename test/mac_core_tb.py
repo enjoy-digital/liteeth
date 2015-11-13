@@ -1,6 +1,7 @@
-from migen import *
-
-from litex.soc.interconnect import wishbone
+from migen.fhdl.std import *
+from migen.bus import wishbone
+from migen.bus.transactions import *
+from migen.sim.generic import run_simulation
 
 from liteeth.common import *
 from liteeth.core.mac.core import LiteEthMACCore
@@ -21,6 +22,16 @@ class TB(Module):
         self.submodules.logger_randomizer = AckRandomizer(eth_phy_description(8), level=50)
         self.submodules.logger = PacketLogger(eth_phy_description(8))
 
+        # use sys_clk for each clock_domain
+        self.clock_domains.cd_eth_rx = ClockDomain()
+        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.comb += [
+            self.cd_eth_rx.clk.eq(ClockSignal()),
+            self.cd_eth_rx.rst.eq(ResetSignal()),
+            self.cd_eth_tx.clk.eq(ClockSignal()),
+            self.cd_eth_tx.rst.eq(ResetSignal()),
+        ]
+
         self.comb += [
             Record.connect(self.streamer.source, self.streamer_randomizer.sink),
             Record.connect(self.streamer_randomizer.source, self.core.sink),
@@ -28,38 +39,25 @@ class TB(Module):
             Record.connect(self.logger_randomizer.source, self.logger.sink)
         ]
 
+    def gen_simulation(self, selfp):
+        selfp.cd_eth_rx.rst = 1
+        selfp.cd_eth_tx.rst = 1
+        yield
+        selfp.cd_eth_rx.rst = 0
+        selfp.cd_eth_tx.rst = 0
 
-def main_generator(dut):
-    for i in range(2):
-        packet = mac.MACPacket([i for i in range(64)])
-        packet.target_mac = 0x010203040506
-        packet.sender_mac = 0x090A0B0C0C0D
-        packet.ethernet_type = 0x0800
-        packet.encode_header()
-        dut.streamer.send(packet)
-        yield from dut.logger.receive()
+        for i in range(8):
+            packet = mac.MACPacket([i for i in range(64)])
+            packet.target_mac = 0x010203040506
+            packet.sender_mac = 0x090A0B0C0C0D
+            packet.ethernet_type = 0x0800
+            packet.encode_header()
+            yield from self.streamer.send(packet)
+            yield from self.logger.receive()
 
-        # check results
-        s, l, e = check(packet, dut.logger.packet)
-        print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
+            # check results
+            s, l, e = check(packet, self.logger.packet)
+            print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
 if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb),
-                   tb.streamer.generator(),
-                   tb.streamer_randomizer.generator(),
-                   tb.logger_randomizer.generator(),
-                   tb.logger.generator()],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+    run_simulation(TB(), ncycles=4000, vcd_name="my.vcd", keep_files=True)
