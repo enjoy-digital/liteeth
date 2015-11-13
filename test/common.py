@@ -1,9 +1,9 @@
 import random
 import copy
 
-from migen.fhdl.std import *
-from migen.flow.actor import Sink, Source
-from migen.genlib.record import *
+from litex.gen.fhdl.std import *
+from litex.gen.flow.actor import Sink, Source
+from litex.gen.genlib.record import *
 
 from liteeth.common import *
 

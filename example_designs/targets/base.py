@@ -1,5 +1,5 @@
-from migen.genlib.io import CRG
-from migen.fhdl.specials import Keep
+from litex.gen.genlib.io import CRG
+from litex.gen.fhdl.specials import Keep
 
 from litex.build.xilinx.vivado import XilinxVivadoToolchain
 from litex.soc.interconnect import wishbone

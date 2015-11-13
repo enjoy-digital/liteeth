@@ -1,4 +1,4 @@
-from migen.genlib.io import DDROutput
+from litex.gen.genlib.io import DDROutput
 
 from liteeth.common import *
 

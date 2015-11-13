@@ -2,7 +2,7 @@ from liteeth.common import *
 from litex.soc.cores.liteeth_mini.mac.frontend import sram
 
 from litex.soc.interconnect import wishbone
-from migen.fhdl.simplify import FullMemoryWE
+from litex.gen.fhdl.simplify import FullMemoryWE
 
 
 class LiteEthMACWishboneInterface(Module, AutoCSR):

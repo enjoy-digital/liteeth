@@ -1,11 +1,11 @@
 import math
 from collections import OrderedDict
 
-from migen import *
-from migen.genlib.resetsync import AsyncResetSynchronizer
-from migen.genlib.record import *
-from migen.genlib.fsm import FSM, NextState
-from migen.genlib.misc import chooser, WaitTimer
+from litex.gen import *
+from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from litex.gen.genlib.record import *
+from litex.gen.genlib.fsm import FSM, NextState
+from litex.gen.genlib.misc import chooser, WaitTimer
 
 from litex.soc.interconnect.stream import *
 from litex.soc.interconnect.packet import *

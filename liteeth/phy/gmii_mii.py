@@ -1,5 +1,5 @@
-from migen.genlib.io import DDROutput
-from migen.genlib.cdc import PulseSynchronizer
+from litex.gen.genlib.io import DDROutput
+from litex.gen.genlib.cdc import PulseSynchronizer
 
 from litex.soc.interconnect.stream import Multiplexer, Demultiplexer
 

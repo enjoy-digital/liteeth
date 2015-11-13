@@ -1,7 +1,7 @@
-from migen.fhdl.std import *
-from migen.bus import wishbone
-from migen.bus.transactions import *
-from migen.sim.generic import run_simulation
+from litex.gen.fhdl.std import *
+from litex.gen.bus import wishbone
+from litex.gen.bus.transactions import *
+from litex.gen.sim.generic import run_simulation
 
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore
