@@ -9,11 +9,6 @@
          with UDP/IP hw stack and Etherbone frontend
                   powered by Migen
 
-[> Doc
--------
-HTML : www.enjoy-digital.fr/liteeth/
-PDF  : www.enjoy-digital.fr/liteeth.pdf
-
 [> Intro
 ---------
 LiteEth provides a small footprint and configurable Ethernet core.
