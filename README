@@ -18,7 +18,7 @@ PDF  : www.enjoy-digital.fr/liteeth.pdf
 ---------
 LiteEth provides a small footprint and configurable Ethernet core.
 
-LiteEth is part of EnjoyDigital's libraries whose aims are to lower entry level of
+LiteEth is part of LiteX libraries whose aims are to lower entry level of
 complex FPGA cores by providing simple, elegant and efficient implementations
 ofcomponents used in today's SoC such as Ethernet, SATA, PCIe, SDRAM Controller...
 
@@ -28,11 +28,12 @@ adapters to use standardized AXI or Avalon-ST streaming buses.
 Since Python is used to describe the HDL, the core is highly and easily
 configurable.
 
-LiteEth uses technologies developed in partnership with M-Labs Ltd:
+LiteEth is built using LiteX and uses technologies developed in partnership with
+M-Labs Ltd:
  - Migen enables generating HDL with Python in an efficient way.
  - MiSoC provides the basic blocks to build a powerful and small footprint SoC.
 
-LiteEth can be used as MiSoC library or can be integrated with your standard
+LiteEth can be used as LiteX library or can be integrated with your standard
 design flow by generating the verilog rtl that you will use as a standard core.
 
 [> Features
@@ -67,28 +68,25 @@ devel [AT] lists.m-labs.hk.
 -------------------
 1. Install Python3 and your vendor's software
 
-2. Obtain Migen and install it:
-  git clone https://github.com/enjoy-digital/migen
-  cd migen
+2. Obtain LiteX and install it:
+  git clone https://github.com/enjoy-digital/litex --recursive
+  cd litex
   python3 setup.py install
   cd ..
 
-3. Obtain MiSoC:
-  git clone https://github.com/enjoy-digital/misoc --recursive
-
-4. Build and load UDP loopback design (only for KC705 for now):
+3. Build and load UDP loopback design (only for KC705 for now):
   go to example_designs/
   run ./make.py -t udp all load-bitstream
 
-5. Test design (only for KC705 for now):
+4. Test design (only for KC705 for now):
   try to ping 192.168.0.42
   go to example_designs/test/
   run ./make.py test_udp
 
-6. Build and load Etherbone design (only for KC705 for now):
+5. Build and load Etherbone design (only for KC705 for now):
   python3 make.py -t etherbone all load-bitstream
 
-7. Test design (only for KC705 for now):
+6. Test design (only for KC705 for now):
   try to ping 192.168.0.42
   go to example_designs/test/
   run ./make.py test_etherbone
