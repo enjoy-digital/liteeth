@@ -1,4 +1,5 @@
-import copy
+from copy import deepcopy
+
 from liteeth.common import *
 
 
@@ -254,7 +255,7 @@ class EtherbonePacket(Packet):
         while len(payload) != 0:
             record = EtherboneRecord(payload)
             record.decode()
-            records.append(copy.deepcopy(record))
+            records.append(deepcopy(record))
             payload = record
         return records
 

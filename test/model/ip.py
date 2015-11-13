@@ -1,8 +1,9 @@
 import math
 
+from litex.soc.interconnect.stream_sim import *
+
 from liteeth.common import *
 
-from test.common import *
 from test.model import mac
 
 

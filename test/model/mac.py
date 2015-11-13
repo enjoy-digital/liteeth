@@ -1,9 +1,9 @@
 import math
 import binascii
 
-from liteeth.common import *
+from litex.soc.interconnect.stream_sim import *
 
-from test.common import *
+from liteeth.common import *
 
 
 def print_mac(s):

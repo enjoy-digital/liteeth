@@ -2,11 +2,11 @@ from litex.gen import *
 from litex.gen.sim.generic import run_simulation
 
 from litex.soc.interconnect import wishbone
+from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 
-from test.common import *
 from test.model import phy, mac, arp, ip, udp
 
 ip_address = 0x12345678

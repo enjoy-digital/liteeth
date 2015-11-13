@@ -1,10 +1,11 @@
 import math
 import copy
 
+from litex.soc.interconnect.stream_sim import *
+
 from liteeth.common import *
 from liteeth.software.etherbone import *
 
-from test.common import *
 from test.model import udp
 
 
@@ -74,7 +75,7 @@ if __name__ == "__main__":
 
     # Packet
     packet = EtherbonePacket()
-    packet.records = [copy.deepcopy(record) for i in range(8)]
+    packet.records = [deepcopy(record) for i in range(8)]
     packet.nr = 0
     packet.pr = 0
     packet.pf = 0
