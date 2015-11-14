@@ -1,6 +1,6 @@
 import os
 
-from litex.soc.cores.liteeth_mini.common import *
+from liteeth.common import *
 
 
 class LiteEthPHYModelCRG(Module, AutoCSR):

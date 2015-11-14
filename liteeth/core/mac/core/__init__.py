@@ -1,6 +1,6 @@
 from liteeth.common import *
 from liteeth.core.mac.core import gap, preamble, crc, padding, last_be
-from liteeth.phy.sim import LiteEthPHYSim
+from liteeth.phy.model import LiteEthPHYModel
 from liteeth.phy.mii import LiteEthPHYMII
 
 
