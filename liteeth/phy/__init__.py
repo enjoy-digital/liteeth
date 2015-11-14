@@ -3,11 +3,7 @@ from liteeth.common import *
 
 def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
     # Autodetect PHY
-    if hasattr(pads, "source_stb"):
-        # This is a simulation PHY
-        from liteeth.phy.sim import LiteEthPHYSim
-        return LiteEthPHYSim(pads)
-    elif hasattr(clock_pads, "gtx") and len(pads.tx_data) == 8:
+    if hasattr(clock_pads, "gtx") and len(pads.tx_data) == 8:
         if hasattr(clock_pads, "tx"):
             # This is a 10/100/1G PHY
             from liteeth.phy.gmii_mii import LiteEthPHYGMIIMII
