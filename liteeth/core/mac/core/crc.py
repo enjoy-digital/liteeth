@@ -238,7 +238,7 @@ class LiteEthMACCRCChecker(Module):
         fifo_full = Signal()
 
         self.comb += [
-            fifo_full.eq(fifo.fifo.level == ratio),
+            fifo_full.eq(fifo.level == ratio),
             fifo_in.eq(sink.stb & (~fifo_full | fifo_out)),
             fifo_out.eq(source.stb & source.ack),
 

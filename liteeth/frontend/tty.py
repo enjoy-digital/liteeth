@@ -23,7 +23,7 @@ class LiteEthTTYTX(Module):
 
             level = Signal(max=fifo_depth)
             level_update = Signal()
-            self.sync += If(level_update, level.eq(fifo.fifo.level))
+            self.sync += If(level_update, level.eq(fifo.level))
 
             self.submodules.counter = counter = Counter(max=fifo_depth)
 
