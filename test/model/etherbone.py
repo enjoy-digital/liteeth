@@ -2,9 +2,9 @@ import math
 import copy
 
 from litex.soc.interconnect.stream_sim import *
+from litex.soc.tools.remote.etherbone import *
 
 from liteeth.common import *
-from liteeth.software.etherbone import *
 
 from test.model import udp
 
@@ -63,22 +63,12 @@ if __name__ == "__main__":
     record = EtherboneRecord()
     record.writes = writes
     record.reads = reads
-    record.bca = 0
-    record.rca = 0
-    record.rff = 0
-    record.cyc = 0
-    record.wca = 0
-    record.wff = 0
-    record.byte_enable = 0
     record.wcount = len(writes.get_datas())
     record.rcount = len(reads.get_addrs())
 
     # Packet
     packet = EtherbonePacket()
     packet.records = [deepcopy(record) for i in range(8)]
-    packet.nr = 0
-    packet.pr = 0
-    packet.pf = 0
     # print(packet)
     packet.encode()
     # print(packet)
