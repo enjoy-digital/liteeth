@@ -24,7 +24,7 @@ class LiteEthMACCore(Module, AutoCSR):
         rx_pipeline += [rx_gap_checker]
 
         # Preamble / CRC
-        if isinstance(phy, LiteEthPHYSim):
+        if isinstance(phy, LiteEthPHYModel):
             # In simulation, avoid CRC/Preamble to enable direct connection
             # to the Ethernet tap.
             self._preamble_crc = CSRStatus(reset=1)
