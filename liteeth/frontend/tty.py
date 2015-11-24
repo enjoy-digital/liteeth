@@ -25,23 +25,31 @@ class LiteEthTTYTX(Module):
             level_update = Signal()
             self.sync += If(level_update, level.eq(fifo.level))
 
-            self.submodules.counter = counter = Counter(max=fifo_depth)
+            counter = Signal(max=fifo_depth)
+            counter_reset = Signal()
+            counter_ce = Signal()
+            self.sync += \
+                If(counter_reset,
+                    counter.eq(0)
+                ).Elif(counter_ce,
+                    counter.eq(counter + 1)
+                )
 
             self.submodules.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
                 If(fifo.source.stb,
                     level_update.eq(1),
-                    counter.reset.eq(1),
+                    counter_reset.eq(1),
                     NextState("SEND")
                 )
             )
             fsm.act("SEND",
                 source.stb.eq(fifo.source.stb),
-                source.sop.eq(counter.value == 0),
+                source.sop.eq(counter == 0),
                 If(level == 0,
                     source.eop.eq(1),
                 ).Else(
-                    source.eop.eq(counter.value == (level-1)),
+                    source.eop.eq(counter == (level-1)),
                 ),
                 source.src_port.eq(udp_port),
                 source.dst_port.eq(udp_port),
@@ -54,7 +62,7 @@ class LiteEthTTYTX(Module):
                 source.data.eq(fifo.source.data),
                 fifo.source.ack.eq(source.ack),
                 If(source.stb & source.ack,
-                    counter.ce.eq(1),
+                    counter_ce.eq(1),
                     If(source.eop,
                         NextState("IDLE")
                     )

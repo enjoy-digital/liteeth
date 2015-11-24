@@ -16,15 +16,6 @@ def reverse_bytes(signal):
     return Cat(*r)
 
 
-@ResetInserter()
-@CEInserter()
-class Counter(Module):
-    def __init__(self, *args, increment=1, **kwargs):
-        self.value = Signal(*args, **kwargs)
-        self.width = len(self.value)
-        self.sync += self.value.eq(self.value+increment)
-
-
 class Port:
     def connect(self, port):
         r = [

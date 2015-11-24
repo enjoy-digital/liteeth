@@ -200,12 +200,20 @@ class LiteEthEtherboneRecordReceiver(Module):
         base_addr_update = Signal()
         self.sync += If(base_addr_update, base_addr.eq(fifo.source.data))
 
-        self.submodules.counter = counter = Counter(max=512)
+        counter = Signal(max=512)
+        counter_reset = Signal()
+        counter_ce = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             fifo.source.ack.eq(1),
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             If(fifo.source.stb & fifo.source.sop,
                 base_addr_update.eq(1),
                 If(fifo.source.wcount,
@@ -217,16 +225,16 @@ class LiteEthEtherboneRecordReceiver(Module):
         )
         fsm.act("RECEIVE_WRITES",
             source.stb.eq(fifo.source.stb),
-            source.sop.eq(counter.value == 0),
-            source.eop.eq(counter.value == fifo.source.wcount-1),
+            source.sop.eq(counter == 0),
+            source.eop.eq(counter == fifo.source.wcount-1),
             source.count.eq(fifo.source.wcount),
             source.be.eq(fifo.source.byte_enable),
-            source.addr.eq(base_addr[2:] + counter.value),
+            source.addr.eq(base_addr[2:] + counter),
             source.we.eq(1),
             source.data.eq(fifo.source.data),
             fifo.source.ack.eq(source.ack),
             If(source.stb & source.ack,
-                counter.ce.eq(1),
+                counter_ce.eq(1),
                 If(source.eop,
                     If(fifo.source.rcount,
                         NextState("RECEIVE_BASE_RET_ADDR")
@@ -237,7 +245,7 @@ class LiteEthEtherboneRecordReceiver(Module):
             )
         )
         fsm.act("RECEIVE_BASE_RET_ADDR",
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             If(fifo.source.stb & fifo.source.sop,
                 base_addr_update.eq(1),
                 NextState("RECEIVE_READS")
@@ -245,14 +253,14 @@ class LiteEthEtherboneRecordReceiver(Module):
         )
         fsm.act("RECEIVE_READS",
             source.stb.eq(fifo.source.stb),
-            source.sop.eq(counter.value == 0),
-            source.eop.eq(counter.value == fifo.source.rcount-1),
+            source.sop.eq(counter == 0),
+            source.eop.eq(counter == fifo.source.rcount-1),
             source.count.eq(fifo.source.rcount),
             source.base_addr.eq(base_addr),
             source.addr.eq(fifo.source.data[2:]),
             fifo.source.ack.eq(source.ack),
             If(source.stb & source.ack,
-                counter.ce.eq(1),
+                counter_ce.eq(1),
                 If(source.eop,
                     NextState("IDLE")
                 )

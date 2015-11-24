@@ -30,21 +30,28 @@ class LiteEthARPTX(Module):
 
         self.submodules.packetizer = packetizer = LiteEthARPPacketizer()
 
-        counter = Counter(max=max(arp_header.length, eth_min_len))
-        self.submodules += counter
+        counter = Signal(max=max(arp_header.length, eth_min_len))
+        counter_reset = Signal()
+        counter_ce = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ack.eq(1),
-            counter.reset.eq(1),
+            counter_reset.eq(1),
             If(sink.stb,
                 sink.ack.eq(0),
                 NextState("SEND")
             )
         )
         self.comb += [
-            packetizer.sink.sop.eq(counter.value == 0),
-            packetizer.sink.eop.eq(counter.value == max(arp_header.length, eth_min_len)-1),
+            packetizer.sink.sop.eq(counter == 0),
+            packetizer.sink.eop.eq(counter == max(arp_header.length, eth_min_len)-1),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
             packetizer.sink.hwsize.eq(6),
@@ -69,7 +76,7 @@ class LiteEthARPTX(Module):
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
             If(source.stb & source.ack,
-                counter.ce.eq(1),
+                counter_ce.eq(1),
                 If(source.eop,
                     sink.ack.eq(1),
                     NextState("IDLE")
@@ -174,9 +181,17 @@ class LiteEthARPTable(Module):
             )
 
         request_timer = WaitTimer(clk_freq//10)
-        request_counter = Counter(max=max_requests)
-        self.submodules += request_timer, request_counter
-        self.comb += request_timer.wait.eq(request_pending & ~request_counter.ce)
+        self.submodules += request_timer
+        request_counter = Signal(max=max_requests)
+        request_counter_reset = Signal()
+        request_counter_ce = Signal()
+        self.sync += \
+            If(request_counter_reset,
+                request_counter.eq(0)
+            ).Elif(request_counter_ce,
+                request_counter.eq(request_counter + 1)
+            )
+        self.comb += request_timer.wait.eq(request_pending & ~request_counter_ce)
 
         # Note: Store only 1 IP/MAC couple, can be improved with a real
         # table in the future to improve performance when packets are
@@ -196,7 +211,7 @@ class LiteEthARPTable(Module):
                 NextState("SEND_REPLY")
             ).Elif(sink.stb & sink.reply & request_pending,
                 NextState("UPDATE_TABLE"),
-            ).Elif(request_counter.value == max_requests-1,
+            ).Elif(request_counter == max_requests-1,
                 NextState("PRESENT_RESPONSE")
             ).Elif(request.stb | (request_pending & request_timer.done),
                 NextState("CHECK_TABLE")
@@ -250,17 +265,17 @@ class LiteEthARPTable(Module):
             source.request.eq(1),
             source.ip_address.eq(request_ip_address),
             If(source.ack,
-                request_counter.reset.eq(request.stb),
-                request_counter.ce.eq(1),
+                request_counter_reset.eq(request.stb),
+                request_counter_ce.eq(1),
                 request_pending_set.eq(1),
                 request.ack.eq(1),
                 NextState("IDLE")
             )
         )
         self.comb += [
-            If(request_counter == max_requests-1,
+            If(request_counter == max_requests - 1,
                 response.failed.eq(1),
-                request_counter.reset.eq(1),
+                request_counter_reset.eq(1),
                 request_pending_clr.eq(1)
             ),
             response.mac_address.eq(cached_mac_address)

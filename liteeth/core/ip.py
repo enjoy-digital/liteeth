@@ -69,10 +69,13 @@ class LiteEthIPV4Checksum(Module):
 
         if not skip_checksum:
             n_cycles += 1
-        self.submodules.counter = counter = Counter(max=n_cycles+1)
+        counter = Signal(max=n_cycles+1)
+        counter_ce = Signal()
+        self.sync += If(counter_ce, counter.eq(counter + 1))
+
         self.comb += [
-            counter.ce.eq(~self.done),
-            self.done.eq(counter.value == n_cycles)
+            counter_ce.eq(~self.done),
+            self.done.eq(counter == n_cycles)
         ]
 
 # ip tx
