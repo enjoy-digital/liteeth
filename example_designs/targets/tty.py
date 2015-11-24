@@ -1,7 +1,7 @@
 from liteeth.common import *
+from liteeth.frontend.tty import LiteEthTTY
 
 from targets.base import BaseSoC
-from liteeth.frontend.tty import LiteEthTTY
 
 
 class TTYSoC(BaseSoC):

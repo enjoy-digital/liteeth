@@ -1,7 +1,7 @@
 from liteeth.common import *
+from liteeth.frontend.etherbone import LiteEthEtherbone
 
 from targets.base import BaseSoC
-from liteeth.frontend.etherbone import LiteEthEtherbone
 
 
 class EtherboneSoC(BaseSoC):

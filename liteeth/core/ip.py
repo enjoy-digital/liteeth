@@ -1,6 +1,9 @@
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
+from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
+
+
 # ip crossbar
 
 class LiteEthIPV4MasterPort:

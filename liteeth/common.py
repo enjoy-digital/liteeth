@@ -1,15 +1,11 @@
-import math
-from collections import OrderedDict
+from math import ceil
 
 from litex.gen import *
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
-from litex.gen.genlib.record import *
-from litex.gen.genlib.fsm import FSM, NextState
-from litex.gen.genlib.misc import chooser, WaitTimer
 
 from litex.soc.interconnect.stream import *
-from litex.soc.interconnect.stream_packet import *
 from litex.soc.interconnect.csr import *
+
+from litex.soc.interconnect.stream_packet import Header, HeaderField
 
 
 def reverse_bytes(signal):

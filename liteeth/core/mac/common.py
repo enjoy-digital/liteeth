@@ -1,6 +1,8 @@
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
+from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
+
 
 class LiteEthMACDepacketizer(Depacketizer):
     def __init__(self):

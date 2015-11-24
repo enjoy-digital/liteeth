@@ -1,5 +1,7 @@
 from liteeth.common import *
 
+from litex.soc.interconnect.stream_packet import Buffer
+
 from targets.base import BaseSoC
 
 

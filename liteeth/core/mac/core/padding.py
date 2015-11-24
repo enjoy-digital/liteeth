@@ -8,7 +8,7 @@ class LiteEthMACPaddingInserter(Module):
 
         # # #
 
-        padding_limit = math.ceil(padding/(dw/8))-1
+        padding_limit = ceil(padding/(dw/8))-1
 
         counter = Signal(16, reset=1)
         counter_done = Signal()

@@ -1,7 +1,10 @@
-from liteeth.common import *
 from functools import reduce
 from operator import xor
+from collections import OrderedDict
 
+from liteeth.common import *
+
+from litex.gen.genlib.misc import chooser, WaitTimer
 
 
 class LiteEthMACCRCEngine(Module):

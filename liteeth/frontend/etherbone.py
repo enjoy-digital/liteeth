@@ -1,6 +1,7 @@
 from liteeth.common import *
 
 from litex.soc.interconnect import wishbone
+from litex.soc.interconnect.stream_packet import *
 
 # etherbone packet
 

@@ -1,6 +1,7 @@
-from litex.gen.genlib.io import DDROutput
-
 from liteeth.common import *
+
+from litex.gen.genlib.io import DDROutput
+from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 
 class LiteEthPHYGMIITX(Module):

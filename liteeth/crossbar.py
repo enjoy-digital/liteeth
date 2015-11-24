@@ -2,6 +2,9 @@ from collections import OrderedDict
 
 from liteeth.common import *
 
+from litex.soc.interconnect.stream_packet import Arbiter, Dispatcher
+
+
 class LiteEthCrossbar(Module):
     def __init__(self, master_port, dispatch_param):
         self.users = OrderedDict()

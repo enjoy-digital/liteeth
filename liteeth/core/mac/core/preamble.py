@@ -1,5 +1,7 @@
 from liteeth.common import *
 
+from litex.gen.genlib.misc import chooser
+
 
 class LiteEthMACPreambleInserter(Module):
     def __init__(self, dw):

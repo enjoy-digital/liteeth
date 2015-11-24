@@ -1,5 +1,8 @@
 from liteeth.common import *
 
+from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer, Buffer
+
+
 # icmp tx
 
 class LiteEthICMPPacketizer(Packetizer):

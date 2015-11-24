@@ -1,12 +1,13 @@
+from liteeth.common import *
+from liteeth.phy.gmii import LiteEthPHYGMIICRG
+from liteeth.phy.mii import LiteEthPHYMIITX, LiteEthPHYMIIRX
+from liteeth.phy.gmii import LiteEthPHYGMIITX, LiteEthPHYGMIIRX
+
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.cdc import PulseSynchronizer
 
 from litex.soc.interconnect.stream import Multiplexer, Demultiplexer
 
-from liteeth.common import *
-from liteeth.phy.gmii import LiteEthPHYGMIICRG
-from liteeth.phy.mii import LiteEthPHYMIITX, LiteEthPHYMIIRX
-from liteeth.phy.gmii import LiteEthPHYGMIITX, LiteEthPHYGMIIRX
 
 modes = {
     "GMII": 0,

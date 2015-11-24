@@ -1,5 +1,8 @@
 from liteeth.common import *
 
+from litex.gen.genlib.misc import WaitTimer
+from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
+
 
 _arp_table_layout = [
         ("reply", 1),

@@ -1,10 +1,11 @@
 # RGMII PHY for Spartan-6
+from liteeth.common import *
 
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.misc import WaitTimer
 from litex.gen.genlib.fsm import FSM, NextState
 
-from liteeth.common import *
+from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 
 class LiteEthPHYRGMIITX(Module):

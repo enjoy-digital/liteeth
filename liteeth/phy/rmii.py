@@ -1,5 +1,7 @@
 from liteeth.common import *
 
+from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+
 
 def converter_description(dw):
     payload_layout = [("data", dw)]
