@@ -104,7 +104,7 @@ class LiteEthPHYRMII(Module, AutoCSR):
         self.dw = 8
         self.submodules.crg = LiteEthPHYMIICRG(clock_pads, pads, with_hw_init_reset)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIIRX(pads))
+        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
         self.comb += [
             self.tx.ce.eq(self.crg.ref_clk == 1),
             self.rx.ce.eq(self.crg.ref_clk == 1)
