@@ -2,6 +2,7 @@ from liteeth.common import *
 from liteeth.core.mac.core import gap, preamble, crc, padding, last_be
 from liteeth.phy.model import LiteEthPHYModel
 from liteeth.phy.mii import LiteEthPHYMII
+from liteeth.phy.rmii import LiteEthPHYRMII
 
 
 class LiteEthMACCore(Module, AutoCSR):
@@ -81,7 +82,7 @@ class LiteEthMACCore(Module, AutoCSR):
             rx_pipeline += [rx_converter]
 
         # Cross Domain Crossing
-        if isinstance(phy, LiteEthPHYMII):
+        if isinstance(phy, (LiteEthPHYMII, LiteEthPHYRMII)):
             fifo_depth = 8
         else:
             fifo_depth = 64
