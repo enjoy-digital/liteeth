@@ -1,5 +1,6 @@
 from liteeth.common import *
 
+from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
 
@@ -8,7 +9,6 @@ def converter_description(dw):
     return EndpointDescription(payload_layout, packetized=True)
 
 
-@CEInserter()
 class LiteEthPHYRMIITX(Module):
     def __init__(self, pads):
         self.sink = sink = Sink(eth_phy_description(8))
@@ -30,7 +30,6 @@ class LiteEthPHYRMIITX(Module):
         ]
 
 
-@CEInserter()
 class LiteEthPHYRMIIRX(Module):
     def __init__(self, pads):
         self.source = source = Source(eth_phy_description(8))
@@ -63,21 +62,20 @@ class LiteEthPHYRMIIRX(Module):
         self.comb += Record.connect(converter.source, source)
 
 
-class LiteEthPHYMIICRG(Module, AutoCSR):
+class LiteEthPHYRMIICRG(Module, AutoCSR):
     def __init__(self, clock_pads, pads, with_hw_init_reset):
         self._reset = CSRStorage()
-        self.ref_clk = Signal()
 
         # # #
 
-        # assumming 100MHz clock provided externally
-        self.sync.eth += self.ref_clk.eq(~self.ref_clk)
-        self.comb += clock_pads.ref_clk.eq(self.ref_clk)
+        self.specials += DDROutput(1, 0, clock_pads.ref_clk, ClockSignal("eth"))
 
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
-        self.comb += self.cd_eth_rx.clk.eq(ClockSignal("eth"))
-        self.comb += self.cd_eth_tx.clk.eq(ClockSignal("eth"))
+        self.comb += [
+            self.cd_eth_rx.clk.eq(ClockSignal("eth")),
+            self.cd_eth_tx.clk.eq(ClockSignal("eth"))
+        ]
 
         if with_hw_init_reset:
             reset = Signal()
@@ -102,7 +100,7 @@ class LiteEthPHYMIICRG(Module, AutoCSR):
 class LiteEthPHYRMII(Module, AutoCSR):
     def __init__(self, clock_pads, pads, with_hw_init_reset=True):
         self.dw = 8
-        self.submodules.crg = LiteEthPHYMIICRG(clock_pads, pads, with_hw_init_reset)
+        self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, with_hw_init_reset)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
         self.comb += [
