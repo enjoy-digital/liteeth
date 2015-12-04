@@ -1,5 +1,7 @@
 from liteeth.common import *
 
+from litex.gen.genlib.cdc import MultiReg
+from litex.gen.genlib.misc import WaitTimer
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
@@ -46,19 +48,45 @@ class LiteEthPHYRMIIRX(Module):
         converter = ResetInserter()(converter)
         self.submodules += converter
 
+        converter_sink_stb = Signal()
+        converter_sink_sop = Signal()
+        converter_sink_data = Signal(2)
+
+        self.specials += [
+            MultiReg(converter_sink_stb, converter.sink.stb, n=2),
+            MultiReg(converter_sink_sop, converter.sink.sop, n=2),
+            MultiReg(converter_sink_data, converter.sink.data, n=2)
+        ]
+
+        crs_dv = Signal()
+        crs_dv_d = Signal()
+        rx_data = Signal(2)
         self.sync += [
-            converter.reset.eq(~pads.dv),
-            converter.sink.stb.eq(1),
-            converter.sink.data.eq(pads.rx_data)
+            crs_dv.eq(pads.crs_dv),
+            crs_dv_d.eq(crs_dv),
+            rx_data.eq(pads.rx_data)
         ]
-        self.sync += [
-            sop_set.eq(~pads.dv),
-            sop_clr.eq(pads.dv)
-        ]
-        self.comb += [
-            converter.sink.sop.eq(sop),
-            converter.sink.eop.eq(~pads.dv)
-        ]
+
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            If(crs_dv & (rx_data != 0b00),
+                converter_sink_stb.eq(1),
+                converter_sink_sop.eq(1),
+                converter_sink_data.eq(rx_data),
+                NextState("RECEIVE")
+            ).Else(
+               converter.reset.eq(1)
+            )
+        )
+        fsm.act("RECEIVE",
+            converter_sink_stb.eq(1),
+            converter_sink_data.eq(rx_data),
+            # end of frame when 2 consecutives 0 on crs_dv
+            If(~(crs_dv | crs_dv_d),
+              converter.sink.eop.eq(1),
+              NextState("IDLE")
+            )
+        )
         self.comb += Record.connect(converter.source, source)
 
 
@@ -68,14 +96,14 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
 
         # # #
 
-        self.specials += DDROutput(1, 0, clock_pads.ref_clk, ClockSignal("eth"))
-
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
         self.comb += [
             self.cd_eth_rx.clk.eq(ClockSignal("eth")),
             self.cd_eth_tx.clk.eq(ClockSignal("eth"))
         ]
+
+        self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
 
         if with_hw_init_reset:
             reset = Signal()
@@ -103,8 +131,4 @@ class LiteEthPHYRMII(Module, AutoCSR):
         self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, with_hw_init_reset)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
-        self.comb += [
-            self.tx.ce.eq(self.crg.ref_clk == 1),
-            self.rx.ce.eq(self.crg.ref_clk == 1)
-        ]
         self.sink, self.source = self.tx.sink, self.rx.source
