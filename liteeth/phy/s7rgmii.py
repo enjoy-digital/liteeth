@@ -7,6 +7,8 @@ from litex.gen.genlib.fsm import FSM, NextState
 
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.phy.common import LiteEthPHYMDIO
+
 
 class LiteEthPHYRGMIITX(Module):
     def __init__(self, pads, pads_register=True):
@@ -174,3 +176,6 @@ class LiteEthPHYRGMII(Module, AutoCSR):
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
+
+        if hasattr(pads, "mdc"):
+            self.submodules.mdio = LiteEthPHYMDIO(pads)

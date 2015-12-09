@@ -8,6 +8,8 @@ from litex.gen.genlib.cdc import PulseSynchronizer
 
 from litex.soc.interconnect.stream import Multiplexer, Demultiplexer
 
+from liteeth.phy.common import LiteEthPHYMDIO
+
 
 modes = {
     "GMII": 0,
@@ -168,3 +170,6 @@ class LiteEthPHYGMIIMII(Module, AutoCSR):
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYGMIIMIITX(pads, mode))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYGMIIMIIRX(pads, mode))
         self.sink, self.source = self.tx.sink, self.rx.source
+
+        if hasattr(pads, "mdc"):
+            self.submodules.mdio = LiteEthPHYMDIO(pads)

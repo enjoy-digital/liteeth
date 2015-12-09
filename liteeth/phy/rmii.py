@@ -5,6 +5,8 @@ from litex.gen.genlib.misc import WaitTimer
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.phy.common import LiteEthPHYMDIO
+
 
 def converter_description(dw):
     payload_layout = [("data", dw)]
@@ -132,3 +134,6 @@ class LiteEthPHYRMII(Module, AutoCSR):
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
+
+        if hasattr(pads, "mdc"):
+            self.submodules.mdio = LiteEthPHYMDIO(pads)

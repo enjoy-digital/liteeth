@@ -3,6 +3,8 @@ from liteeth.common import *
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.phy.common import LiteEthPHYMDIO
+
 
 class LiteEthPHYGMIITX(Module):
     def __init__(self, pads, pads_register=True):
@@ -98,3 +100,6 @@ class LiteEthPHYGMII(Module, AutoCSR):
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYGMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYGMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
+
+        if hasattr(pads, "mdc"):
+            self.submodules.mdio = LiteEthPHYMDIO(pads)

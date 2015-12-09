@@ -2,6 +2,8 @@ from liteeth.common import *
 
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.phy.common import LiteEthPHYMDIO
+
 
 def converter_description(dw):
     payload_layout = [("data", dw)]
@@ -108,3 +110,6 @@ class LiteEthPHYMII(Module, AutoCSR):
         self.submodules.tx =  ClockDomainsRenamer("eth_tx")(LiteEthPHYMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
+
+        if hasattr(pads, "mdc"):
+            self.submodules.mdio = LiteEthPHYMDIO(pads)
