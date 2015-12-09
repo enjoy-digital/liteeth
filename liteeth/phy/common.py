@@ -3,6 +3,22 @@ from liteeth.common import *
 from litex.gen.genlib.cdc import MultiReg
 from litex.gen.fhdl.specials import Tristate
 
+class LiteEthPHYHWReset(Module):
+    def __init__(self):
+        self.reset = Signal()
+
+        # # #
+
+        counter = Signal(max=512)
+        counter_done = Signal()
+        counter_ce = Signal()
+        self.sync += If(counter_ce, counter.eq(counter + 1))
+        self.comb += [
+            counter_done.eq(counter == 256),
+            counter_ce.eq(~counter_done),
+            self.reset.eq(~counter_done)
+        ]
+
 
 class LiteEthPHYMDIO(Module, AutoCSR):
     def __init__(self, pads):

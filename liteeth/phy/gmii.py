@@ -3,7 +3,7 @@ from liteeth.common import *
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
-from liteeth.phy.common import LiteEthPHYMDIO
+from liteeth.phy.common import *
 
 
 class LiteEthPHYGMIITX(Module):
@@ -73,19 +73,13 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
                     	              i_S=mii_mode,
                         	          o_O=self.cd_eth_tx.clk)
 
+        reset = Signal()
         if with_hw_init_reset:
-            reset = Signal()
-            counter = Signal(max=512)
-            counter_done = Signal()
-            counter_ce = Signal()
-            self.sync += If(counter_ce, counter.eq(counter + 1))
-            self.comb += [
-                counter_done.eq(counter == 256),
-                counter_ce.eq(~counter_done),
-                reset.eq(~counter_done | self._reset.storage)
-            ]
+            self.submodules.hw_reset = LiteEthPHYHWReset()
+            self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
-            reset = self._reset.storage
+            self.comb += reset.eq(self._reset.storage)
+
         self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),

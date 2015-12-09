@@ -5,7 +5,7 @@ from litex.gen.genlib.misc import WaitTimer
 from litex.gen.genlib.io import DDROutput
 from litex.gen.genlib.resetsync import AsyncResetSynchronizer
 
-from liteeth.phy.common import LiteEthPHYMDIO
+from liteeth.phy.common import *
 
 
 def converter_description(dw):
@@ -107,19 +107,13 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
 
         self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
 
+        reset = Signal()
         if with_hw_init_reset:
-            reset = Signal()
-            counter_done = Signal()
-            counter = Signal(max=512)
-            counter_ce = Signal()
-            self.sync += If(counter_ce, counter.eq(counter + 1))
-            self.comb += [
-                counter_done.eq(counter == 256),
-                counter_ce.eq(~counter_done),
-                reset.eq(~counter_done | self._reset.storage)
-            ]
+            self.submodules.hw_reset = LiteEthPHYHWReset()
+            self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
-            reset = self._reset.storage
+            self.comb += reset.eq(self._reset.storage)
+
         self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
