@@ -27,12 +27,12 @@ class TB(Module):
         self.submodules.streamer = PacketStreamer(eth_udp_user_description(dw))
         self.submodules.logger = PacketLogger(eth_udp_user_description(dw))
         self.comb += [
-            Record.connect(self.streamer.source, udp_port.sink),
+            self.streamer.source.connect(udp_port.sink),
             udp_port.sink.ip_address.eq(0x12345678),
             udp_port.sink.src_port.eq(0x1234),
             udp_port.sink.dst_port.eq(0x5678),
             udp_port.sink.length.eq(64//(dw//8)),
-            Record.connect(udp_port.source, self.logger.sink)
+            udp_port.source.connect(self.logger.sink)
         ]
 
         # use sys_clk for each clock_domain

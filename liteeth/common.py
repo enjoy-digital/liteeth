@@ -18,10 +18,8 @@ def reverse_bytes(signal):
 
 class Port:
     def connect(self, port):
-        r = [
-            Record.connect(self.source, port.sink),
-            Record.connect(port.source, self.sink)
-        ]
+        r = [self.source.connect(port.sink),
+             port.source.connect(self.sink)]
         return r
 
 

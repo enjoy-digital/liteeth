@@ -71,7 +71,7 @@ class LiteEthARPTX(Module):
         ]
         fsm.act("SEND",
             packetizer.sink.stb.eq(1),
-            Record.connect(packetizer.source, source),
+            packetizer.source.connect(source),
             source.target_mac.eq(packetizer.sink.target_mac),
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
@@ -102,7 +102,7 @@ class LiteEthARPRX(Module):
         # # #
 
         self.submodules.depacketizer = depacketizer = LiteEthARPDepacketizer()
-        self.comb += Record.connect(sink, depacketizer.sink)
+        self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -295,11 +295,11 @@ class LiteEthARP(Module):
         self.submodules.rx = rx = LiteEthARPRX(mac_address, ip_address)
         self.submodules.table = table = LiteEthARPTable(clk_freq)
         self.comb += [
-            Record.connect(rx.source, table.sink),
-            Record.connect(table.source, tx.sink)
+            rx.source.connect(table.sink),
+            table.source.connect(tx.sink)
         ]
         mac_port = mac.crossbar.get_port(ethernet_type_arp)
         self.comb += [
-            Record.connect(tx.source, mac_port.sink),
-            Record.connect(mac_port.source, rx.sink)
+            tx.source.connect(mac_port.sink),
+            mac_port.source.connect(rx.sink)
         ]

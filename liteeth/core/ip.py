@@ -154,7 +154,7 @@ class LiteEthIPTX(Module):
                 target_mac.eq(arp_table.response.mac_address)
             )
         fsm.act("SEND",
-            Record.connect(packetizer.source, source),
+            packetizer.source.connect(source),
             source.ethernet_type.eq(ethernet_type_ip),
             source.target_mac.eq(target_mac),
             source.sender_mac.eq(mac_address),
@@ -189,7 +189,7 @@ class LiteEthIPRX(Module):
         # # #
 
         self.submodules.depacketizer = depacketizer = LiteEthIPV4Depacketizer()
-        self.comb += Record.connect(sink, depacketizer.sink)
+        self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
         self.comb += [
@@ -257,11 +257,11 @@ class LiteEthIP(Module):
         self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address)
         mac_port = mac.crossbar.get_port(ethernet_type_ip)
         self.comb += [
-            Record.connect(tx.source, mac_port.sink),
-            Record.connect(mac_port.source, rx.sink)
+            tx.source.connect(mac_port.sink),
+            mac_port.source.connect(rx.sink)
         ]
         self.submodules.crossbar = crossbar = LiteEthIPV4Crossbar()
         self.comb += [
-            Record.connect(crossbar.master.source, tx.sink),
-            Record.connect(rx.source, crossbar.master.sink)
+            crossbar.master.source.connect(tx.sink),
+            rx.source.connect(crossbar.master.sink)
         ]

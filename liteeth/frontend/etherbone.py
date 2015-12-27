@@ -46,7 +46,7 @@ class LiteEthEtherbonePacketTX(Module):
             )
         )
         fsm.act("SEND",
-            Record.connect(packetizer.source, source),
+            packetizer.source.connect(source),
             source.src_port.eq(udp_port),
             source.dst_port.eq(udp_port),
             source.ip_address.eq(sink.ip_address),
@@ -73,7 +73,7 @@ class LiteEthEtherbonePacketRX(Module):
         # # #
 
         self.submodules.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
-        self.comb += Record.connect(sink, depacketizer.sink)
+        self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -133,8 +133,8 @@ class LiteEthEtherbonePacket(Module):
         self.submodules.rx = rx = LiteEthEtherbonePacketRX()
         udp_port = udp.crossbar.get_port(udp_port, dw=32)
         self.comb += [
-            Record.connect(tx.source, udp_port.sink),
-            Record.connect(udp_port.source, rx.sink)
+            tx.source.connect(udp_port.sink),
+            udp_port.source.connect(rx.sink)
         ]
         self.sink, self.source = self.tx.sink, self.rx.source
 
@@ -157,7 +157,7 @@ class LiteEthEtherboneProbe(Module):
             )
         )
         fsm.act("PROBE_RESPONSE",
-            Record.connect(sink, source),
+            sink.connect(source),
             source.pf.eq(0),
             source.pr.eq(1),
             If(source.stb & source.eop & source.ack,
@@ -194,7 +194,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         fifo = SyncFIFO(eth_etherbone_record_description(32), buffer_depth,
                         buffered=True)
         self.submodules += fifo
-        self.comb += Record.connect(sink, fifo.sink)
+        self.comb += sink.connect(fifo.sink)
 
         base_addr = Signal(32)
         base_addr_update = Signal()
@@ -278,7 +278,7 @@ class LiteEthEtherboneRecordSender(Module):
         # TODO: optimize ressources (no need to store parameters as datas)
         pbuffer = Buffer(eth_etherbone_mmap_description(32), buffer_depth)
         self.submodules += pbuffer
-        self.comb += Record.connect(sink, pbuffer.sink)
+        self.comb += sink.connect(pbuffer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -332,8 +332,8 @@ class LiteEthEtherboneRecord(Module):
         self.submodules.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
         self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver()
         self.comb += [
-            Record.connect(sink, depacketizer.sink),
-            Record.connect(depacketizer.source, receiver.sink)
+            sink.connect(depacketizer.sink),
+            depacketizer.source.connect(receiver.sink)
         ]
         if endianness is "big":
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
@@ -350,8 +350,8 @@ class LiteEthEtherboneRecord(Module):
         self.submodules.sender = sender = LiteEthEtherboneRecordSender()
         self.submodules.packetizer = packetizer = LiteEthEtherboneRecordPacketizer()
         self.comb += [
-            Record.connect(sender.source, packetizer.sink),
-            Record.connect(packetizer.source, source),
+            sender.source.connect(packetizer.sink),
+            packetizer.source.connect(source),
             # XXX improve this
             source.length.eq(sender.source.wcount*4 + 4 + etherbone_record_header.length),
             source.ip_address.eq(last_ip_address)
@@ -453,6 +453,6 @@ class LiteEthEtherbone(Module):
         # create mmap ŵishbone master
         self.submodules.master = master = LiteEthEtherboneWishboneMaster()
         self.comb += [
-            Record.connect(record.receiver.source, master.sink),
-            Record.connect(master.source, record.sender.sink)
+            record.receiver.source.connect(master.sink),
+            master.source.connect(record.sender.sink)
         ]

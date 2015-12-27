@@ -39,15 +39,15 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
                                   eth_udp_user_description(8))
             self.submodules += converter
             self.comb += [
-                Record.connect(user_port.sink, converter.sink),
-                Record.connect(converter.source, internal_port.sink)
+                user_port.sink.connect(converter.sink),
+                converter.source.connect(internal_port.sink)
             ]
             converter = Converter(eth_udp_user_description(8),
                                   eth_udp_user_description(user_port.dw))
             self.submodules += converter
             self.comb += [
-                Record.connect(internal_port.source, converter.sink),
-                Record.connect(converter.source, user_port.source)
+                internal_port.source.connect(converter.sink),
+                converter.source.connect(user_port.source)
             ]
             self.users[udp_port] = internal_port
         else:
@@ -93,7 +93,7 @@ class LiteEthUDPTX(Module):
             )
         )
         fsm.act("SEND",
-            Record.connect(packetizer.source, source),
+            packetizer.source.connect(source),
             source.length.eq(packetizer.sink.length),
             source.protocol.eq(udp_protocol),
             source.ip_address.eq(sink.ip_address),
@@ -120,7 +120,7 @@ class LiteEthUDPRX(Module):
         # # #
 
         self.submodules.depacketizer = depacketizer = LiteEthUDPDepacketizer()
-        self.comb += Record.connect(sink, depacketizer.sink)
+        self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -177,11 +177,11 @@ class LiteEthUDP(Module):
         self.submodules.rx = rx = LiteEthUDPRX(ip_address)
         ip_port = ip.crossbar.get_port(udp_protocol)
         self.comb += [
-            Record.connect(tx.source, ip_port.sink),
-            Record.connect(ip_port.source, rx.sink)
+            tx.source.connect(ip_port.sink),
+            ip_port.source.connect(rx.sink)
         ]
         self.submodules.crossbar = crossbar = LiteEthUDPCrossbar()
         self.comb += [
-            Record.connect(crossbar.master.source, tx.sink),
-            Record.connect(rx.source, crossbar.master.sink)
+            crossbar.master.source.connect(tx.sink),
+            rx.source.connect(crossbar.master.sink)
         ]

@@ -42,7 +42,7 @@ class LiteEthICMPTX(Module):
             )
         )
         fsm.act("SEND",
-            Record.connect(packetizer.source, source),
+            packetizer.source.connect(source),
             source.length.eq(sink.length + icmp_header.length),
             source.protocol.eq(icmp_protocol),
             source.ip_address.eq(sink.ip_address),
@@ -69,7 +69,7 @@ class LiteEthICMPRX(Module):
         # # #
 
         self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer()
-        self.comb += Record.connect(sink, depacketizer.sink)
+        self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -131,8 +131,8 @@ class LiteEthICMPEcho(Module):
         # TODO: optimize ressources (no need to store parameters as datas)
         self.submodules.buffer = Buffer(eth_icmp_user_description(8), 128, 2)
         self.comb += [
-            Record.connect(sink, self.buffer.sink),
-            Record.connect(self.buffer.source, source),
+            sink.connect(self.buffer.sink),
+            self.buffer.source.connect(source),
             self.source.msgtype.eq(0x0),
             self.source.checksum.eq(~((~self.buffer.source.checksum)-0x0800))
         ]
@@ -145,11 +145,11 @@ class LiteEthICMP(Module):
         self.submodules.rx = rx = LiteEthICMPRX(ip_address)
         self.submodules.echo = echo = LiteEthICMPEcho()
         self.comb += [
-            Record.connect(rx.source, echo.sink),
-            Record.connect(echo.source, tx.sink)
+            rx.source.connect(echo.sink),
+            echo.source.connect(tx.sink)
         ]
         ip_port = ip.crossbar.get_port(icmp_protocol)
         self.comb += [
-            Record.connect(tx.source, ip_port.sink),
-            Record.connect(ip_port.source, rx.sink)
+            tx.source.connect(ip_port.sink),
+            ip_port.source.connect(rx.sink)
         ]

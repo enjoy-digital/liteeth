@@ -89,7 +89,7 @@ class LiteEthPHYRMIIRX(Module):
               NextState("IDLE")
             )
         )
-        self.comb += Record.connect(converter.source, source)
+        self.comb += converter.source.connect(source)
 
 
 class LiteEthPHYRMIICRG(Module, AutoCSR):

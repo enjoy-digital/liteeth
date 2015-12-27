@@ -33,10 +33,10 @@ class TB(Module):
         ]
 
         self.comb += [
-            Record.connect(self.streamer.source, self.streamer_randomizer.sink),
-            Record.connect(self.streamer_randomizer.source, self.core.sink),
-            Record.connect(self.core.source, self.logger_randomizer.sink),
-            Record.connect(self.logger_randomizer.source, self.logger.sink)
+            self.streamer.source.connect(self.streamer_randomizer.sink),
+            self.streamer_randomizer.source.connect(self.core.sink),
+            self.core.source.connect(self.logger_randomizer.sink),
+            self.logger_randomizer.source.connect(self.logger.sink)
         ]
 
     def gen_simulation(self, selfp):

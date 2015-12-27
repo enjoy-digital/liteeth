@@ -19,7 +19,7 @@ class LiteEthTTYTX(Module):
             ]
         else:
             self.submodules.fifo = fifo = SyncFIFO([("data", 8)], fifo_depth)
-            self.comb += Record.connect(sink, fifo.sink)
+            self.comb += sink.connect(fifo.sink)
 
             level = Signal(max=fifo_depth)
             level_update = Signal()
@@ -94,7 +94,7 @@ class LiteEthTTYRX(Module):
                 fifo.sink.stb.eq(sink.stb & valid),
                 fifo.sink.data.eq(sink.data),
                 sink.ack.eq(fifo.sink.ack),
-                Record.connect(fifo.source, source)
+                fifo.source.connect(source)
             ]
 
 
@@ -106,7 +106,7 @@ class LiteEthTTY(Module):
         self.submodules.rx = rx = LiteEthTTYRX(ip_address, udp_port, rx_fifo_depth)
         udp_port = udp.crossbar.get_port(udp_port, dw=8)
         self.comb += [
-            Record.connect(tx.source, udp_port.sink),
-            Record.connect(udp_port.source, rx.sink)
+            tx.source.connect(udp_port.sink),
+            udp_port.source.connect(rx.sink)
         ]
         self.sink, self.source = self.tx.sink, self.rx.source

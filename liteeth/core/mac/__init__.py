@@ -16,10 +16,10 @@ class LiteEthMAC(Module, AutoCSR):
             self.submodules.packetizer = LiteEthMACPacketizer()
             self.submodules.depacketizer = LiteEthMACDepacketizer()
             self.comb += [
-                Record.connect(self.crossbar.master.source, self.packetizer.sink),
-                Record.connect(self.packetizer.source, self.core.sink),
-                Record.connect(self.core.source, self.depacketizer.sink),
-                Record.connect(self.depacketizer.source, self.crossbar.master.sink)
+                self.crossbar.master.source.connect(self.packetizer.sink),
+                self.packetizer.source.connect(self.core.sink),
+                self.core.source.connect(self.depacketizer.sink),
+                self.depacketizer.source.connect(self.crossbar.master.sink)
             ]
         elif interface == "wishbone":
             self.submodules.interface = LiteEthMACWishboneInterface(dw, 2, 2)
