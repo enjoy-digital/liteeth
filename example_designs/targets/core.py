@@ -12,6 +12,9 @@ from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 
 from liteeth.phy.mii import LiteEthPHYMII
+from liteeth.phy.rmii import LiteEthPHYRMII
+from liteeth.phy.gmii import LiteEthPHYGMII
+from liteeth.phy.s7rgmii import LiteEthPHYRGMII
 from liteeth.core.mac import LiteEthMAC
 
 _io = [
@@ -32,11 +35,12 @@ _io = [
         Subsignal("err",   Pins(1))
     ),
 
-    ("eth_clocks", 0,
+    # MII PHY Pads
+    ("mii_eth_clocks", 0,
         Subsignal("tx", Pins(1)),
         Subsignal("rx", Pins(1)),
     ),
-    ("eth", 0,
+    ("mii_eth", 0,
         Subsignal("rst_n", Pins(1)),
         Subsignal("mdio", Pins(1)),
         Subsignal("mdc", Pins(1)),
@@ -47,7 +51,58 @@ _io = [
         Subsignal("tx_data", Pins(4)),
         Subsignal("col", Pins(1)),
         Subsignal("crs", Pins(1))
-    )
+    ),
+
+    # RMII PHY Pads
+    ("rmii_eth_clocks", 0,
+        Subsignal("ref_clk", Pins(1))
+    ),
+    ("rmii_eth", 0,
+        Subsignal("rst_n", Pins(1)),
+        Subsignal("rx_data", Pins(2)),
+        Subsignal("crs_dv", Pins(1)),
+        Subsignal("tx_en", Pins(1)),
+        Subsignal("tx_data", Pins(2)),
+        Subsignal("mdc", Pins(1)),
+        Subsignal("mdio", Pins(1)),
+    ),
+
+    # GMII PHY Pads
+    ("gmii_eth_clocks", 0,
+        Subsignal("tx", Pins(1)),
+        Subsignal("gtx", Pins(1)),
+        Subsignal("rx", Pins(1))
+    ),
+    ("gmii_eth", 0,
+        Subsignal("rst_n", Pins(1)),
+        Subsignal("int_n", Pins(1)),
+        Subsignal("mdio", Pins(1)),
+        Subsignal("mdc", Pins(1)),
+        Subsignal("dv", Pins(1)),
+        Subsignal("rx_er", Pins(1)),
+        Subsignal("rx_data", Pins(8)),
+        Subsignal("tx_en", Pins(1)),
+        Subsignal("tx_er", Pins(1)),
+        Subsignal("tx_data", Pins(8)),
+        Subsignal("col", Pins(1)),
+        Subsignal("crs", Pins(1))
+    ),
+
+    # RGMII PHY Pads
+    ("rgmii_eth_clocks", 0,
+        Subsignal("tx", Pins(1)),
+        Subsignal("rx", Pins(1))
+    ),
+    ("rgmii_eth", 0,
+        Subsignal("rst_n", Pins(1)),
+        Subsignal("int_n", Pins(1)),
+        Subsignal("mdio", Pins(1)),
+        Subsignal("mdc", Pins(1)),
+        Subsignal("rx_ctl", Pins(1)),
+        Subsignal("rx_data", Pins(4)),
+        Subsignal("tx_ctl", Pins(1)),
+        Subsignal("tx_data", Pins(4))
+    ),
 ]
 
 class CorePlatform(XilinxPlatform):
@@ -80,7 +135,7 @@ class Core(SoCCore):
     }
     mem_map.update(SoCCore.mem_map)
 
-    def __init__(self, clk_freq=100*1000000):
+    def __init__(self, phy, clk_freq=100*1000000):
         platform = CorePlatform()
         SoCCore.__init__(self, platform,
             clk_freq=clk_freq,
@@ -93,8 +148,21 @@ class Core(SoCCore):
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
         # ethernet
-        self.submodules.ethphy = LiteEthPHYMII(platform.request("eth_clocks"),
-                                               platform.request("eth"))
+        if phy == "MII":
+            self.submodules.ethphy = LiteEthPHYMII(platform.request("mii_eth_clocks"),
+                                                   platform.request("mii_eth"))
+        elif phy == "RMII":
+            self.submodules.ethphy = LiteEthPHYRMII(platform.request("rmii_eth_clocks"),
+                                                    platform.request("rmii_eth"))
+        elif phy == "GMII":
+            self.submodules.ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
+                                                    platform.request("gmii_eth"))
+        elif phy == "RGMII":
+            self.submodules.ethphy = LiteEthPHYRGMII(platform.request("rgmii_eth_clocks"),
+                                                     platform.request("rgmii_eth"))
+        else:
+            ValueError("Unsupported " + phy + " PHY");
+
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
         self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
@@ -108,9 +176,10 @@ def main():
     parser = argparse.ArgumentParser(description="LiteEth core builder")
     builder_args(parser)
     soc_core_args(parser)
+    parser.add_argument("--phy", default="MII", help="Ethernet PHY(MII/RMII/GMII/RMGII)")
     args = parser.parse_args()
 
-    soc = Core(**soc_core_argdict(args))
+    soc = Core(phy=args.phy, **soc_core_argdict(args))
     builder = Builder(soc, output_dir="liteeth", compile_gateware=False, csr_csv="liteeth/csr.csv")
     builder.build(build_name="liteeth")
 
