@@ -149,29 +149,9 @@ class CorePlatform(XilinxPlatform):
     def do_finalize(self, *args, **kwargs):
         pass
 
-class WishboneBridge(Module):
-    def __init__(self, interface):
-        self.wishbone = interface
 
-class Core(SoCCore):
-    csr_peripherals = (
-        "ethphy",
-        "ethmac"
-    )
-    csr_map = dict((n, v) for v, n in enumerate(csr_peripherals, start=16))
-    csr_map.update(SoCCore.csr_map)
-
-    interrupt_map = {
-        "ethmac": 2,
-    }
-    interrupt_map.update(SoCCore.interrupt_map)
-
-    mem_map = {
-        "ethmac": 0x50000000
-    }
-    mem_map.update(SoCCore.mem_map)
-
-    def __init__(self, phy, core, clk_freq, mac_address, ip_address, udp_port):
+class PHYCore(SoCCore):
+    def __init__(self, phy, clk_freq):
         platform = CorePlatform()
         SoCCore.__init__(self, platform,
             clk_freq=clk_freq,
@@ -199,55 +179,84 @@ class Core(SoCCore):
         else:
             ValueError("Unsupported " + phy + " PHY");
 
-        # core
-        if core == "mac":
-            self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
-            self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
-            self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
 
-            self.add_cpu_or_bridge(WishboneBridge(platform.request("wishbone")))
-            self.add_wb_master(self.cpu_or_bridge.wishbone)
-        
-        elif core == "udp":
-            self.submodules.core = LiteEthUDPIPCore(self.ethphy, mac_address, convert_ip(ip_address), clk_freq)
-            udp_port = self.core.udp.crossbar.get_port(udp_port, 8)
-            # XXX avoid manual connect
-            udp_sink = platform.request("udp_sink")
-            self.comb += [
-                # control
-                udp_port.sink.stb.eq(udp_sink.stb),
-                udp_port.sink.sop.eq(udp_sink.sop),
-                udp_port.sink.eop.eq(udp_sink.eop),
-                udp_sink.ack.eq(udp_port.sink.ack),
+class MACCore(PHYCore):
+    csr_peripherals = (
+        "ethphy",
+        "ethmac"
+    )
+    csr_map = dict((n, v) for v, n in enumerate(csr_peripherals, start=16))
+    csr_map.update(SoCCore.csr_map)
 
-                # param
-                udp_port.sink.src_port.eq(udp_sink.src_port),
-                udp_port.sink.dst_port.eq(udp_sink.dst_port),
-                udp_port.sink.ip_address.eq(udp_sink.ip_address),
-                udp_port.sink.length.eq(udp_sink.length),
+    interrupt_map = {
+        "ethmac": 2,
+    }
+    interrupt_map.update(SoCCore.interrupt_map)
 
-                # payload
-                udp_port.sink.data.eq(udp_sink.data),
-                udp_port.sink.error.eq(udp_sink.error)
-            ]
-            udp_source = platform.request("udp_source")
-            self.comb += [
-                # control
-                udp_source.stb.eq(udp_port.source.stb),
-                udp_source.sop.eq(udp_port.source.sop),
-                udp_source.eop.eq(udp_port.source.eop),
-                udp_port.source.ack.eq(udp_source.ack),
+    mem_map = {
+        "ethmac": 0x50000000
+    }
+    mem_map.update(SoCCore.mem_map)
+    
+    def __init__(self, phy, clk_freq):
+        PHYCore.__init__(self, phy, clk_freq)
 
-                # param
-                udp_source.src_port.eq(udp_port.source.src_port),
-                udp_source.dst_port.eq(udp_port.source.dst_port),
-                udp_source.ip_address.eq(udp_port.source.ip_address),
-                udp_source.length.eq(udp_port.source.length),
+        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
+        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+        self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
 
-                # payload
-                udp_source.data.eq(udp_port.source.data),
-                udp_source.error.eq(udp_port.source.error)
-            ]
+        class _WishboneBridge(Module):
+            def __init__(self, interface):
+                self.wishbone = interface
+
+        self.add_cpu_or_bridge(_WishboneBridge(self.platform.request("wishbone")))
+        self.add_wb_master(self.cpu_or_bridge.wishbone)
+
+
+class UDPCore(PHYCore):
+    def __init__(self, phy, clk_freq, mac_address, ip_address, port):
+        PHYCore.__init__(self, phy, clk_freq)
+
+        self.submodules.core = LiteEthUDPIPCore(self.ethphy, mac_address, convert_ip(ip_address), clk_freq)
+        udp_port = self.core.udp.crossbar.get_port(port, 8)
+        # XXX avoid manual connect
+        udp_sink = self.platform.request("udp_sink")
+        self.comb += [
+            # control
+            udp_port.sink.stb.eq(udp_sink.stb),
+            udp_port.sink.sop.eq(udp_sink.sop),
+            udp_port.sink.eop.eq(udp_sink.eop),
+            udp_sink.ack.eq(udp_port.sink.ack),
+
+            # param
+            udp_port.sink.src_port.eq(udp_sink.src_port),
+            udp_port.sink.dst_port.eq(udp_sink.dst_port),
+            udp_port.sink.ip_address.eq(udp_sink.ip_address),
+            udp_port.sink.length.eq(udp_sink.length),
+
+            # payload
+            udp_port.sink.data.eq(udp_sink.data),
+            udp_port.sink.error.eq(udp_sink.error)
+        ]
+        udp_source = self.platform.request("udp_source")
+        self.comb += [
+            # control
+            udp_source.stb.eq(udp_port.source.stb),
+            udp_source.sop.eq(udp_port.source.sop),
+            udp_source.eop.eq(udp_port.source.eop),
+            udp_port.source.ack.eq(udp_source.ack),
+
+            # param
+            udp_source.src_port.eq(udp_port.source.src_port),
+            udp_source.dst_port.eq(udp_port.source.dst_port),
+            udp_source.ip_address.eq(udp_port.source.ip_address),
+            udp_source.length.eq(udp_port.source.length),
+
+            # payload
+            udp_source.data.eq(udp_port.source.data),
+            udp_source.error.eq(udp_port.source.error)
+        ]
+
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth core builder")
@@ -259,13 +268,15 @@ def main():
     parser.add_argument("--ip_address", default="192.168.0.42", help="IP address")
     args = parser.parse_args()
 
-    soc = Core(phy=args.phy,
-               core=args.core,
-               clk_freq=100*1000,
-               mac_address=args.mac_address,
-               ip_address=args.ip_address,
-               udp_port=6000,
-               **soc_core_argdict(args))
+    if args.core == "mac":
+        soc = MACCore(phy=args.phy, clk_freq=100*1000000)
+    elif args.core == "udp":
+        soc =  UDPCore(phy=args.phy, clk_freq=100*10000000,
+                       mac_address=args.mac_address,
+                       ip_address=args.ip_address,
+                       port=6000)
+    else:
+        raise ValueError
     builder = Builder(soc, output_dir="liteeth", compile_gateware=False, csr_csv="liteeth/csr.csv")
     builder.build(build_name="liteeth")
 
