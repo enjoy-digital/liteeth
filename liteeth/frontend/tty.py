@@ -3,8 +3,8 @@ from liteeth.common import *
 
 class LiteEthTTYTX(Module):
     def __init__(self, ip_address, udp_port, fifo_depth=None):
-        self.sink = sink = Sink(eth_tty_description(8))
-        self.source = source = Source(eth_udp_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_tty_description(8))
+        self.source = source = stream.Endpoint(eth_udp_user_description(8))
 
         # # #
 
@@ -18,7 +18,7 @@ class LiteEthTTYTX(Module):
                 sink.ack.eq(source.ack)
             ]
         else:
-            self.submodules.fifo = fifo = SyncFIFO([("data", 8)], fifo_depth)
+            self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += sink.connect(fifo.sink)
 
             level = Signal(max=fifo_depth)
@@ -72,8 +72,8 @@ class LiteEthTTYTX(Module):
 
 class LiteEthTTYRX(Module):
     def __init__(self, ip_address, udp_port, fifo_depth=None):
-        self.sink = sink = Sink(eth_udp_user_description(8))
-        self.source = source = Source(eth_tty_description(8))
+        self.sink = sink = stream.Endpoint(eth_udp_user_description(8))
+        self.source = source = stream.Endpoint(eth_tty_description(8))
 
         # # #
 
@@ -89,7 +89,7 @@ class LiteEthTTYRX(Module):
                 sink.ack.eq(source.ack)
             ]
         else:
-            self.submodules.fifo = fifo = SyncFIFO([("data", 8)], fifo_depth)
+            self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += [
                 fifo.sink.stb.eq(sink.stb & valid),
                 fifo.sink.data.eq(sink.data),

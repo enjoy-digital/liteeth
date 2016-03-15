@@ -22,7 +22,7 @@ rx_pads_layout = [("rx_er", 1), ("dv", 1), ("rx_data", 8)]
 
 class LiteEthPHYGMIIMIITX(Module):
     def __init__(self, pads, mode):
-        self.sink = sink = Sink(eth_phy_description(8))
+        self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
@@ -58,7 +58,7 @@ class LiteEthPHYGMIIMIITX(Module):
 
 class LiteEthPHYGMIIMIIRX(Module):
     def __init__(self, pads, mode):
-        self.source = source = Source(eth_phy_description(8))
+        self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 

@@ -12,7 +12,7 @@ from liteeth.phy.common import *
 
 class LiteEthPHYRGMIITX(Module):
     def __init__(self, pads):
-        self.sink = sink = Sink(eth_phy_description(8))
+        self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
@@ -34,7 +34,7 @@ class LiteEthPHYRGMIITX(Module):
 
 class LiteEthPHYRGMIIRX(Module):
     def __init__(self, pads):
-        self.source = source = Source(eth_phy_description(8))
+        self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 

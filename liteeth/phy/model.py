@@ -27,8 +27,8 @@ class LiteEthPHYModel(Module, AutoCSR):
     def __init__(self, pads, tap="tap0", ip_address="192.168.1.100"):
         self.dw = 8
         self.submodules.crg = LiteEthPHYModelCRG()
-        self.sink = sink = Sink(eth_phy_description(8))
-        self.source = source = Source(eth_phy_description(8))
+        self.sink = sink = stream.Endpoint(eth_phy_description(8))
+        self.source = source = stream.Endpoint(eth_phy_description(8))
         self.tap = tap
         self.ip_address = ip_address
 

@@ -9,15 +9,15 @@ from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
 class LiteEthIPV4MasterPort:
     def __init__(self, dw):
         self.dw = dw
-        self.source = Source(eth_ipv4_user_description(dw))
-        self.sink = Sink(eth_ipv4_user_description(dw))
+        self.source = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.sink = stream.Endpoint(eth_ipv4_user_description(dw))
 
 
 class LiteEthIPV4SlavePort:
     def __init__(self, dw):
         self.dw = dw
-        self.sink = Sink(eth_ipv4_user_description(dw))
-        self.source = Source(eth_ipv4_user_description(dw))
+        self.sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.source = stream.Endpoint(eth_ipv4_user_description(dw))
 
 
 class LiteEthIPV4UserPort(LiteEthIPV4SlavePort):
@@ -90,8 +90,8 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 class LiteEthIPTX(Module):
     def __init__(self, mac_address, ip_address, arp_table):
-        self.sink = sink = Sink(eth_ipv4_user_description(8))
-        self.source = source = Source(eth_mac_description(8))
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(8))
+        self.source = source = stream.Endpoint(eth_mac_description(8))
         self.target_unreachable = Signal()
 
         # # #
@@ -183,8 +183,8 @@ class LiteEthIPV4Depacketizer(Depacketizer):
 
 class LiteEthIPRX(Module):
     def __init__(self, mac_address, ip_address):
-        self.sink = sink = Sink(eth_mac_description(8))
-        self.source = source = Source(eth_ipv4_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_mac_description(8))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
 
         # # #
 

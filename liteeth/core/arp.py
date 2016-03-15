@@ -23,8 +23,8 @@ class LiteEthARPPacketizer(Packetizer):
 
 class LiteEthARPTX(Module):
     def __init__(self, mac_address, ip_address):
-        self.sink = sink = Sink(_arp_table_layout)
-        self.source = source = Source(eth_mac_description(8))
+        self.sink = sink = stream.Endpoint(_arp_table_layout)
+        self.source = source = stream.Endpoint(eth_mac_description(8))
 
         # # #
 
@@ -96,8 +96,8 @@ class LiteEthARPDepacketizer(Depacketizer):
 
 class LiteEthARPRX(Module):
     def __init__(self, mac_address, ip_address):
-        self.sink = sink = Sink(eth_mac_description(8))
-        self.source = source = Source(_arp_table_layout)
+        self.sink = sink = stream.Endpoint(eth_mac_description(8))
+        self.source = source = stream.Endpoint(_arp_table_layout)
 
         # # #
 
@@ -151,12 +151,12 @@ class LiteEthARPRX(Module):
 
 class LiteEthARPTable(Module):
     def __init__(self, clk_freq, max_requests=8):
-        self.sink = sink = Sink(_arp_table_layout)             # from arp_rx
-        self.source = source = Source(_arp_table_layout)       # to arp_tx
+        self.sink = sink = stream.Endpoint(_arp_table_layout)  # from arp_rx
+        self.source = source = stream.Endpoint(_arp_table_layout)       # to arp_tx
 
         # Request/Response interface
-        self.request = request = Sink(arp_table_request_layout)
-        self.response = response = Source(arp_table_response_layout)
+        self.request = request = stream.Endpoint(arp_table_request_layout)
+        self.response = response = stream.Endpoint(arp_table_response_layout)
 
         # # #
 

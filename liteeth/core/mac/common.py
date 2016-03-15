@@ -22,14 +22,14 @@ class LiteEthMACPacketizer(Packetizer):
 
 class LiteEthMACMasterPort:
     def __init__(self, dw):
-        self.source = Source(eth_mac_description(dw))
-        self.sink = Sink(eth_mac_description(dw))
+        self.source = stream.Endpoint(eth_mac_description(dw))
+        self.sink = stream.Endpoint(eth_mac_description(dw))
 
 
 class LiteEthMACSlavePort:
     def __init__(self, dw):
-        self.sink = Sink(eth_mac_description(dw))
-        self.source = Source(eth_mac_description(dw))
+        self.sink = stream.Endpoint(eth_mac_description(dw))
+        self.source = stream.Endpoint(eth_mac_description(dw))
 
 
 class LiteEthMACUserPort(LiteEthMACSlavePort):

@@ -8,7 +8,7 @@ def print_phy(s):
 
 
 # PHY model
-class PHYSource(PacketStreamer):
+class PHYstream.Endpoint(PacketStreamer):
     def __init__(self, dw):
         PacketStreamer.__init__(self, eth_phy_description(dw))
 
@@ -23,7 +23,7 @@ class PHY(Module):
         self.dw = dw
         self.debug = debug
 
-        self.submodules.phy_source = PHYSource(dw)
+        self.submodules.phy_source = PHYstream.Endpoint(dw)
         self.submodules.phy_sink = PHYSink(dw)
 
         self.source = self.phy_source.source

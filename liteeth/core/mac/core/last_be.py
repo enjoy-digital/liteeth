@@ -3,8 +3,8 @@ from liteeth.common import *
 
 class LiteEthMACTXLastBE(Module):
     def __init__(self, dw):
-        self.sink = sink = Sink(eth_phy_description(dw))
-        self.source = source = Source(eth_phy_description(dw))
+        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
@@ -28,8 +28,8 @@ class LiteEthMACTXLastBE(Module):
 
 class LiteEthMACRXLastBE(Module):
     def __init__(self, dw):
-        self.sink = sink = Sink(eth_phy_description(dw))
-        self.source = source = Source(eth_phy_description(dw))
+        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 

@@ -9,15 +9,15 @@ from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer, Buffe
 class LiteEthUDPMasterPort:
     def __init__(self, dw):
         self.dw = dw
-        self.source = Source(eth_udp_user_description(dw))
-        self.sink = Sink(eth_udp_user_description(dw))
+        self.source = stream.Endpoint(eth_udp_user_description(dw))
+        self.sink = stream.Endpoint(eth_udp_user_description(dw))
 
 
 class LiteEthUDPSlavePort:
     def __init__(self, dw):
         self.dw = dw
-        self.sink = Sink(eth_udp_user_description(dw))
-        self.source = Source(eth_udp_user_description(dw))
+        self.sink = stream.Endpoint(eth_udp_user_description(dw))
+        self.source = stream.Endpoint(eth_udp_user_description(dw))
 
 
 class LiteEthUDPUserPort(LiteEthUDPSlavePort):
@@ -35,14 +35,14 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         user_port = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(8)
         if dw != 8:
-            converter = Converter(eth_udp_user_description(user_port.dw),
+            converter = stream.Converter(eth_udp_user_description(user_port.dw),
                                   eth_udp_user_description(8))
             self.submodules += converter
             self.comb += [
                 user_port.sink.connect(converter.sink),
                 converter.source.connect(internal_port.sink)
             ]
-            converter = Converter(eth_udp_user_description(8),
+            converter = stream.Converter(eth_udp_user_description(8),
                                   eth_udp_user_description(user_port.dw))
             self.submodules += converter
             self.comb += [
@@ -66,8 +66,8 @@ class LiteEthUDPPacketizer(Packetizer):
 
 class LiteEthUDPTX(Module):
     def __init__(self, ip_address):
-        self.sink = sink = Sink(eth_udp_user_description(8))
-        self.source = source = Source(eth_ipv4_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_udp_user_description(8))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
 
         # # #
 
@@ -114,8 +114,8 @@ class LiteEthUDPDepacketizer(Depacketizer):
 
 class LiteEthUDPRX(Module):
     def __init__(self, ip_address):
-        self.sink = sink = Sink(eth_ipv4_user_description(8))
-        self.source = source = Source(eth_udp_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(8))
+        self.source = source = stream.Endpoint(eth_udp_user_description(8))
 
         # # #
 

@@ -7,19 +7,19 @@ from liteeth.phy.common import *
 
 def converter_description(dw):
     payload_layout = [("data", dw)]
-    return EndpointDescription(payload_layout, packetized=True)
+    return EndpointDescription(payload_layout)
 
 
 class LiteEthPHYMIITX(Module):
     def __init__(self, pads):
-        self.sink = sink = Sink(eth_phy_description(8))
+        self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
         if hasattr(pads, "tx_er"):
             self.sync += pads.tx_er.eq(0)
-        converter = Converter(converter_description(8),
-                              converter_description(4))
+        converter = stream.Converter(converter_description(8),
+                                     converter_description(4))
         self.submodules += converter
         self.comb += [
             converter.sink.stb.eq(sink.stb),
@@ -35,7 +35,7 @@ class LiteEthPHYMIITX(Module):
 
 class LiteEthPHYMIIRX(Module):
     def __init__(self, pads):
-        self.source = source = Source(eth_phy_description(8))
+        self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
@@ -44,8 +44,8 @@ class LiteEthPHYMIIRX(Module):
         sop_clr = Signal()
         self.sync += If(sop_set, sop.eq(1)).Elif(sop_clr, sop.eq(0))
 
-        converter = Converter(converter_description(4),
-                              converter_description(8))
+        converter = stream.Converter(converter_description(4),
+                                     converter_description(8))
         converter = ResetInserter()(converter)
         self.submodules += converter
 

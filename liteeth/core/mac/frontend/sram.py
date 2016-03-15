@@ -7,7 +7,7 @@ from litex.soc.interconnect.csr_eventmanager import *
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2):
-        self.sink = sink = Sink(eth_phy_description(dw))
+        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
         slotbits = max(log2_int(nslots), 1)
@@ -54,7 +54,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         ongoing = Signal()
 
         # status fifo
-        fifo = SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
+        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += fifo
 
         # fsm
@@ -125,7 +125,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2):
-        self.source = source = Source(eth_phy_description(dw))
+        self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         slotbits = max(log2_int(nslots), 1)
         lengthbits = log2_int(depth*4)  # length in bytes
@@ -143,7 +143,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         # # #
 
         # command fifo
-        fifo = SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
+        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += fifo
         self.comb += [
             fifo.sink.stb.eq(self._start.re),

@@ -3,8 +3,8 @@ from liteeth.common import *
 
 class LiteEthMACPaddingInserter(Module):
     def __init__(self, dw, padding):
-        self.sink = sink = Sink(eth_phy_description(dw))
-        self.source = source = Source(eth_phy_description(dw))
+        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
@@ -52,8 +52,8 @@ class LiteEthMACPaddingInserter(Module):
 
 class LiteEthMACPaddingChecker(Module):
     def __init__(self, dw, packet_min_length):
-        self.sink = sink = Sink(eth_phy_description(dw))
-        self.source = source = Source(eth_phy_description(dw))
+        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 

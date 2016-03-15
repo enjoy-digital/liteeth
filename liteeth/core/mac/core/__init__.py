@@ -69,12 +69,12 @@ class LiteEthMACCore(Module, AutoCSR):
         # Converters
         if dw != phy.dw:
             reverse = endianness == "big"
-            tx_converter = Converter(eth_phy_description(dw),
-                                     eth_phy_description(phy.dw),
-                                     reverse=reverse)
-            rx_converter = Converter(eth_phy_description(phy.dw),
-                                     eth_phy_description(dw),
-                                     reverse=reverse)
+            tx_converter = stream.Converter(eth_phy_description(dw),
+                                            eth_phy_description(phy.dw),
+                                            reverse=reverse)
+            rx_converter = stream.Converter(eth_phy_description(phy.dw),
+                                            eth_phy_description(dw),
+                                            reverse=reverse)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
 
@@ -86,8 +86,8 @@ class LiteEthMACCore(Module, AutoCSR):
             fifo_depth = 8
         else:
             fifo_depth = 64
-        tx_cdc = AsyncFIFO(eth_phy_description(dw), fifo_depth)
-        rx_cdc = AsyncFIFO(eth_phy_description(dw), fifo_depth)
+        tx_cdc = stream.AsyncFIFO(eth_phy_description(dw), fifo_depth)
+        rx_cdc = stream.AsyncFIFO(eth_phy_description(dw), fifo_depth)
         self.submodules += ClockDomainsRenamer({"write": "sys", "read": "eth_tx"})(tx_cdc)
         self.submodules += ClockDomainsRenamer({"write": "eth_rx", "read": "sys"})(rx_cdc)
 
@@ -95,7 +95,7 @@ class LiteEthMACCore(Module, AutoCSR):
         rx_pipeline += [rx_cdc]
 
         # Graph
-        self.submodules.tx_pipeline = Pipeline(*reversed(tx_pipeline))
-        self.submodules.rx_pipeline = Pipeline(*rx_pipeline)
+        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
+        self.submodules.rx_pipeline = stream.Pipeline(*rx_pipeline)
 
         self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source

@@ -5,8 +5,8 @@ from litex.gen.genlib.misc import chooser
 
 class LiteEthMACPreambleInserter(Module):
     def __init__(self, dw):
-        self.sink = Sink(eth_phy_description(dw))
-        self.source = Source(eth_phy_description(dw))
+        self.sink = stream.Endpoint(eth_phy_description(dw))
+        self.source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
@@ -60,8 +60,8 @@ class LiteEthMACPreambleInserter(Module):
 
 class LiteEthMACPreambleChecker(Module):
     def __init__(self, dw):
-        self.sink = Sink(eth_phy_description(dw))
-        self.source = Source(eth_phy_description(dw))
+        self.sink = stream.Endpoint(eth_phy_description(dw))
+        self.source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 

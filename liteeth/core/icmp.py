@@ -15,8 +15,8 @@ class LiteEthICMPPacketizer(Packetizer):
 
 class LiteEthICMPTX(Module):
     def __init__(self, ip_address):
-        self.sink = sink = Sink(eth_icmp_user_description(8))
-        self.source = source = Source(eth_ipv4_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_icmp_user_description(8))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
 
         # # #
 
@@ -63,8 +63,8 @@ class LiteEthICMPDepacketizer(Depacketizer):
 
 class LiteEthICMPRX(Module):
     def __init__(self, ip_address):
-        self.sink = sink = Sink(eth_ipv4_user_description(8))
-        self.source = source = Source(eth_icmp_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(8))
+        self.source = source = stream.Endpoint(eth_icmp_user_description(8))
 
         # # #
 
@@ -123,8 +123,8 @@ class LiteEthICMPRX(Module):
 
 class LiteEthICMPEcho(Module):
     def __init__(self):
-        self.sink = sink = Sink(eth_icmp_user_description(8))
-        self.source = source = Source(eth_icmp_user_description(8))
+        self.sink = sink = stream.Endpoint(eth_icmp_user_description(8))
+        self.source = source = stream.Endpoint(eth_icmp_user_description(8))
 
         # # #
 
