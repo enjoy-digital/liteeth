@@ -23,7 +23,6 @@ class LiteEthICMPTX(Module):
         self.submodules.packetizer = packetizer = LiteEthICMPPacketizer()
         self.comb += [
             packetizer.sink.stb.eq(sink.stb),
-            packetizer.sink.sop.eq(sink.sop),
             packetizer.sink.eop.eq(sink.eop),
             sink.ack.eq(packetizer.sink.ack),
             packetizer.sink.msgtype.eq(sink.msgtype),
@@ -36,7 +35,7 @@ class LiteEthICMPTX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             packetizer.source.ack.eq(1),
-            If(packetizer.source.stb & packetizer.source.sop,
+            If(packetizer.source.stb,
                 packetizer.source.ack.eq(0),
                 NextState("SEND")
             )
@@ -74,7 +73,7 @@ class LiteEthICMPRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb & depacketizer.source.sop,
+            If(depacketizer.source.stb,
                 depacketizer.source.ack.eq(0),
                 NextState("CHECK")
             )
@@ -92,7 +91,6 @@ class LiteEthICMPRX(Module):
             )
         )
         self.comb += [
-            source.sop.eq(depacketizer.source.sop),
             source.eop.eq(depacketizer.source.eop),
             source.msgtype.eq(depacketizer.source.msgtype),
             source.code.eq(depacketizer.source.code),

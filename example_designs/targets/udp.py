@@ -38,25 +38,21 @@ class UDPSoCDevel(UDPSoC):
         UDPSoC.__init__(self, platform)
         debug = (
             self.loopback_8.sink.stb,
-            self.loopback_8.sink.sop,
             self.loopback_8.sink.eop,
             self.loopback_8.sink.ack,
             self.loopback_8.sink.data,
 
             self.loopback_8.source.stb,
-            self.loopback_8.source.sop,
             self.loopback_8.source.eop,
             self.loopback_8.source.ack,
             self.loopback_8.source.data,
 
             self.loopback_32.sink.stb,
-            self.loopback_32.sink.sop,
             self.loopback_32.sink.eop,
             self.loopback_32.sink.ack,
             self.loopback_32.sink.data,
 
             self.loopback_32.source.stb,
-            self.loopback_32.source.sop,
             self.loopback_32.source.eop,
             self.loopback_32.source.ack,
             self.loopback_32.source.data

@@ -23,7 +23,6 @@ class LiteEthEtherbonePacketTX(Module):
         self.submodules.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
         self.comb += [
             packetizer.sink.stb.eq(sink.stb),
-            packetizer.sink.sop.eq(sink.sop),
             packetizer.sink.eop.eq(sink.eop),
             sink.ack.eq(packetizer.sink.ack),
 
@@ -40,7 +39,7 @@ class LiteEthEtherbonePacketTX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             packetizer.source.ack.eq(1),
-            If(packetizer.source.stb & packetizer.source.sop,
+            If(packetizer.source.stb,
                 packetizer.source.ack.eq(0),
                 NextState("SEND")
             )
@@ -78,7 +77,7 @@ class LiteEthEtherbonePacketRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb & depacketizer.source.sop,
+            If(depacketizer.source.stb,
                 depacketizer.source.ack.eq(0),
                 NextState("CHECK")
             )
@@ -96,7 +95,6 @@ class LiteEthEtherbonePacketRX(Module):
             )
         )
         self.comb += [
-            source.sop.eq(depacketizer.source.sop),
             source.eop.eq(depacketizer.source.eop),
 
             source.pf.eq(depacketizer.source.pf),
@@ -151,7 +149,7 @@ class LiteEthEtherboneProbe(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ack.eq(1),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 sink.ack.eq(0),
                 NextState("PROBE_RESPONSE")
             )
@@ -214,7 +212,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         fsm.act("IDLE",
             fifo.source.ack.eq(1),
             counter_reset.eq(1),
-            If(fifo.source.stb & fifo.source.sop,
+            If(fifo.source.stb,
                 base_addr_update.eq(1),
                 If(fifo.source.wcount,
                     NextState("RECEIVE_WRITES")
@@ -225,7 +223,6 @@ class LiteEthEtherboneRecordReceiver(Module):
         )
         fsm.act("RECEIVE_WRITES",
             source.stb.eq(fifo.source.stb),
-            source.sop.eq(counter == 0),
             source.eop.eq(counter == fifo.source.wcount-1),
             source.count.eq(fifo.source.wcount),
             source.be.eq(fifo.source.byte_enable),
@@ -246,14 +243,13 @@ class LiteEthEtherboneRecordReceiver(Module):
         )
         fsm.act("RECEIVE_BASE_RET_ADDR",
             counter_reset.eq(1),
-            If(fifo.source.stb & fifo.source.sop,
+            If(fifo.source.stb,
                 base_addr_update.eq(1),
                 NextState("RECEIVE_READS")
             )
         )
         fsm.act("RECEIVE_READS",
             source.stb.eq(fifo.source.stb),
-            source.sop.eq(counter == 0),
             source.eop.eq(counter == fifo.source.rcount-1),
             source.count.eq(fifo.source.rcount),
             source.base_addr.eq(base_addr),
@@ -283,7 +279,7 @@ class LiteEthEtherboneRecordSender(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             pbuffer.source.ack.eq(1),
-            If(pbuffer.source.stb & pbuffer.source.sop,
+            If(pbuffer.source.stb,
                 pbuffer.source.ack.eq(0),
                 NextState("SEND_BASE_ADDRESS")
             )
@@ -299,7 +295,6 @@ class LiteEthEtherboneRecordSender(Module):
 
         fsm.act("SEND_BASE_ADDRESS",
             source.stb.eq(pbuffer.source.stb),
-            source.sop.eq(1),
             source.eop.eq(0),
             source.data.eq(pbuffer.source.base_addr),
             If(source.ack,
@@ -308,7 +303,6 @@ class LiteEthEtherboneRecordSender(Module):
         )
         fsm.act("SEND_DATA",
             source.stb.eq(pbuffer.source.stb),
-            source.sop.eq(0),
             source.eop.eq(pbuffer.source.eop),
             source.data.eq(pbuffer.source.data),
             If(source.stb & source.ack,
@@ -339,10 +333,14 @@ class LiteEthEtherboneRecord(Module):
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
         # save last ip address
+        first = Signal(reset=1)
         last_ip_address = Signal(32)
         self.sync += [
-            If(sink.stb & sink.sop & sink.ack,
-                last_ip_address.eq(sink.ip_address)
+            If(sink.stb & sink.ack,
+                If(first,
+                    last_ip_address.eq(sink.ip_address),
+                ),
+                first.eq(sink.eop)
             )
         ]
 
@@ -378,7 +376,7 @@ class LiteEthEtherboneWishboneMaster(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ack.eq(1),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 sink.ack.eq(0),
                 If(sink.we,
                     NextState("WRITE_DATA")
@@ -413,7 +411,6 @@ class LiteEthEtherboneWishboneMaster(Module):
         )
         fsm.act("SEND_DATA",
             source.stb.eq(sink.stb),
-            source.sop.eq(sink.sop),
             source.eop.eq(sink.eop),
             source.base_addr.eq(sink.base_addr),
             source.addr.eq(sink.addr),
@@ -450,7 +447,7 @@ class LiteEthEtherbone(Module):
         arbiter = Arbiter([probe.source, record.source], packet.sink)
         self.submodules += dispatcher, arbiter
 
-        # create mmap ŵishbone master
+        # create mmap wishbone master
         self.submodules.master = master = LiteEthEtherboneWishboneMaster()
         self.comb += [
             record.receiver.source.connect(master.sink),

@@ -16,16 +16,13 @@ class LiteEthMACPaddingInserter(Module):
         counter_done = Signal()
         counter_reset = Signal()
         counter_ce = Signal()
-        self.sync += If(counter_reset,
-                            counter.eq(1)
-                        ).Elif(counter_ce,
-                            counter.eq(counter + 1)
-                        )
-        self.comb += [
-            counter_reset.eq(sink.stb & sink.sop & sink.ack),
-            counter_ce.eq(source.stb & source.ack),
-            counter_done.eq(counter >= padding_limit),
-        ]
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 1)
+            )
+        self.comb += counter_done.eq(counter >= padding_limit)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -36,6 +33,8 @@ class LiteEthMACPaddingInserter(Module):
                     If(~counter_done,
                         source.eop.eq(0),
                         NextState("PADDING")
+                    ).Else(
+                        counter_reset.eq(1)
                     )
                 )
             )
@@ -44,8 +43,10 @@ class LiteEthMACPaddingInserter(Module):
             source.stb.eq(1),
             source.eop.eq(counter_done),
             source.data.eq(0),
-            If(source.ack,
+            If(source.stb & source.ack,
+                counter_ce.eq(1),
                 If(counter_done,
+                    counter_reset.eq(1),
                     NextState("IDLE")
                 )
             )

@@ -151,7 +151,7 @@ class LiteEthMACCRCInserter(Module):
         fsm.act("IDLE",
             crc.reset.eq(1),
             sink.ack.eq(1),
-            If(sink.stb & sink.sop,
+            If(sink.stb,
                 sink.ack.eq(0),
                 NextState("COPY"),
             )
@@ -242,12 +242,11 @@ class LiteEthMACCRCChecker(Module):
             fifo_in.eq(sink.stb & (~fifo_full | fifo_out)),
             fifo_out.eq(source.stb & source.ack),
 
-            sink.connect(fifo.sink, leave_out=set(["stb", "ack"])),
+            sink.connect(fifo.sink),
             fifo.sink.stb.eq(fifo_in),
             self.sink.ack.eq(fifo_in),
 
             source.stb.eq(sink.stb & fifo_full),
-            source.sop.eq(fifo.source.sop),
             source.eop.eq(sink.eop),
             fifo.source.ack.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
@@ -262,7 +261,7 @@ class LiteEthMACCRCChecker(Module):
         )
         self.comb += crc.data.eq(sink.data)
         fsm.act("IDLE",
-            If(sink.stb & sink.sop & sink.ack,
+            If(sink.stb & sink.ack,
                 crc.ce.eq(1),
                 NextState("COPY")
             )

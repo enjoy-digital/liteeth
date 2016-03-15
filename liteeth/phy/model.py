@@ -40,7 +40,6 @@ class LiteEthPHYModel(Module, AutoCSR):
 
         self.sync += [
             self.source.stb.eq(pads.sink_stb),
-            self.source.sop.eq(pads.sink_stb & ~self.source.stb),
             self.source.data.eq(pads.sink_data),
         ]
         self.comb += [

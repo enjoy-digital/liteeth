@@ -26,7 +26,6 @@ class EtherboneSoCDevel(EtherboneSoC):
         debug = (
             # mmap stream from HOST
             self.etherbone.master.sink.stb,
-            self.etherbone.master.sink.sop,
             self.etherbone.master.sink.eop,
             self.etherbone.master.sink.ack,
             self.etherbone.master.sink.we,
@@ -38,7 +37,6 @@ class EtherboneSoCDevel(EtherboneSoC):
 
             # mmap stream to HOST
             self.etherbone.master.source.stb,
-            self.etherbone.master.source.sop,
             self.etherbone.master.source.eop,
             self.etherbone.master.source.ack,
             self.etherbone.master.source.we,

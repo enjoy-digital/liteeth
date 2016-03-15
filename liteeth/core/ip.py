@@ -98,14 +98,13 @@ class LiteEthIPTX(Module):
 
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
         self.comb += [
-            checksum.ce.eq(sink.stb & sink.sop),
+            checksum.ce.eq(sink.stb),
             checksum.reset.eq(source.stb & source.eop & source.ack)
         ]
 
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer()
         self.comb += [
             packetizer.sink.stb.eq(sink.stb & checksum.done),
-            packetizer.sink.sop.eq(sink.sop),
             packetizer.sink.eop.eq(sink.eop),
             sink.ack.eq(packetizer.sink.ack & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
@@ -126,7 +125,7 @@ class LiteEthIPTX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             packetizer.source.ack.eq(1),
-            If(packetizer.source.stb & packetizer.source.sop,
+            If(packetizer.source.stb,
                 packetizer.source.ack.eq(0),
                 NextState("SEND_MAC_ADDRESS_REQUEST")
             )
@@ -194,14 +193,14 @@ class LiteEthIPRX(Module):
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
         self.comb += [
             checksum.header.eq(depacketizer.header),
-            checksum.reset.eq(~(depacketizer.source.stb & depacketizer.source.sop)),
+            checksum.reset.eq(~(depacketizer.source.stb)),
             checksum.ce.eq(1)
         ]
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb & depacketizer.source.sop,
+            If(depacketizer.source.stb,
                 depacketizer.source.ack.eq(0),
                 NextState("CHECK")
             )
@@ -225,7 +224,6 @@ class LiteEthIPRX(Module):
             )
         )
         self.comb += [
-            source.sop.eq(depacketizer.source.sop),
             source.eop.eq(depacketizer.source.eop),
             source.length.eq(depacketizer.source.total_length - (0x5*4)),
             source.protocol.eq(depacketizer.source.protocol),

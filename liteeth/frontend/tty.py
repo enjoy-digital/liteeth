@@ -11,7 +11,6 @@ class LiteEthTTYTX(Module):
         if fifo_depth is None:
             self.comb += [
                 source.stb.eq(sink.stb),
-                source.sop.eq(1),
                 source.eop.eq(1),
                 source.length.eq(1),
                 source.data.eq(sink.data),
@@ -45,7 +44,6 @@ class LiteEthTTYTX(Module):
             )
             fsm.act("SEND",
                 source.stb.eq(fifo.source.stb),
-                source.sop.eq(counter == 0),
                 If(level == 0,
                     source.eop.eq(1),
                 ).Else(

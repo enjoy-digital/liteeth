@@ -16,9 +16,9 @@ class LiteEthPHYGMIITX(Module):
             self.sync += pads.tx_er.eq(0)
         self.sync += [
             pads.tx_en.eq(sink.stb),
-            pads.tx_data.eq(sink.data)
+            pads.tx_data.eq(sink.data),
+            sink.ack.eq(1)
         ]
-        self.comb += sink.ack.eq(1)
 
 
 class LiteEthPHYGMIIRX(Module):
@@ -28,20 +28,12 @@ class LiteEthPHYGMIIRX(Module):
         # # #
 
         dv_d = Signal()
-        self.sync += dv_d.eq(pads.dv)
-
-        sop = Signal()
-        eop = Signal()
-        self.comb += [
-            sop.eq(pads.dv & ~dv_d),
-            eop.eq(~pads.dv & dv_d)
-        ]
         self.sync += [
+            dv_d.eq(pads.dv),
             source.stb.eq(pads.dv),
-            source.sop.eq(sop),
             source.data.eq(pads.rx_data)
         ]
-        self.comb += source.eop.eq(eop)
+        self.comb += source.eop.eq(~pads.dv & dv_d)
 
 
 class LiteEthPHYGMIICRG(Module, AutoCSR):

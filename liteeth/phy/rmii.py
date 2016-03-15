@@ -40,23 +40,16 @@ class LiteEthPHYRMIIRX(Module):
 
         # # #
 
-        sop = Signal(reset=1)
-        sop_set = Signal()
-        sop_clr = Signal()
-        self.sync += If(sop_set, sop.eq(1)).Elif(sop_clr, sop.eq(0))
-
         converter = stream.Converter(converter_description(2),
                                      converter_description(8))
         converter = ResetInserter()(converter)
         self.submodules += converter
 
         converter_sink_stb = Signal()
-        converter_sink_sop = Signal()
         converter_sink_data = Signal(2)
 
         self.specials += [
             MultiReg(converter_sink_stb, converter.sink.stb, n=2),
-            MultiReg(converter_sink_sop, converter.sink.sop, n=2),
             MultiReg(converter_sink_data, converter.sink.data, n=2)
         ]
 
@@ -73,7 +66,6 @@ class LiteEthPHYRMIIRX(Module):
         fsm.act("IDLE",
             If(crs_dv & (rx_data != 0b00),
                 converter_sink_stb.eq(1),
-                converter_sink_sop.eq(1),
                 converter_sink_data.eq(rx_data),
                 NextState("RECEIVE")
             ).Else(

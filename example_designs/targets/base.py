@@ -81,33 +81,28 @@ class BaseSoCDevel(BaseSoC):
         debug = (
             # MAC interface
             self.core.mac.core.sink.stb,
-            self.core.mac.core.sink.sop,
             self.core.mac.core.sink.eop,
             self.core.mac.core.sink.ack,
             self.core.mac.core.sink.data,
 
             self.core.mac.core.source.stb,
-            self.core.mac.core.source.sop,
             self.core.mac.core.source.eop,
             self.core.mac.core.source.ack,
             self.core.mac.core.source.data,
 
             # ICMP interface
             self.core.icmp.echo.sink.stb,
-            self.core.icmp.echo.sink.sop,
             self.core.icmp.echo.sink.eop,
             self.core.icmp.echo.sink.ack,
             self.core.icmp.echo.sink.data,
 
             self.core.icmp.echo.source.stb,
-            self.core.icmp.echo.source.sop,
             self.core.icmp.echo.source.eop,
             self.core.icmp.echo.source.ack,
             self.core.icmp.echo.source.data,
 
             # IP interface
             self.core.ip.crossbar.master.sink.stb,
-            self.core.ip.crossbar.master.sink.sop,
             self.core.ip.crossbar.master.sink.eop,
             self.core.ip.crossbar.master.sink.ack,
             self.core.ip.crossbar.master.sink.data,

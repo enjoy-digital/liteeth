@@ -50,7 +50,6 @@ class LiteEthARPTX(Module):
             )
         )
         self.comb += [
-            packetizer.sink.sop.eq(counter == 0),
             packetizer.sink.eop.eq(counter == max(arp_header.length, eth_min_len)-1),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
@@ -107,7 +106,7 @@ class LiteEthARPRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb & depacketizer.source.sop,
+            If(depacketizer.source.stb,
                 depacketizer.source.ack.eq(0),
                 NextState("CHECK")
             )

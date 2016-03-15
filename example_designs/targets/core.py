@@ -112,7 +112,6 @@ _io = [
     # UDP
     ("udp_sink", 0,
         Subsignal("stb",   Pins(1)),
-        Subsignal("sop",   Pins(1)),
         Subsignal("eop",   Pins(1)),
         Subsignal("ack",   Pins(1)),
         # param
@@ -127,7 +126,6 @@ _io = [
 
     ("udp_source", 0,
         Subsignal("stb",   Pins(1)),
-        Subsignal("sop",   Pins(1)),
         Subsignal("eop",   Pins(1)),
         Subsignal("ack",   Pins(1)),
         # param
@@ -224,7 +222,6 @@ class UDPCore(PHYCore):
         self.comb += [
             # control
             udp_port.sink.stb.eq(udp_sink.stb),
-            udp_port.sink.sop.eq(udp_sink.sop),
             udp_port.sink.eop.eq(udp_sink.eop),
             udp_sink.ack.eq(udp_port.sink.ack),
 
@@ -242,7 +239,6 @@ class UDPCore(PHYCore):
         self.comb += [
             # control
             udp_source.stb.eq(udp_port.source.stb),
-            udp_source.sop.eq(udp_port.source.sop),
             udp_source.eop.eq(udp_port.source.eop),
             udp_port.source.ack.eq(udp_source.ack),
 

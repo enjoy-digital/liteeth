@@ -74,7 +74,6 @@ class LiteEthUDPTX(Module):
         self.submodules.packetizer = packetizer = LiteEthUDPPacketizer()
         self.comb += [
             packetizer.sink.stb.eq(sink.stb),
-            packetizer.sink.sop.eq(sink.sop),
             packetizer.sink.eop.eq(sink.eop),
             sink.ack.eq(packetizer.sink.ack),
             packetizer.sink.src_port.eq(sink.src_port),
@@ -87,7 +86,7 @@ class LiteEthUDPTX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             packetizer.source.ack.eq(1),
-            If(packetizer.source.stb & packetizer.source.sop,
+            If(packetizer.source.stb,
                 packetizer.source.ack.eq(0),
                 NextState("SEND")
             )
@@ -125,7 +124,7 @@ class LiteEthUDPRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb & depacketizer.source.sop,
+            If(depacketizer.source.stb,
                 depacketizer.source.ack.eq(0),
                 NextState("CHECK")
             )
@@ -144,7 +143,6 @@ class LiteEthUDPRX(Module):
             )
         )
         self.comb += [
-            source.sop.eq(depacketizer.source.sop),
             source.eop.eq(depacketizer.source.eop),
             source.src_port.eq(depacketizer.source.src_port),
             source.dst_port.eq(depacketizer.source.dst_port),
