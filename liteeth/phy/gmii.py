@@ -7,21 +7,17 @@ from liteeth.phy.common import *
 
 
 class LiteEthPHYGMIITX(Module):
-    def __init__(self, pads, pads_register=True):
+    def __init__(self, pads):
         self.sink = sink = Sink(eth_phy_description(8))
 
         # # #
 
         if hasattr(pads, "tx_er"):
             self.sync += pads.tx_er.eq(0)
-        pads_eq = [
+        self.sync += [
             pads.tx_en.eq(sink.stb),
             pads.tx_data.eq(sink.data)
         ]
-        if pads_register:
-            self.sync += pads_eq
-        else:
-            self.comb += pads_eq
         self.comb += sink.ack.eq(1)
 
 
