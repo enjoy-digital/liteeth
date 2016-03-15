@@ -40,11 +40,12 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         counter = Signal(lengthbits)
         counter_reset = Signal()
         counter_ce = Signal()
-        self.sync += If(counter_reset,
-                        counter.eq(0)
-                    ).Elif(counter_ce,
-                        counter.eq(counter + increment)
-                    )
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + increment)
+            )
 
         # slot computation
         slot = Signal(slotbits)
@@ -156,11 +157,12 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         counter = Signal(lengthbits)
         counter_reset = Signal()
         counter_ce = Signal()
-        self.sync += If(counter_reset,
-                            counter.eq(0)
-                        ).Elif(counter_ce,
-                            counter.eq(counter + 4)
-                        )
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + 4)
+            )
 
 
         # fsm

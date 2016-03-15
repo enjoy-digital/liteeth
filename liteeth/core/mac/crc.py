@@ -140,7 +140,6 @@ class LiteEthMACCRCInserter(Module):
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
-        self.busy = Signal()
 
         # # #
 
@@ -160,7 +159,7 @@ class LiteEthMACCRCInserter(Module):
         fsm.act("COPY",
             crc.ce.eq(sink.stb & source.ack),
             crc.data.eq(sink.data),
-            sink.connect(source, leave_out=set(["eop"])),
+            sink.connect(source),
             source.eop.eq(0),
             If(sink.stb & sink.eop & source.ack,
                 NextState("INSERT"),
@@ -192,7 +191,6 @@ class LiteEthMACCRCInserter(Module):
                 source.data.eq(crc.value),
                 If(source.ack, NextState("IDLE"))
             )
-        self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
 
 
 class LiteEthMACCRC32Inserter(LiteEthMACCRCInserter):
@@ -221,7 +219,6 @@ class LiteEthMACCRCChecker(Module):
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
-        self.busy = Signal()
 
         # # #
 
@@ -278,7 +275,6 @@ class LiteEthMACCRCChecker(Module):
                 )
             )
         )
-        self.comb += self.busy.eq(~fsm.ongoing("IDLE"))
 
 
 class LiteEthMACCRC32Checker(LiteEthMACCRCChecker):

@@ -1,4 +1,7 @@
+import math
+
 from liteeth.common import *
+
 
 class LiteEthMACGap(Module):
     def __init__(self, dw, ack_on_gap=False):
@@ -7,7 +10,7 @@ class LiteEthMACGap(Module):
 
         # # #
 
-        gap = ceil(eth_interpacket_gap/(dw//8))
+        gap = math.ceil(eth_interpacket_gap/(dw//8))
         counter = Signal(max=gap)
         counter_reset = Signal()
         counter_ce = Signal()

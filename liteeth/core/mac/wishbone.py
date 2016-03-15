@@ -1,5 +1,5 @@
 from liteeth.common import *
-from liteeth.core.mac.frontend import sram
+from liteeth.core.mac import sram
 
 from litex.soc.interconnect import wishbone
 from litex.gen.fhdl.simplify import FullMemoryWE

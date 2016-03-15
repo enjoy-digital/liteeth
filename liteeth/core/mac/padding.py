@@ -1,3 +1,5 @@
+import math
+
 from liteeth.common import *
 
 
@@ -8,7 +10,7 @@ class LiteEthMACPaddingInserter(Module):
 
         # # #
 
-        padding_limit = ceil(padding/(dw/8))-1
+        padding_limit = math.ceil(padding/(dw/8))-1
 
         counter = Signal(16, reset=1)
         counter_done = Signal()
@@ -57,7 +59,7 @@ class LiteEthMACPaddingChecker(Module):
 
         # # #
 
-        # XXX see if we should drop the packet when
+        # TODO: see if we should drop the packet when
         # payload size < minimum ethernet payload size
         self.comb += sink.connect(source)
 
