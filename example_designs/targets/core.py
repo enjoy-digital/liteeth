@@ -138,7 +138,7 @@ _io = [
         # payload
         Subsignal("data", Pins(32)),
         Subsignal("error", Pins(4))
-    ),    
+    ),
 ]
 
 class CorePlatform(XilinxPlatform):
@@ -197,7 +197,7 @@ class MACCore(PHYCore):
         "ethmac": 0x50000000
     }
     mem_map.update(SoCCore.mem_map)
-    
+
     def __init__(self, phy, clk_freq):
         PHYCore.__init__(self, phy, clk_freq)
 
@@ -265,7 +265,7 @@ def main():
     parser.add_argument("--phy", default="MII", help="Ethernet PHY(MII/RMII/GMII/RMGII)")
     parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
     parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
-    parser.add_argument("--ip_address", default="192.168.0.42", help="IP address")
+    parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
     args = parser.parse_args()
 
     if args.core == "mac":

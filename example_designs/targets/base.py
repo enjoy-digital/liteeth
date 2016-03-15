@@ -20,7 +20,7 @@ class BaseSoC(SoCCore):
     csr_map.update(SoCCore.csr_map)
     def __init__(self, platform, clk_freq=166*1000000,
             mac_address=0x10e2d5000000,
-            ip_address="192.168.0.42"):
+            ip_address="192.168.1.50"):
         clk_freq = int((1/(platform.default_clk_period))*1000000000)
         SoCCore.__init__(self, platform, clk_freq,
             cpu_type=None,

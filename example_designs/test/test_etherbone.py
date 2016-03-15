@@ -10,7 +10,7 @@ socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 packet = EtherbonePacket()
 packet.pf = 1
 packet.encode()
-socket.sendto(bytes(packet), ("192.168.0.42", 20000))
+socket.sendto(bytes(packet), ("192.168.1.50", 20000))
 time.sleep(0.01)
 
 # test writes
@@ -23,7 +23,7 @@ record.wcount = len(writes_datas)
 packet = EtherbonePacket()
 packet.records = [record]
 packet.encode()
-socket.sendto(bytes(packet), ("192.168.0.42", 20000))
+socket.sendto(bytes(packet), ("192.168.1.50", 20000))
 time.sleep(0.01)
 
 # test reads
@@ -36,5 +36,5 @@ record.rcount = len(reads_addrs)
 packet = EtherbonePacket()
 packet.records = [record]
 packet.encode()
-socket.sendto(bytes(packet), ("192.168.0.42", 20000))
+socket.sendto(bytes(packet), ("192.168.1.50", 20000))
 time.sleep(0.01)

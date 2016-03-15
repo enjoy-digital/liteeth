@@ -10,7 +10,7 @@ class UDPSoC(BaseSoC):
     def __init__(self, platform):
         BaseSoC.__init__(self, platform,
             mac_address=0x10e2d5000000,
-            ip_address="192.168.0.42")
+            ip_address="192.168.1.50")
 
         # add udp loopback on port 6000 with dw=8
         self.add_udp_loopback(6000, 8,  8192, "loopback_8")

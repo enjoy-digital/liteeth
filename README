@@ -74,7 +74,7 @@ devel [AT] lists.m-labs.hk.
   run ./make.py -t udp all load-bitstream
 
 4. Test design (only for KC705 for now):
-  try to ping 192.168.0.42
+  try to ping 192.168.1.50
   go to example_designs/test/
   run ./test_udp.py
 
@@ -82,7 +82,7 @@ devel [AT] lists.m-labs.hk.
   python3 make.py -t etherbone all load-bitstream
 
 6. Test design (only for KC705 for now):
-  try to ping 192.168.0.42
+  try to ping 192.168.1.50
   go to example_designs/test/
   run ./test_etherbone.py
 

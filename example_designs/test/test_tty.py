@@ -36,6 +36,6 @@ def test(fpga_ip, udp_port, test_message):
 # # #
 
 test_message = "LiteEth virtual TTY Hello world\n"
-test("192.168.0.42", 10000, test_message)
+test("192.168.1.50", 10000, test_message)
 
 # # #
