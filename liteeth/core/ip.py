@@ -98,15 +98,15 @@ class LiteEthIPTX(Module):
 
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
         self.comb += [
-            checksum.ce.eq(sink.stb),
-            checksum.reset.eq(source.stb & source.eop & source.ack)
+            checksum.ce.eq(sink.valid),
+            checksum.reset.eq(source.valid & source.last & source.ready)
         ]
 
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer()
         self.comb += [
-            packetizer.sink.stb.eq(sink.stb & checksum.done),
-            packetizer.sink.eop.eq(sink.eop),
-            sink.ack.eq(packetizer.sink.ack & checksum.done),
+            packetizer.sink.valid.eq(sink.valid & checksum.done),
+            packetizer.sink.last.eq(sink.last),
+            sink.ready.eq(packetizer.sink.ready & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
             packetizer.sink.protocol.eq(sink.protocol),
             packetizer.sink.total_length.eq(sink.length + (0x5*4)),
@@ -124,22 +124,22 @@ class LiteEthIPTX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ack.eq(1),
-            If(packetizer.source.stb,
-                packetizer.source.ack.eq(0),
+            packetizer.source.ready.eq(1),
+            If(packetizer.source.valid,
+                packetizer.source.ready.eq(0),
                 NextState("SEND_MAC_ADDRESS_REQUEST")
             )
         )
         self.comb += arp_table.request.ip_address.eq(sink.ip_address)
         fsm.act("SEND_MAC_ADDRESS_REQUEST",
-            arp_table.request.stb.eq(1),
-            If(arp_table.request.stb & arp_table.request.ack,
+            arp_table.request.valid.eq(1),
+            If(arp_table.request.valid & arp_table.request.ready,
                 NextState("WAIT_MAC_ADDRESS_RESPONSE")
             )
         )
         fsm.act("WAIT_MAC_ADDRESS_RESPONSE",
-            If(arp_table.response.stb,
-                arp_table.response.ack.eq(1),
+            If(arp_table.response.valid,
+                arp_table.response.ready.eq(1),
                 If(arp_table.response.failed,
                     self.target_unreachable.eq(1),
                     NextState("DROP"),
@@ -149,7 +149,7 @@ class LiteEthIPTX(Module):
             )
         )
         self.sync += \
-            If(arp_table.response.stb,
+            If(arp_table.response.valid,
                 target_mac.eq(arp_table.response.mac_address)
             )
         fsm.act("SEND",
@@ -157,15 +157,15 @@ class LiteEthIPTX(Module):
             source.ethernet_type.eq(ethernet_type_ip),
             source.target_mac.eq(target_mac),
             source.sender_mac.eq(mac_address),
-            If(source.stb & source.eop & source.ack,
+            If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
         fsm.act("DROP",
-            packetizer.source.ack.eq(1),
-            If(packetizer.source.stb &
-               packetizer.source.eop &
-               packetizer.source.ack,
+            packetizer.source.ready.eq(1),
+            If(packetizer.source.valid &
+               packetizer.source.last &
+               packetizer.source.ready,
                 NextState("IDLE")
             )
         )
@@ -193,21 +193,21 @@ class LiteEthIPRX(Module):
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
         self.comb += [
             checksum.header.eq(depacketizer.header),
-            checksum.reset.eq(~(depacketizer.source.stb)),
+            checksum.reset.eq(~(depacketizer.source.valid)),
             checksum.ce.eq(1)
         ]
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb,
-                depacketizer.source.ack.eq(0),
+            depacketizer.source.ready.eq(1),
+            If(depacketizer.source.valid,
+                depacketizer.source.ready.eq(0),
                 NextState("CHECK")
             )
         )
         valid = Signal()
         self.sync += valid.eq(
-            depacketizer.source.stb &
+            depacketizer.source.valid &
             (depacketizer.source.target_ip == ip_address) &
             (depacketizer.source.version == 0x4) &
             (depacketizer.source.ihl == 0x5) &
@@ -224,7 +224,7 @@ class LiteEthIPRX(Module):
             )
         )
         self.comb += [
-            source.eop.eq(depacketizer.source.eop),
+            source.last.eq(depacketizer.source.last),
             source.length.eq(depacketizer.source.total_length - (0x5*4)),
             source.protocol.eq(depacketizer.source.protocol),
             source.ip_address.eq(depacketizer.source.sender_ip),
@@ -232,17 +232,17 @@ class LiteEthIPRX(Module):
             source.error.eq(depacketizer.source.error)
         ]
         fsm.act("PRESENT",
-            source.stb.eq(depacketizer.source.stb),
-            depacketizer.source.ack.eq(source.ack),
-            If(source.stb & source.eop & source.ack,
+            source.valid.eq(depacketizer.source.valid),
+            depacketizer.source.ready.eq(source.ready),
+            If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
         fsm.act("DROP",
-            depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb &
-               depacketizer.source.eop &
-               depacketizer.source.ack,
+            depacketizer.source.ready.eq(1),
+            If(depacketizer.source.valid &
+               depacketizer.source.last &
+               depacketizer.source.ready,
                 NextState("IDLE")
             )
         )

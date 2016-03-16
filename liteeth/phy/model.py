@@ -33,17 +33,17 @@ class LiteEthPHYModel(Module, AutoCSR):
         self.ip_address = ip_address
 
         self.comb += [
-            pads.source_stb.eq(self.sink.stb),
+            pads.source_valid.eq(self.sink.valid),
             pads.source_data.eq(self.sink.data),
-            self.sink.ack.eq(1)
+            self.sink.ready.eq(1)
         ]
 
         self.sync += [
-            self.source.stb.eq(pads.sink_stb),
+            self.source.valid.eq(pads.sink_valid),
             self.source.data.eq(pads.sink_data),
         ]
         self.comb += [
-            self.source.eop.eq(~pads.sink_stb & self.source.stb),
+            self.source.last.eq(~pads.sink_valid & self.source.valid),
         ]
 
         # TODO avoid use of os.system

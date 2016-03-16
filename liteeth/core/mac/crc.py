@@ -150,18 +150,18 @@ class LiteEthMACCRCInserter(Module):
 
         fsm.act("IDLE",
             crc.reset.eq(1),
-            sink.ack.eq(1),
-            If(sink.stb,
-                sink.ack.eq(0),
+            sink.ready.eq(1),
+            If(sink.valid,
+                sink.ready.eq(0),
                 NextState("COPY"),
             )
         )
         fsm.act("COPY",
-            crc.ce.eq(sink.stb & source.ack),
+            crc.ce.eq(sink.valid & source.ready),
             crc.data.eq(sink.data),
             sink.connect(source),
-            source.eop.eq(0),
-            If(sink.stb & sink.eop & source.ack,
+            source.last.eq(0),
+            If(sink.valid & sink.last & source.ready,
                 NextState("INSERT"),
             )
         )
@@ -170,11 +170,11 @@ class LiteEthMACCRCInserter(Module):
             cnt = Signal(max=ratio, reset=ratio-1)
             cnt_done = Signal()
             fsm.act("INSERT",
-                source.stb.eq(1),
+                source.valid.eq(1),
                 chooser(crc.value, cnt, source.data, reverse=True),
                 If(cnt_done,
-                    source.eop.eq(1),
-                    If(source.ack, NextState("IDLE"))
+                    source.last.eq(1),
+                    If(source.ready, NextState("IDLE"))
                 )
             )
             self.comb += cnt_done.eq(cnt == 0)
@@ -182,14 +182,14 @@ class LiteEthMACCRCInserter(Module):
                 If(fsm.ongoing("IDLE"),
                     cnt.eq(cnt.reset)
                 ).Elif(fsm.ongoing("INSERT") & ~cnt_done,
-                    cnt.eq(cnt - source.ack)
+                    cnt.eq(cnt - source.ready)
                 )
         else:
             fsm.act("INSERT",
-                source.stb.eq(1),
-                source.eop.eq(1),
+                source.valid.eq(1),
+                source.last.eq(1),
                 source.data.eq(crc.value),
-                If(source.ack, NextState("IDLE"))
+                If(source.ready, NextState("IDLE"))
             )
 
 
@@ -214,7 +214,7 @@ class LiteEthMACCRCChecker(Module):
         Packets input with CRC.
     source : out
         Packets output without CRC and "error" set to 0
-        on eop when CRC OK / set to 1 when CRC KO.
+        on last when CRC OK / set to 1 when CRC KO.
     """
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
@@ -239,16 +239,16 @@ class LiteEthMACCRCChecker(Module):
 
         self.comb += [
             fifo_full.eq(fifo.level == ratio),
-            fifo_in.eq(sink.stb & (~fifo_full | fifo_out)),
-            fifo_out.eq(source.stb & source.ack),
+            fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
+            fifo_out.eq(source.valid & source.ready),
 
             sink.connect(fifo.sink),
-            fifo.sink.stb.eq(fifo_in),
-            self.sink.ack.eq(fifo_in),
+            fifo.sink.valid.eq(fifo_in),
+            self.sink.ready.eq(fifo_in),
 
-            source.stb.eq(sink.stb & fifo_full),
-            source.eop.eq(sink.eop),
-            fifo.source.ack.eq(fifo_out),
+            source.valid.eq(sink.valid & fifo_full),
+            source.last.eq(sink.last),
+            fifo.source.ready.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
 
             source.error.eq(sink.error | crc.error),
@@ -261,15 +261,15 @@ class LiteEthMACCRCChecker(Module):
         )
         self.comb += crc.data.eq(sink.data)
         fsm.act("IDLE",
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 crc.ce.eq(1),
                 NextState("COPY")
             )
         )
         fsm.act("COPY",
-            If(sink.stb & sink.ack,
+            If(sink.valid & sink.ready,
                 crc.ce.eq(1),
-                If(sink.eop,
+                If(sink.last,
                     NextState("RESET")
                 )
             )

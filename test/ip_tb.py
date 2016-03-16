@@ -44,13 +44,13 @@ class TB(Module):
             yield
 
         while True:
-            selfp.ip_port.sink.stb = 1
-            selfp.ip_port.sink.eop = 1
+            selfp.ip_port.sink.valid = 1
+            selfp.ip_port.sink.last = 1
             selfp.ip_port.sink.ip_address = 0x12345678
             selfp.ip_port.sink.protocol = udp_protocol
 
-            selfp.ip_port.source.ack = 1
-            if selfp.ip_port.source.stb == 1 and selfp.ip_port.source.eop == 1:
+            selfp.ip_port.source.ready = 1
+            if selfp.ip_port.source.valid == 1 and selfp.ip_port.source.last == 1:
                 print("packet from IP 0x{:08x}".format(selfp.ip_port.sink.ip_address))
 
             yield

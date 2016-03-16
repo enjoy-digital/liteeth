@@ -22,9 +22,9 @@ class LiteEthICMPTX(Module):
 
         self.submodules.packetizer = packetizer = LiteEthICMPPacketizer()
         self.comb += [
-            packetizer.sink.stb.eq(sink.stb),
-            packetizer.sink.eop.eq(sink.eop),
-            sink.ack.eq(packetizer.sink.ack),
+            packetizer.sink.valid.eq(sink.valid),
+            packetizer.sink.last.eq(sink.last),
+            sink.ready.eq(packetizer.sink.ready),
             packetizer.sink.msgtype.eq(sink.msgtype),
             packetizer.sink.code.eq(sink.code),
             packetizer.sink.checksum.eq(sink.checksum),
@@ -34,9 +34,9 @@ class LiteEthICMPTX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ack.eq(1),
-            If(packetizer.source.stb,
-                packetizer.source.ack.eq(0),
+            packetizer.source.ready.eq(1),
+            If(packetizer.source.valid,
+                packetizer.source.ready.eq(0),
                 NextState("SEND")
             )
         )
@@ -45,7 +45,7 @@ class LiteEthICMPTX(Module):
             source.length.eq(sink.length + icmp_header.length),
             source.protocol.eq(icmp_protocol),
             source.ip_address.eq(sink.ip_address),
-            If(source.stb & source.eop & source.ack,
+            If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
@@ -72,15 +72,15 @@ class LiteEthICMPRX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb,
-                depacketizer.source.ack.eq(0),
+            depacketizer.source.ready.eq(1),
+            If(depacketizer.source.valid,
+                depacketizer.source.ready.eq(0),
                 NextState("CHECK")
             )
         )
         valid = Signal()
         self.sync += valid.eq(
-            depacketizer.source.stb &
+            depacketizer.source.valid &
             (sink.protocol == icmp_protocol)
         )
         fsm.act("CHECK",
@@ -91,7 +91,7 @@ class LiteEthICMPRX(Module):
             )
         )
         self.comb += [
-            source.eop.eq(depacketizer.source.eop),
+            source.last.eq(depacketizer.source.last),
             source.msgtype.eq(depacketizer.source.msgtype),
             source.code.eq(depacketizer.source.code),
             source.checksum.eq(depacketizer.source.checksum),
@@ -102,17 +102,17 @@ class LiteEthICMPRX(Module):
             source.error.eq(depacketizer.source.error)
         ]
         fsm.act("PRESENT",
-            source.stb.eq(depacketizer.source.stb),
-            depacketizer.source.ack.eq(source.ack),
-            If(source.stb & source.eop & source.ack,
+            source.valid.eq(depacketizer.source.valid),
+            depacketizer.source.ready.eq(source.ready),
+            If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
         fsm.act("DROP",
-            depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb &
-               depacketizer.source.eop &
-               depacketizer.source.ack,
+            depacketizer.source.ready.eq(1),
+            If(depacketizer.source.valid &
+               depacketizer.source.last &
+               depacketizer.source.ready,
                 NextState("IDLE")
             )
         )

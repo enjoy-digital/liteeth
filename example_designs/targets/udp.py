@@ -35,24 +35,24 @@ class UDPSoCDevel(UDPSoC):
         from litescope.core.port import LiteScopeTerm
         UDPSoC.__init__(self, platform)
         debug = (
-            self.loopback_8.sink.stb,
-            self.loopback_8.sink.eop,
-            self.loopback_8.sink.ack,
+            self.loopback_8.sink.valid,
+            self.loopback_8.sink.last,
+            self.loopback_8.sink.ready,
             self.loopback_8.sink.data,
 
-            self.loopback_8.source.stb,
-            self.loopback_8.source.eop,
-            self.loopback_8.source.ack,
+            self.loopback_8.source.valid,
+            self.loopback_8.source.last,
+            self.loopback_8.source.ready,
             self.loopback_8.source.data,
 
-            self.loopback_32.sink.stb,
-            self.loopback_32.sink.eop,
-            self.loopback_32.sink.ack,
+            self.loopback_32.sink.valid,
+            self.loopback_32.sink.last,
+            self.loopback_32.sink.ready,
             self.loopback_32.sink.data,
 
-            self.loopback_32.source.stb,
-            self.loopback_32.source.eop,
-            self.loopback_32.source.ack,
+            self.loopback_32.source.valid,
+            self.loopback_32.source.last,
+            self.loopback_32.source.ready,
             self.loopback_32.source.data
         )
         self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 4096)

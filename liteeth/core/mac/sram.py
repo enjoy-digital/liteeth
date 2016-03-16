@@ -23,7 +23,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         # # #
 
         # packet dropped if no slot available
-        sink.ack.reset = 1
+        sink.ready.reset = 1
 
         # length computation
         increment = Signal(3)
@@ -63,8 +63,8 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         self.submodules += fsm
 
         fsm.act("IDLE",
-            If(sink.stb,
-                If(fifo.sink.ack,
+            If(sink.valid,
+                If(fifo.sink.ready,
                     ongoing.eq(1),
                     counter_ce.eq(1),
                     NextState("WRITE")
@@ -72,9 +72,9 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             )
         )
         fsm.act("WRITE",
-            counter_ce.eq(sink.stb),
+            counter_ce.eq(sink.valid),
             ongoing.eq(1),
-            If(sink.stb & sink.eop,
+            If(sink.valid & sink.last,
                 If((sink.error & sink.last_be) != 0,
                     NextState("DISCARD")
                 ).Else(
@@ -93,12 +93,12 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         fsm.act("TERMINATE",
             counter_reset.eq(1),
             slot_ce.eq(1),
-            fifo.sink.stb.eq(1),
+            fifo.sink.valid.eq(1),
             NextState("IDLE")
         )
         self.comb += [
-            fifo.source.ack.eq(self.ev.available.clear),
-            self.ev.available.trigger.eq(fifo.source.stb),
+            fifo.source.ready.eq(self.ev.available.clear),
+            self.ev.available.trigger.eq(fifo.source.valid),
             self._slot.status.eq(fifo.source.slot),
             self._length.status.eq(fifo.source.length),
         ]
@@ -117,7 +117,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             cases[n] = [
                 ports[n].adr.eq(counter[2:]),
                 ports[n].dat_w.eq(sink.data),
-                If(sink.stb & ongoing,
+                If(sink.valid & ongoing,
                     ports[n].we.eq(0xf)
                 )
             ]
@@ -147,10 +147,10 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += fifo
         self.comb += [
-            fifo.sink.stb.eq(self._start.re),
+            fifo.sink.valid.eq(self._start.re),
             fifo.sink.slot.eq(self._slot.storage),
             fifo.sink.length.eq(self._length.storage),
-            self._ready.status.eq(fifo.sink.ack)
+            self._ready.status.eq(fifo.sink.ready)
         ]
 
         # length computation
@@ -174,7 +174,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
         fsm.act("IDLE",
             counter_reset.eq(1),
-            If(fifo.source.stb,
+            If(fifo.source.valid,
                 NextState("CHECK")
             )
         )
@@ -200,15 +200,15 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             )
         ]
         fsm.act("SEND",
-            source.stb.eq(1),
-            source.eop.eq(last),
-            If(source.ack,
+            source.valid.eq(1),
+            source.last.eq(last),
+            If(source.ready,
                 counter_ce.eq(~last),
                 NextState("CHECK")
             )
         )
         fsm.act("END",
-            fifo.source.ack.eq(1),
+            fifo.source.ready.eq(1),
             self.ev.done.trigger.eq(1),
             NextState("IDLE")
         )

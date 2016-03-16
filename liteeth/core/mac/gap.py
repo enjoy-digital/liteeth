@@ -25,13 +25,13 @@ class LiteEthMACGap(Module):
         fsm.act("COPY",
             counter_reset.eq(1),
             sink.connect(source),
-            If(sink.stb & sink.eop & sink.ack,
+            If(sink.valid & sink.last & sink.ready,
                 NextState("GAP")
             )
         )
         fsm.act("GAP",
             counter_ce.eq(1),
-            sink.ack.eq(int(ack_on_gap)),
+            sink.ready.eq(int(ack_on_gap)),
             If(counter == (gap-1),
                 NextState("COPY")
             )

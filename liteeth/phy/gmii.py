@@ -15,9 +15,9 @@ class LiteEthPHYGMIITX(Module):
         if hasattr(pads, "tx_er"):
             self.sync += pads.tx_er.eq(0)
         self.sync += [
-            pads.tx_en.eq(sink.stb),
+            pads.tx_en.eq(sink.valid),
             pads.tx_data.eq(sink.data),
-            sink.ack.eq(1)
+            sink.ready.eq(1)
         ]
 
 
@@ -30,10 +30,10 @@ class LiteEthPHYGMIIRX(Module):
         dv_d = Signal()
         self.sync += [
             dv_d.eq(pads.dv),
-            source.stb.eq(pads.dv),
+            source.valid.eq(pads.dv),
             source.data.eq(pads.rx_data)
         ]
-        self.comb += source.eop.eq(~pads.dv & dv_d)
+        self.comb += source.last.eq(~pads.dv & dv_d)
 
 
 class LiteEthPHYGMIICRG(Module, AutoCSR):

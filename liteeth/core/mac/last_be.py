@@ -10,18 +10,18 @@ class LiteEthMACTXLastBE(Module):
 
         ongoing = Signal(reset=1)
         self.sync += \
-            If(sink.stb & sink.ack,
-                If(sink.eop,
+            If(sink.valid & sink.ready,
+                If(sink.last,
                     ongoing.eq(1)
                 ).Elif(sink.last_be,
                     ongoing.eq(0)
                 )
             )
         self.comb += [
-            source.stb.eq(sink.stb & ongoing),
-            source.eop.eq(sink.last_be),
+            source.valid.eq(sink.valid & ongoing),
+            source.last.eq(sink.last_be),
             source.data.eq(sink.data),
-            sink.ack.eq(source.ack)
+            sink.ready.eq(source.ready)
         ]
 
 
@@ -34,5 +34,5 @@ class LiteEthMACRXLastBE(Module):
 
         self.comb += [
             sink.connect(source),
-            source.last_be.eq(sink.eop)
+            source.last_be.eq(sink.last)
         ]

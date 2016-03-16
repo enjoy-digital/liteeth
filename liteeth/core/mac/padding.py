@@ -27,11 +27,11 @@ class LiteEthMACPaddingInserter(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.connect(source),
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 counter_ce.eq(1),
-                If(sink.eop,
+                If(sink.last,
                     If(~counter_done,
-                        source.eop.eq(0),
+                        source.last.eq(0),
                         NextState("PADDING")
                     ).Else(
                         counter_reset.eq(1)
@@ -40,10 +40,10 @@ class LiteEthMACPaddingInserter(Module):
             )
         )
         fsm.act("PADDING",
-            source.stb.eq(1),
-            source.eop.eq(counter_done),
+            source.valid.eq(1),
+            source.last.eq(counter_done),
             source.data.eq(0),
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 counter_ce.eq(1),
                 If(counter_done,
                     counter_reset.eq(1),

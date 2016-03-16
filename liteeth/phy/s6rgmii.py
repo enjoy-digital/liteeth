@@ -20,7 +20,7 @@ class LiteEthPHYRGMIITX(Module):
                 p_DDR_ALIGNMENT="C0", p_INIT=0, p_SRTYPE="ASYNC",
                 i_C0=ClockSignal("eth_tx"), i_C1=~ClockSignal("eth_tx"),
                 i_CE=1, i_S=0, i_R=0,
-                i_D0=sink.stb, i_D1=sink.stb, o_Q=pads.tx_ctl,
+                i_D0=sink.valid, i_D1=sink.valid, o_Q=pads.tx_ctl,
         )
         for i in range(4):
             self.specials += Instance("ODDR2",
@@ -29,7 +29,7 @@ class LiteEthPHYRGMIITX(Module):
                     i_CE=1, i_S=0, i_R=0,
                     i_D0=sink.data[i], i_D1=sink.data[4+i], o_Q=pads.tx_data[i],
             )
-        self.comb += sink.ack.eq(1)
+        self.comb += sink.ready.eq(1)
 
 
 class LiteEthPHYRGMIIRX(Module):
@@ -60,10 +60,10 @@ class LiteEthPHYRGMIIRX(Module):
         self.sync += rx_ctl_d.eq(rx_ctl)
 
         self.sync += [
-            source.stb.eq(rx_ctl),
+            source.valid.eq(rx_ctl),
             source.data.eq(rx_data)
         ]
-        self.comb += source.eop.eq(eop)
+        self.comb += source.last.eq(last)
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):

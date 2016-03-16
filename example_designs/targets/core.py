@@ -111,9 +111,9 @@ _io = [
 
     # UDP
     ("udp_sink", 0,
-        Subsignal("stb",   Pins(1)),
-        Subsignal("eop",   Pins(1)),
-        Subsignal("ack",   Pins(1)),
+        Subsignal("valid",   Pins(1)),
+        Subsignal("last",    Pins(1)),
+        Subsignal("ready",   Pins(1)),
         # param
         Subsignal("src_port", Pins(16)),
         Subsignal("dst_port", Pins(16)),
@@ -125,9 +125,9 @@ _io = [
     ),
 
     ("udp_source", 0,
-        Subsignal("stb",   Pins(1)),
-        Subsignal("eop",   Pins(1)),
-        Subsignal("ack",   Pins(1)),
+        Subsignal("valid",   Pins(1)),
+        Subsignal("last",    Pins(1)),
+        Subsignal("ready",   Pins(1)),
         # param
         Subsignal("src_port", Pins(16)),
         Subsignal("dst_port", Pins(16)),
@@ -221,9 +221,9 @@ class UDPCore(PHYCore):
         udp_sink = self.platform.request("udp_sink")
         self.comb += [
             # control
-            udp_port.sink.stb.eq(udp_sink.stb),
-            udp_port.sink.eop.eq(udp_sink.eop),
-            udp_sink.ack.eq(udp_port.sink.ack),
+            udp_port.sink.valid.eq(udp_sink.valid),
+            udp_port.sink.last.eq(udp_sink.last),
+            udp_sink.ready.eq(udp_port.sink.ready),
 
             # param
             udp_port.sink.src_port.eq(udp_sink.src_port),
@@ -238,9 +238,9 @@ class UDPCore(PHYCore):
         udp_source = self.platform.request("udp_source")
         self.comb += [
             # control
-            udp_source.stb.eq(udp_port.source.stb),
-            udp_source.eop.eq(udp_port.source.eop),
-            udp_port.source.ack.eq(udp_source.ack),
+            udp_source.valid.eq(udp_port.source.valid),
+            udp_source.last.eq(udp_port.source.last),
+            udp_port.source.ready.eq(udp_source.ready),
 
             # param
             udp_source.src_port.eq(udp_port.source.src_port),

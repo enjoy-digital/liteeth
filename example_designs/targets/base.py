@@ -80,31 +80,31 @@ class BaseSoCDevel(BaseSoC):
 
         debug = (
             # MAC interface
-            self.core.mac.core.sink.stb,
-            self.core.mac.core.sink.eop,
-            self.core.mac.core.sink.ack,
+            self.core.mac.core.sink.valid,
+            self.core.mac.core.sink.last,
+            self.core.mac.core.sink.ready,
             self.core.mac.core.sink.data,
 
-            self.core.mac.core.source.stb,
-            self.core.mac.core.source.eop,
-            self.core.mac.core.source.ack,
+            self.core.mac.core.source.valid,
+            self.core.mac.core.source.last,
+            self.core.mac.core.source.ready,
             self.core.mac.core.source.data,
 
             # ICMP interface
-            self.core.icmp.echo.sink.stb,
-            self.core.icmp.echo.sink.eop,
-            self.core.icmp.echo.sink.ack,
+            self.core.icmp.echo.sink.valid,
+            self.core.icmp.echo.sink.last,
+            self.core.icmp.echo.sink.ready,
             self.core.icmp.echo.sink.data,
 
-            self.core.icmp.echo.source.stb,
-            self.core.icmp.echo.source.eop,
-            self.core.icmp.echo.source.ack,
+            self.core.icmp.echo.source.valid,
+            self.core.icmp.echo.source.last,
+            self.core.icmp.echo.source.ready,
             self.core.icmp.echo.source.data,
 
             # IP interface
-            self.core.ip.crossbar.master.sink.stb,
-            self.core.ip.crossbar.master.sink.eop,
-            self.core.ip.crossbar.master.sink.ack,
+            self.core.ip.crossbar.master.sink.valid,
+            self.core.ip.crossbar.master.sink.last,
+            self.core.ip.crossbar.master.sink.ready,
             self.core.ip.crossbar.master.sink.data,
             self.core.ip.crossbar.master.sink.ip_address,
             self.core.ip.crossbar.master.sink.protocol,

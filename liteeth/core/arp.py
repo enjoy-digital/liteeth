@@ -42,15 +42,15 @@ class LiteEthARPTX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ack.eq(1),
+            sink.ready.eq(1),
             counter_reset.eq(1),
-            If(sink.stb,
-                sink.ack.eq(0),
+            If(sink.valid,
+                sink.ready.eq(0),
                 NextState("SEND")
             )
         )
         self.comb += [
-            packetizer.sink.eop.eq(counter == max(arp_header.length, eth_min_len)-1),
+            packetizer.sink.last.eq(counter == max(arp_header.length, eth_min_len)-1),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
             packetizer.sink.hwsize.eq(6),
@@ -69,15 +69,15 @@ class LiteEthARPTX(Module):
             )
         ]
         fsm.act("SEND",
-            packetizer.sink.stb.eq(1),
+            packetizer.sink.valid.eq(1),
             packetizer.source.connect(source),
             source.target_mac.eq(packetizer.sink.target_mac),
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
-            If(source.stb & source.ack,
+            If(source.valid & source.ready,
                 counter_ce.eq(1),
-                If(source.eop,
-                    sink.ack.eq(1),
+                If(source.last,
+                    sink.ready.eq(1),
                     NextState("IDLE")
                 )
             )
@@ -105,15 +105,15 @@ class LiteEthARPRX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb,
-                depacketizer.source.ack.eq(0),
+            depacketizer.source.ready.eq(1),
+            If(depacketizer.source.valid,
+                depacketizer.source.ready.eq(0),
                 NextState("CHECK")
             )
         )
         valid = Signal()
         self.sync += valid.eq(
-            depacketizer.source.stb &
+            depacketizer.source.valid &
             (depacketizer.source.hwtype == arp_hwtype_ethernet) &
             (depacketizer.source.proto == arp_proto_ip) &
             (depacketizer.source.hwsize == 6) &
@@ -133,15 +133,15 @@ class LiteEthARPRX(Module):
         ]
         fsm.act("CHECK",
             If(valid,
-                source.stb.eq(1),
+                source.valid.eq(1),
                 source.reply.eq(reply),
                 source.request.eq(request)
             ),
             NextState("TERMINATE")
         ),
         fsm.act("TERMINATE",
-            depacketizer.source.ack.eq(1),
-            If(depacketizer.source.stb & depacketizer.source.eop,
+            depacketizer.source.ready.eq(1),
+            If(depacketizer.source.valid & depacketizer.source.last,
                 NextState("IDLE")
             )
         )
@@ -206,22 +206,22 @@ class LiteEthARPTable(Module):
         fsm.act("IDLE",
             # Note: for simplicicy, if APR table is busy response from arp_rx
             # is lost. This is compensated by the protocol (retries)
-            If(sink.stb & sink.request,
+            If(sink.valid & sink.request,
                 NextState("SEND_REPLY")
-            ).Elif(sink.stb & sink.reply & request_pending,
+            ).Elif(sink.valid & sink.reply & request_pending,
                 NextState("UPDATE_TABLE"),
             ).Elif(request_counter == max_requests-1,
                 NextState("PRESENT_RESPONSE")
-            ).Elif(request.stb | (request_pending & request_timer.done),
+            ).Elif(request.valid | (request_pending & request_timer.done),
                 NextState("CHECK_TABLE")
             )
         )
         fsm.act("SEND_REPLY",
-            source.stb.eq(1),
+            source.valid.eq(1),
             source.reply.eq(1),
             source.ip_address.eq(sink.ip_address),
             source.mac_address.eq(sink.mac_address),
-            If(source.ack,
+            If(source.ready,
                 NextState("IDLE")
             )
         )
@@ -248,26 +248,26 @@ class LiteEthARPTable(Module):
                     request_ip_address_reset.eq(1),
                     NextState("PRESENT_RESPONSE"),
                 ).Elif(request.ip_address == cached_ip_address,
-                    request.ack.eq(request.stb),
+                    request.ready.eq(request.valid),
                     NextState("PRESENT_RESPONSE"),
                 ).Else(
-                    request_ip_address_update.eq(request.stb),
+                    request_ip_address_update.eq(request.valid),
                     NextState("SEND_REQUEST")
                 )
             ).Else(
-                request_ip_address_update.eq(request.stb),
+                request_ip_address_update.eq(request.valid),
                 NextState("SEND_REQUEST")
             )
         )
         fsm.act("SEND_REQUEST",
-            source.stb.eq(1),
+            source.valid.eq(1),
             source.request.eq(1),
             source.ip_address.eq(request_ip_address),
-            If(source.ack,
-                request_counter_reset.eq(request.stb),
+            If(source.ready,
+                request_counter_reset.eq(request.valid),
                 request_counter_ce.eq(1),
                 request_pending_set.eq(1),
-                request.ack.eq(1),
+                request.ready.eq(1),
                 NextState("IDLE")
             )
         )
@@ -280,8 +280,8 @@ class LiteEthARPTable(Module):
             response.mac_address.eq(cached_mac_address)
         ]
         fsm.act("PRESENT_RESPONSE",
-            response.stb.eq(1),
-            If(response.ack,
+            response.valid.eq(1),
+            If(response.ready,
                 NextState("IDLE")
             )
         )

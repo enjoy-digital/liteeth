@@ -22,13 +22,13 @@ class LiteEthPHYMIITX(Module):
                                            converter_description(4))
         self.submodules += converter
         self.comb += [
-            converter.sink.stb.eq(sink.stb),
+            converter.sink.valid.eq(sink.valid),
             converter.sink.data.eq(sink.data),
-            sink.ack.eq(converter.sink.ack),
-            converter.source.ack.eq(1)
+            sink.ready.eq(converter.sink.ready),
+            converter.source.ready.eq(1)
         ]
         self.sync += [
-            pads.tx_en.eq(converter.source.stb),
+            pads.tx_en.eq(converter.source.valid),
             pads.tx_data.eq(converter.source.data)
         ]
 
@@ -46,11 +46,11 @@ class LiteEthPHYMIIRX(Module):
 
         self.sync += [
             converter.reset.eq(~pads.dv),
-            converter.sink.stb.eq(1),
+            converter.sink.valid.eq(1),
             converter.sink.data.eq(pads.rx_data)
         ]
         self.comb += [
-            converter.sink.eop.eq(~pads.dv),
+            converter.sink.last.eq(~pads.dv),
             converter.source.connect(source)
         ]
 

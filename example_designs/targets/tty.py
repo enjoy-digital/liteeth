@@ -24,12 +24,12 @@ class TTYSoCDevel(TTYSoC):
         from litescope.core.port import LiteScopeTerm
         TTYSoC.__init__(self, platform)
         debug = (
-            self.tty.sink.stb,
-            self.tty.sink.ack,
+            self.tty.sink.valid,
+            self.tty.sink.ready,
             self.tty.sink.data,
 
-            self.tty.source.stb,
-            self.tty.source.ack,
+            self.tty.source.valid,
+            self.tty.source.ready,
             self.tty.source.data
         )
         self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 4096)

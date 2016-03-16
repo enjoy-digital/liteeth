@@ -43,13 +43,13 @@ class TB(Module):
         for i in range(100):
             yield
 
-        while selfp.arp.table.request.ack != 1:
-            selfp.arp.table.request.stb = 1
+        while selfp.arp.table.request.ready != 1:
+            selfp.arp.table.request.valid = 1
             selfp.arp.table.request.ip_address = 0x12345678
             yield
-        selfp.arp.table.request.stb = 0
-        while selfp.arp.table.response.stb != 1:
-            selfp.arp.table.response.ack = 1
+        selfp.arp.table.request.valid = 0
+        while selfp.arp.table.response.valid != 1:
+            selfp.arp.table.response.ready = 1
             yield
         print("Received MAC : 0x{:12x}".format(selfp.arp.table.response.mac_address))
 

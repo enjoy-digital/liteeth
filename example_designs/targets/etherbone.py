@@ -25,9 +25,9 @@ class EtherboneSoCDevel(EtherboneSoC):
         EtherboneSoC.__init__(self, platform)
         debug = (
             # mmap stream from HOST
-            self.etherbone.master.sink.stb,
-            self.etherbone.master.sink.eop,
-            self.etherbone.master.sink.ack,
+            self.etherbone.master.sink.valid,
+            self.etherbone.master.sink.last,
+            self.etherbone.master.sink.ready,
             self.etherbone.master.sink.we,
             self.etherbone.master.sink.count,
             self.etherbone.master.sink.base_addr,
@@ -36,9 +36,9 @@ class EtherboneSoCDevel(EtherboneSoC):
             self.etherbone.master.sink.data,
 
             # mmap stream to HOST
-            self.etherbone.master.source.stb,
-            self.etherbone.master.source.eop,
-            self.etherbone.master.source.ack,
+            self.etherbone.master.source.valid,
+            self.etherbone.master.source.last,
+            self.etherbone.master.source.ready,
             self.etherbone.master.source.we,
             self.etherbone.master.source.count,
             self.etherbone.master.source.base_addr,

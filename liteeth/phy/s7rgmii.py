@@ -23,7 +23,7 @@ class LiteEthPHYRGMIITX(Module):
             Instance("ODDR",
                 p_DDR_CLK_EDGE="SAME_EDGE",
                 i_C=ClockSignal("eth_tx"), i_CE=1, i_S=0, i_R=0,
-                i_D1=sink.stb, i_D2=sink.stb, o_Q=tx_ctl_obuf
+                i_D1=sink.valid, i_D2=sink.valid, o_Q=tx_ctl_obuf
             ),
             Instance("OBUF", i_I=tx_ctl_obuf, o_O=pads.tx_ctl)
         ]
@@ -36,7 +36,7 @@ class LiteEthPHYRGMIITX(Module):
                 ),
                 Instance("OBUF", i_I=tx_data_obuf[i], o_O=pads.tx_data[i])
             ]
-        self.comb += sink.ack.eq(1)
+        self.comb += sink.ready.eq(1)
 
 
 class LiteEthPHYRGMIIRX(Module):
@@ -83,13 +83,13 @@ class LiteEthPHYRGMIIRX(Module):
         rx_ctl_d = Signal()
         self.sync += rx_ctl_d.eq(rx_ctl)
 
-        eop = Signal()
-        self.comb += eop.eq(~rx_ctl & rx_ctl_d)
+        last = Signal()
+        self.comb += last.eq(~rx_ctl & rx_ctl_d)
         self.sync += [
-            source.stb.eq(rx_ctl),
+            source.valid.eq(rx_ctl),
             source.data.eq(rx_data)
         ]
-        self.comb += source.eop.eq(eop)
+        self.comb += source.last.eq(last)
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):

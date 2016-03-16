@@ -23,13 +23,13 @@ class LiteEthPHYRMIITX(Module):
                                            converter_description(2))
         self.submodules += converter
         self.comb += [
-            converter.sink.stb.eq(sink.stb),
+            converter.sink.valid.eq(sink.valid),
             converter.sink.data.eq(sink.data),
-            sink.ack.eq(converter.sink.ack),
-            converter.source.ack.eq(1)
+            sink.ready.eq(converter.sink.ready),
+            converter.source.ready.eq(1)
         ]
         self.sync += [
-            pads.tx_en.eq(converter.source.stb),
+            pads.tx_en.eq(converter.source.valid),
             pads.tx_data.eq(converter.source.data)
         ]
 
@@ -45,11 +45,11 @@ class LiteEthPHYRMIIRX(Module):
         converter = ResetInserter()(converter)
         self.submodules += converter
 
-        converter_sink_stb = Signal()
+        converter_sink_valid = Signal()
         converter_sink_data = Signal(2)
 
         self.specials += [
-            MultiReg(converter_sink_stb, converter.sink.stb, n=2),
+            MultiReg(converter_sink_valid, converter.sink.valid, n=2),
             MultiReg(converter_sink_data, converter.sink.data, n=2)
         ]
 
@@ -65,7 +65,7 @@ class LiteEthPHYRMIIRX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(crs_dv & (rx_data != 0b00),
-                converter_sink_stb.eq(1),
+                converter_sink_valid.eq(1),
                 converter_sink_data.eq(rx_data),
                 NextState("RECEIVE")
             ).Else(
@@ -73,11 +73,11 @@ class LiteEthPHYRMIIRX(Module):
             )
         )
         fsm.act("RECEIVE",
-            converter_sink_stb.eq(1),
+            converter_sink_valid.eq(1),
             converter_sink_data.eq(rx_data),
             # end of frame when 2 consecutives 0 on crs_dv
             If(~(crs_dv | crs_dv_d),
-              converter.sink.eop.eq(1),
+              converter.sink.last.eq(1),
               NextState("IDLE")
             )
         )

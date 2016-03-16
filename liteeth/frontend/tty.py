@@ -10,11 +10,11 @@ class LiteEthTTYTX(Module):
 
         if fifo_depth is None:
             self.comb += [
-                source.stb.eq(sink.stb),
-                source.eop.eq(1),
+                source.valid.eq(sink.valid),
+                source.last.eq(1),
                 source.length.eq(1),
                 source.data.eq(sink.data),
-                sink.ack.eq(source.ack)
+                sink.ready.eq(source.ready)
             ]
         else:
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
@@ -36,18 +36,18 @@ class LiteEthTTYTX(Module):
 
             self.submodules.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
-                If(fifo.source.stb,
+                If(fifo.source.valid,
                     level_update.eq(1),
                     counter_reset.eq(1),
                     NextState("SEND")
                 )
             )
             fsm.act("SEND",
-                source.stb.eq(fifo.source.stb),
+                source.valid.eq(fifo.source.valid),
                 If(level == 0,
-                    source.eop.eq(1),
+                    source.last.eq(1),
                 ).Else(
-                    source.eop.eq(counter == (level-1)),
+                    source.last.eq(counter == (level-1)),
                 ),
                 source.src_port.eq(udp_port),
                 source.dst_port.eq(udp_port),
@@ -58,10 +58,10 @@ class LiteEthTTYTX(Module):
                     source.length.eq(level),
                 ),
                 source.data.eq(fifo.source.data),
-                fifo.source.ack.eq(source.ack),
-                If(source.stb & source.ack,
+                fifo.source.ready.eq(source.ready),
+                If(source.valid & source.ready,
                     counter_ce.eq(1),
-                    If(source.eop,
+                    If(source.last,
                         NextState("IDLE")
                     )
                 )
@@ -82,16 +82,16 @@ class LiteEthTTYRX(Module):
         )
         if fifo_depth is None:
             self.comb += [
-                source.stb.eq(sink.stb & valid),
+                source.valid.eq(sink.valid & valid),
                 source.data.eq(sink.data),
-                sink.ack.eq(source.ack)
+                sink.ready.eq(source.ready)
             ]
         else:
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += [
-                fifo.sink.stb.eq(sink.stb & valid),
+                fifo.sink.valid.eq(sink.valid & valid),
                 fifo.sink.data.eq(sink.data),
-                sink.ack.eq(fifo.sink.ack),
+                sink.ready.eq(fifo.sink.ready),
                 fifo.source.connect(source)
             ]
 
