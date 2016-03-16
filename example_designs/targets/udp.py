@@ -1,7 +1,5 @@
 from liteeth.common import *
 
-from litex.soc.interconnect.stream_packet import Buffer
-
 from targets.base import BaseSoC
 
 
@@ -19,7 +17,7 @@ class UDPSoC(BaseSoC):
 
     def add_udp_loopback(self, port, dw, depth, name=None):
         port = self.core.udp.crossbar.get_port(port, dw)
-        buf = Buffer(eth_udp_user_description(dw), depth//(dw//8), 8)
+        buf = stream.SyncFIFO(eth_udp_user_description(dw), depth//(dw//8))
         if name is None:
             self.submodules += buf
         else:

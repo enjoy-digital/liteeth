@@ -1,6 +1,6 @@
 from liteeth.common import *
 
-from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer, Buffer
+from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
 
 
 # icmp tx
@@ -127,7 +127,7 @@ class LiteEthICMPEcho(Module):
         # # #
 
         # TODO: optimize ressources (no need to store parameters as datas)
-        self.submodules.buffer = Buffer(eth_icmp_user_description(8), 128, 2)
+        self.submodules.buffer = stream.SyncFIFO(eth_icmp_user_description(8), 128)
         self.comb += [
             sink.connect(self.buffer.sink),
             self.buffer.source.connect(source),

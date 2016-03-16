@@ -1,7 +1,8 @@
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
-from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer, Buffer
+from litex.soc.interconnect import stream
+from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
 
 
 # udp crossbar

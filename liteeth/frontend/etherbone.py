@@ -272,7 +272,7 @@ class LiteEthEtherboneRecordSender(Module):
         # # #
 
         # TODO: optimize ressources (no need to store parameters as datas)
-        pbuffer = Buffer(eth_etherbone_mmap_description(32), buffer_depth)
+        pbuffer = stream.SyncFIFO(eth_etherbone_mmap_description(32), buffer_depth)
         self.submodules += pbuffer
         self.comb += sink.connect(pbuffer.sink)
 
