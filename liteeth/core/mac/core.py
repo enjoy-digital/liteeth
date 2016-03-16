@@ -67,12 +67,12 @@ class LiteEthMACCore(Module, AutoCSR):
         # Converters
         if dw != phy.dw:
             reverse = endianness == "big"
-            tx_converter = stream.Converter(eth_phy_description(dw),
-                                            eth_phy_description(phy.dw),
-                                            reverse=reverse)
-            rx_converter = stream.Converter(eth_phy_description(phy.dw),
-                                            eth_phy_description(dw),
-                                            reverse=reverse)
+            tx_converter = stream.StrideConverter(eth_phy_description(dw),
+                                                  eth_phy_description(phy.dw),
+                                                 reverse=reverse)
+            rx_converter = stream.StrideConverter(eth_phy_description(phy.dw),
+                                                  eth_phy_description(dw),
+                                                  reverse=reverse)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
 

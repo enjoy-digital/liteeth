@@ -18,8 +18,8 @@ class LiteEthPHYMIITX(Module):
 
         if hasattr(pads, "tx_er"):
             self.sync += pads.tx_er.eq(0)
-        converter = stream.Converter(converter_description(8),
-                                     converter_description(4))
+        converter = stream.StrideConverter(converter_description(8),
+                                           converter_description(4))
         self.submodules += converter
         self.comb += [
             converter.sink.stb.eq(sink.stb),
@@ -39,8 +39,8 @@ class LiteEthPHYMIIRX(Module):
 
         # # #
 
-        converter = stream.Converter(converter_description(4),
-                                     converter_description(8))
+        converter = stream.StrideConverter(converter_description(4),
+                                           converter_description(8))
         converter = ResetInserter()(converter)
         self.submodules += converter
 

@@ -35,15 +35,15 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         user_port = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(8)
         if dw != 8:
-            converter = stream.Converter(eth_udp_user_description(user_port.dw),
-                                  eth_udp_user_description(8))
+            converter = stream.StrideConverter(eth_udp_user_description(user_port.dw),
+                                               eth_udp_user_description(8))
             self.submodules += converter
             self.comb += [
                 user_port.sink.connect(converter.sink),
                 converter.source.connect(internal_port.sink)
             ]
-            converter = stream.Converter(eth_udp_user_description(8),
-                                  eth_udp_user_description(user_port.dw))
+            converter = stream.StrideConverter(eth_udp_user_description(8),
+                                               eth_udp_user_description(user_port.dw))
             self.submodules += converter
             self.comb += [
                 internal_port.source.connect(converter.sink),

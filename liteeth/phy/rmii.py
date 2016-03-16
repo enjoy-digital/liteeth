@@ -19,8 +19,8 @@ class LiteEthPHYRMIITX(Module):
 
         # # #
 
-        converter = stream.Converter(converter_description(8),
-                                     converter_description(2))
+        converter = stream.StrideConverter(converter_description(8),
+                                           converter_description(2))
         self.submodules += converter
         self.comb += [
             converter.sink.stb.eq(sink.stb),
@@ -40,8 +40,8 @@ class LiteEthPHYRMIIRX(Module):
 
         # # #
 
-        converter = stream.Converter(converter_description(2),
-                                     converter_description(8))
+        converter = stream.StrideConverter(converter_description(2),
+                                           converter_description(8))
         converter = ResetInserter()(converter)
         self.submodules += converter
 
