@@ -54,7 +54,7 @@ class PHY(Module):
             print_phy(r)
         self.packet = self.phy_sink.packet
 
-    def gen_simulation(self, selfp):
+    def generator(self):
         while True:
             yield from self.receive()
             if self.mac_callback is not None:

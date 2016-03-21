@@ -1,5 +1,4 @@
 from litex.gen import *
-from litex.gen.sim.generic import run_simulation
 
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.stream_sim import *
@@ -23,37 +22,31 @@ class TB(Module):
         self.submodules.ip = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000)
         self.ip_port = self.ip.ip.crossbar.get_port(udp_protocol)
 
-        # use sys_clk for each clock_domain
-        self.clock_domains.cd_eth_rx = ClockDomain()
-        self.clock_domains.cd_eth_tx = ClockDomain()
-        self.comb += [
-            self.cd_eth_rx.clk.eq(ClockSignal()),
-            self.cd_eth_rx.rst.eq(ResetSignal()),
-            self.cd_eth_tx.clk.eq(ClockSignal()),
-            self.cd_eth_tx.rst.eq(ResetSignal()),
-        ]
+def main_generator(dut):
+    while True:
+        yield dut.ip_port.sink.valid.eq(1)
+        yield dut.ip_port.sink.last.eq(1)
+        yield dut.ip_port.sink.ip_address.eq(0x12345678)
+        yield dut.ip_port.sink.protocol.eq(udp_protocol)
 
-    def gen_simulation(self, selfp):
-        selfp.cd_eth_rx.rst = 1
-        selfp.cd_eth_tx.rst = 1
+        yield dut.ip_port.source.ready.eq(1)
+        if (yield dut.ip_port.source.valid) == 1 and (yield dut.ip_port.source.last) == 1:
+            print("packet from IP 0x{:08x}".format((yield dut.ip_port.sink.ip_address)))
+            # XXX: find a way to exit properly
+            import sys
+            sys.exit()
+
         yield
-        selfp.cd_eth_rx.rst = 0
-        selfp.cd_eth_tx.rst = 0
-
-        for i in range(100):
-            yield
-
-        while True:
-            selfp.ip_port.sink.valid = 1
-            selfp.ip_port.sink.last = 1
-            selfp.ip_port.sink.ip_address = 0x12345678
-            selfp.ip_port.sink.protocol = udp_protocol
-
-            selfp.ip_port.source.ready = 1
-            if selfp.ip_port.source.valid == 1 and selfp.ip_port.source.last == 1:
-                print("packet from IP 0x{:08x}".format(selfp.ip_port.sink.ip_address))
-
-            yield
 
 if __name__ == "__main__":
-    run_simulation(TB(), ncycles=2048, vcd_name="my.vcd", keep_files=True)
+    tb = TB()
+    generators = {
+        "sys" :   [main_generator(tb)],
+        "eth_tx": [tb.phy_model.phy_sink.generator(),
+                   tb.phy_model.generator()],
+        "eth_rx":  tb.phy_model.phy_source.generator()
+    }
+    clocks = {"sys":    10,
+              "eth_rx": 10,
+              "eth_tx": 10}
+    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
