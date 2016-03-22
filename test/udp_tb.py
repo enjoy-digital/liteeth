@@ -6,8 +6,7 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 
-
-from test.model import phy, mac, arp, ip, udp
+from model import phy, mac, arp, ip, udp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd

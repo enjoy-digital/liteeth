@@ -1,7 +1,6 @@
-COREDIR = ../
 PYTHON = python3
 
-CMD = PYTHONPATH=$(COREDIR) $(PYTHON)
+CMD = $(PYTHON)
 
 model_tb:
 	$(CMD) ./model/mac.py

@@ -6,11 +6,11 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore
 
-from test.model.dumps import *
-from test.model.mac import *
-from test.model.ip import *
-from test.model.icmp import *
-from test.model import phy, mac, arp, ip, icmp
+from model.dumps import *
+from model.mac import *
+from model.ip import *
+from model.icmp import *
+from model import phy, mac, arp, ip, icmp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd

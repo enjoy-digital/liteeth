@@ -7,7 +7,7 @@ from liteeth.common import *
 from liteeth.core.mac import LiteEthMAC
 from liteeth.core.arp import LiteEthARP
 
-from test.model import phy, mac, arp
+from model import phy, mac, arp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd

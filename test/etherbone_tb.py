@@ -7,7 +7,7 @@ from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
-from test.model import phy, mac, arp, ip, udp, etherbone
+from model import phy, mac, arp, ip, udp, etherbone
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd

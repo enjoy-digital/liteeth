@@ -4,7 +4,7 @@ from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
 
-from test.model import mac
+from model import mac
 
 
 def print_arp(s):
@@ -124,8 +124,8 @@ class ARP(Module):
         request.target_ip = ip_address
 
 if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
+    from model.dumps import *
+    from model.mac import *
     errors = 0
     # ARP request
     packet = MACPacket(arp_request)

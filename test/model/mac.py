@@ -135,7 +135,7 @@ class MAC(Module):
                 raise ValueError  # XXX handle this properly
 
 if __name__ == "__main__":
-    from test.model.dumps import *
+    from model.dumps import *
     errors = 0
     packet = MACPacket(arp_request)
     packet.decode_remove_header()
