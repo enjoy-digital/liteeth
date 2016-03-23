@@ -16,12 +16,12 @@ mac_address = 0x12345678abcd
 
 class TB(Module):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=True)
-        self.submodules.mac_model = mac.MAC(self.phy_model, debug=True, loopback=False)
-        self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=True)
-        self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address, debug=True, loopback=False)
-        self.submodules.udp_model = udp.UDP(self.ip_model, ip_address, debug=True, loopback=False)
-        self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=True)
+        self.submodules.phy_model = phy.PHY(8, debug=False)
+        self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
+        self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
+        self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
+        self.submodules.udp_model = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
+        self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
 
         self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000)
         self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 20000)
@@ -32,16 +32,16 @@ class TB(Module):
 
 def main_generator(dut):
     test_probe = True
-    test_writes = False
-    test_reads = False
+    test_writes = True
+    test_reads = True
 
     # test probe
     if test_probe:
         packet = etherbone.EtherbonePacket()
         packet.pf = 1
         dut.etherbone_model.send(packet)
-        yield from self.etherbone_model.receive()
-        print("probe: " + str(bool(self.etherbone_model.rx_packet.pr)))
+        yield from dut.etherbone_model.receive()
+        print("probe: " + str(bool(dut.etherbone_model.rx_packet.pr)))
 
     for i in range(8):
         # test writes
@@ -64,7 +64,7 @@ def main_generator(dut):
 
             packet = etherbone.EtherbonePacket()
             packet.records = [record]
-            self.etherbone_model.send(packet)
+            dut.etherbone_model.send(packet)
             for i in range(256):
                 yield
 
@@ -88,10 +88,10 @@ def main_generator(dut):
 
             packet = etherbone.EtherbonePacket()
             packet.records = [record]
-            self.etherbone_model.send(packet)
-            yield from self.etherbone_model.receive()
+            dut.etherbone_model.send(packet)
+            yield from dut.etherbone_model.receive()
             loopback_writes_datas = []
-            loopback_writes_datas = self.etherbone_model.rx_packet.records.pop().writes.get_datas()
+            loopback_writes_datas = dut.etherbone_model.rx_packet.records.pop().writes.get_datas()
 
             # check resultss
             s, l, e = check(writes_datas, loopback_writes_datas)
