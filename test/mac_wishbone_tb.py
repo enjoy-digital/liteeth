@@ -22,7 +22,7 @@ class WishboneMaster:
         yield self.obj.we.eq(1)
         yield self.obj.sel.eq(0xf)
         yield self.obj.dat_w.eq(dat)
-        while (yield self.obj.ack) == 0:
+        while not (yield self.obj.ack):
             yield
         yield self.obj.cyc.eq(0)
         yield self.obj.stb.eq(0)
@@ -35,9 +35,9 @@ class WishboneMaster:
         yield self.obj.we.eq(0)
         yield self.obj.sel.eq(0xf)
         yield self.obj.dat_w.eq(0)
-        while (yield self.obj.ack) == 0:
+        while not (yield self.obj.ack):
             yield
-        yield self.dat.eq(self.obj.dat_r)
+        self.dat = (yield self.obj.dat_r)
         yield self.obj.cyc.eq(0)
         yield self.obj.stb.eq(0)
         yield
@@ -56,7 +56,7 @@ class SRAMReaderDriver:
         yield
 
     def wait_done(self):
-        while (yield self.obj.ev.done.pending) == 0:
+        while not (yield self.obj.ev.done.pending):
             yield
 
     def clear_done(self):
@@ -71,7 +71,7 @@ class SRAMWriterDriver:
         self.obj = obj
 
     def wait_available(self):
-        while (yield self.obj.ev.available.pending) == 0:
+        while not (yield self.obj.ev.available.pending):
             yield
 
     def clear_available(self):
@@ -83,8 +83,8 @@ class SRAMWriterDriver:
 
 class TB(Module):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=True)
-        self.submodules.mac_model = mac.MAC(self.phy_model, debug=True, loopback=True)
+        self.submodules.phy_model = phy.PHY(8, debug=False)
+        self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
         self.submodules.ethmac = LiteEthMAC(phy=self.phy_model, dw=32, interface="wishbone", with_preamble_crc=True)
 
 
@@ -98,11 +98,11 @@ def main_generator(dut):
 
     length = 150+2
 
-    tx_payload = [seed_to_data(i, True) % 0xFF for i in range(length)] + [0, 0, 0, 0]
+    tx_payload = [seed_to_data(i, True) % 0xff for i in range(length)] + [0, 0, 0, 0]
 
     errors = 0
 
-    while True:
+    for i in range(2):
         for i in range(20):
             yield
         for slot in range(2):
@@ -112,26 +112,25 @@ def main_generator(dut):
                 dat = int.from_bytes(tx_payload[4*i:4*(i+1)], "big")
                 yield from wishbone_master.write(sram_reader_slots_offset[slot]+i, dat)
 
+            # send tx payload & wait
+            yield from sram_reader_driver.start(slot, length)
+            yield from sram_reader_driver.wait_done()
+            yield from sram_reader_driver.clear_done()
 
-#            # send tx payload & wait
-#            yield from sram_reader_driver.start(slot, length)
-#            yield from sram_reader_driver.wait_done()
-#            yield from sram_reader_driver.clear_done()
-#
-#            # wait rx
-#            yield from sram_writer_driver.wait_available()
-#            yield from sram_writer_driver.clear_available()
-#
-#            # get rx payload (loopback on PHY Model)
-#            rx_payload = []
-#            for i in range(length//4+1):
-#                yield from wishbone_master.read(sram_writer_slots_offset[slot]+i)
-#                dat = wishbone_master.dat
-#                rx_payload += list(dat.to_bytes(4, byteorder='big'))
-#
-#            # check results
-#            s, l, e = check(tx_payload[:length], rx_payload[:min(length, len(rx_payload))])
-#            print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+            # wait rx
+            yield from sram_writer_driver.wait_available()
+            yield from sram_writer_driver.clear_available()
+
+            # get rx payload (loopback on PHY Model)
+            rx_payload = []
+            for i in range(length//4+1):
+                yield from wishbone_master.read(sram_writer_slots_offset[slot]+i)
+                dat = wishbone_master.dat
+                rx_payload += list(dat.to_bytes(4, byteorder='big'))
+
+            # check results
+            s, l, e = check(tx_payload[:length], rx_payload[:min(length, len(rx_payload))])
+            print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
 if __name__ == "__main__":
     tb = TB()
