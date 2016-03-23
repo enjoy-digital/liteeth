@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -16,9 +17,9 @@ class TB(Module):
         self.submodules.core = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True)
 
         self.submodules.streamer = PacketStreamer(eth_phy_description(8), last_be=1)
-        self.submodules.streamer_randomizer = AckRandomizer(eth_phy_description(8), level=50)
+        self.submodules.streamer_randomizer = Randomizer(eth_phy_description(8), level=50)
 
-        self.submodules.logger_randomizer = AckRandomizer(eth_phy_description(8), level=50)
+        self.submodules.logger_randomizer = Randomizer(eth_phy_description(8), level=50)
         self.submodules.logger = PacketLogger(eth_phy_description(8))
 
         self.comb += [
@@ -42,10 +43,6 @@ def main_generator(dut):
         # check results
         s, l, e = check(packet, dut.logger.packet)
         print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
 
 if __name__ == "__main__":
     tb = TB()

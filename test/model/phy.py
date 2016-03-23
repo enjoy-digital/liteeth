@@ -54,6 +54,7 @@ class PHY(Module):
             print_phy(r)
         self.packet = self.phy_sink.packet
 
+    @passive
     def generator(self):
         while True:
             yield from self.receive()

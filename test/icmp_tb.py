@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -37,10 +38,6 @@ def main_generator(dut):
 
     for i in range(256):
         yield
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
 
 if __name__ == "__main__":
     tb = TB()

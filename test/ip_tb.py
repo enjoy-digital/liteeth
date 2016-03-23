@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -23,20 +24,15 @@ class TB(Module):
         self.ip_port = self.ip.ip.crossbar.get_port(udp_protocol)
 
 def main_generator(dut):
-    while True:
-        yield dut.ip_port.sink.valid.eq(1)
-        yield dut.ip_port.sink.last.eq(1)
-        yield dut.ip_port.sink.ip_address.eq(0x12345678)
-        yield dut.ip_port.sink.protocol.eq(udp_protocol)
+    yield dut.ip_port.sink.valid.eq(1)
+    yield dut.ip_port.sink.last.eq(1)
+    yield dut.ip_port.sink.ip_address.eq(0x12345678)
+    yield dut.ip_port.sink.protocol.eq(udp_protocol)
 
-        yield dut.ip_port.source.ready.eq(1)
-        if (yield dut.ip_port.source.valid) == 1 and (yield dut.ip_port.source.last) == 1:
-            print("packet from IP 0x{:08x}".format((yield dut.ip_port.sink.ip_address)))
-            # XXX: find a way to exit properly
-            import sys
-            sys.exit()
-
+    yield dut.ip_port.source.ready.eq(1)
+    while not ((yield dut.ip_port.source.valid) and (yield dut.ip_port.source.last)):
         yield
+    print("packet from IP 0x{:08x}".format((yield dut.ip_port.sink.ip_address)))
 
 if __name__ == "__main__":
     tb = TB()

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -111,9 +112,6 @@ def main_generator(dut):
                 dat = int.from_bytes(tx_payload[4*i:4*(i+1)], "big")
                 yield from wishbone_master.write(sram_reader_slots_offset[slot]+i, dat)
 
-        # XXX: find a way to exit properly
-        import sys
-        sys.exit()
 
 #            # send tx payload & wait
 #            yield from sram_reader_driver.start(slot, length)

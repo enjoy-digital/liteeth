@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -42,10 +43,6 @@ def main_generator(dut):
     # check results
     s, l, e = check(packet, dut.logger.packet)
     print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
 
 if __name__ == "__main__":
     tb = TB(8)

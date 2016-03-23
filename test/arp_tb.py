@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -33,10 +34,6 @@ def main_generator(dut):
         yield dut.arp.table.response.ready.eq(1)
         yield
     print("Received MAC : 0x{:12x}".format((yield dut.arp.table.response.mac_address)))
-
-    # XXX: find a way to exit properly
-    import sys
-    sys.exit()
 
 if __name__ == "__main__":
     tb = TB()
