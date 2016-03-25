@@ -60,9 +60,11 @@ class SRAMReaderDriver:
             yield
 
     def clear_done(self):
-        yield self.obj.ev.done.clear.eq(1)
+        yield self.obj.ev.pending.re.eq(1)
+        yield self.obj.ev.pending.r.eq(1)
         yield
-        yield self.obj.ev.done.clear.eq(0)
+        yield self.obj.ev.pending.re.eq(0)
+        yield self.obj.ev.pending.r.eq(0)
         yield
 
 
@@ -75,9 +77,11 @@ class SRAMWriterDriver:
             yield
 
     def clear_available(self):
-        yield self.obj.ev.available.clear.eq(1)
+        yield self.obj.ev.pending.re.eq(1)
+        yield self.obj.ev.pending.r.eq(1)
         yield
-        yield self.obj.ev.available.clear.eq(0)
+        yield self.obj.ev.pending.re.eq(0)
+        yield self.obj.ev.pending.r.eq(0)
         yield
 
 
@@ -103,8 +107,6 @@ def main_generator(dut):
     errors = 0
 
     for i in range(2):
-        for i in range(20):
-            yield
         for slot in range(2):
             print("slot {}: ".format(slot), end="")
             # fill tx memory
