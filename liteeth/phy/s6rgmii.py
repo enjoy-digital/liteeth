@@ -59,6 +59,8 @@ class LiteEthPHYRGMIIRX(Module):
         rx_ctl_d = Signal()
         self.sync += rx_ctl_d.eq(rx_ctl)
 
+        last = Signal()
+        self.comb += last.eq(~rx_ctl & rx_ctl_d)
         self.sync += [
             source.valid.eq(rx_ctl),
             source.data.eq(rx_data)
