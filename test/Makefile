@@ -3,12 +3,12 @@ PYTHON = python3
 CMD = $(PYTHON)
 
 model_tb:
-	$(CMD) ./model/mac.py
-	$(CMD) ./model/arp.py
-	$(CMD) ./model/ip.py
-	$(CMD) ./model/udp.py
-	$(CMD) ./model/icmp.py
-	$(CMD) ./model/etherbone.py
+	PYTHONPATH=./ $(CMD) ./model/mac.py
+	PYTHONPATH=./ $(CMD) ./model/arp.py
+	PYTHONPATH=./ $(CMD) ./model/ip.py
+	PYTHONPATH=./ $(CMD) ./model/udp.py
+	PYTHONPATH=./ $(CMD) ./model/icmp.py
+	PYTHONPATH=./ $(CMD) ./model/etherbone.py
 
 mac_core_tb:
 	$(CMD) mac_core_tb.py
