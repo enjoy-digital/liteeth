@@ -60,12 +60,11 @@ set_false_path -from [get_clocks eth_tx_clk] -to [get_clocks sys_clk]
 
 class BaseSoCDevel(BaseSoC):
     csr_map = {
-        "logic_analyzer": 20
+        "analyzer": 20
     }
     csr_map.update(BaseSoC.csr_map)
     def __init__(self, platform):
-        from litescope.frontend.logic_analyzer import LiteScopeLogicAnalyzer
-        from litescope.core.port import LiteScopeTerm
+        from litescope import LiteScopeAnalyzer
         BaseSoC.__init__(self, platform)
 
         self.core_icmp_rx_fsm_state = Signal(4)
@@ -78,7 +77,7 @@ class BaseSoCDevel(BaseSoC):
         self.core_arp_tx_fsm_state = Signal(4)
         self.core_arp_table_fsm_state = Signal(4)
 
-        debug = (
+        debug = [
             # MAC interface
             self.core.mac.core.sink.valid,
             self.core.mac.core.sink.last,
@@ -122,9 +121,8 @@ class BaseSoCDevel(BaseSoC):
 
             self.core_udp_rx_fsm_state,
             self.core_udp_tx_fsm_state
-        )
-        self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 4096)
-        self.logic_analyzer.trigger.add_port(LiteScopeTerm(self.logic_analyzer.dw))
+        ]
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
 
     def do_finalize(self):
         BaseSoC.do_finalize(self)
@@ -144,6 +142,6 @@ class BaseSoCDevel(BaseSoC):
         ]
 
     def do_exit(self, vns):
-        self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
+        self.analyzer.export_csv(vns, "test/analyzer.csv")
 
 default_subtarget = BaseSoC

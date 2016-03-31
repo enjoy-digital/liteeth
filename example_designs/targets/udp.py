@@ -27,14 +27,13 @@ class UDPSoC(BaseSoC):
 
 class UDPSoCDevel(UDPSoC):
     csr_map = {
-        "logic_analyzer": 20
+        "analyzer": 20
     }
     csr_map.update(UDPSoC.csr_map)
     def __init__(self, platform):
-        from litescope.frontend.logic_analyzer import LiteScopeLogicAnalyzer
-        from litescope.core.port import LiteScopeTerm
+        from litescope import LiteScopeAnalyzer
         UDPSoC.__init__(self, platform)
-        debug = (
+        debug = [
             self.loopback_8.sink.valid,
             self.loopback_8.sink.last,
             self.loopback_8.sink.ready,
@@ -54,11 +53,10 @@ class UDPSoCDevel(UDPSoC):
             self.loopback_32.source.last,
             self.loopback_32.source.ready,
             self.loopback_32.source.data
-        )
-        self.submodules.logic_analyzer = LiteScopeLogicAnalyzer(debug, 4096)
-        self.logic_analyzer.trigger.add_port(LiteScopeTerm(self.logic_analyzer.dw))
+        ]
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
 
     def do_exit(self, vns):
-        self.logic_analyzer.export(vns, "test/logic_analyzer.csv")
+        self.analyzer.export_csv(vns, "test/analyzer.csv")
 
 default_subtarget = UDPSoC
