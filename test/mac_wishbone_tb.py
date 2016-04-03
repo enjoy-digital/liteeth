@@ -142,7 +142,7 @@ if __name__ == "__main__":
                    tb.phy_model.generator()],
         "eth_rx":  tb.phy_model.phy_source.generator()
     }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
+    clocks = {"sys":    20,
+              "eth_rx": 8,
+              "eth_tx": 8}
     run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
