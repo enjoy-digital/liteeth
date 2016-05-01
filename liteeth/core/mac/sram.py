@@ -4,14 +4,13 @@ from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
 
 
-
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2):
         self.sink = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
         slotbits = max(log2_int(nslots), 1)
-        lengthbits = log2_int(depth*4)  # length in bytes
+        lengthbits = 32
 
         self._slot = CSRStatus(slotbits)
         self._length = CSRStatus(lengthbits)
@@ -73,7 +72,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         )
         fsm.act("WRITE",
             counter_ce.eq(sink.valid),
-            ongoing.eq(1),
+            ongoing.eq(counter < eth_mtu),
             If(sink.valid & sink.last,
                 If((sink.error & sink.last_be) != 0,
                     NextState("DISCARD")
