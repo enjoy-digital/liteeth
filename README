@@ -3,11 +3,11 @@
               / /__/ / __/ -_) _// __/ _ \
              /____/_/\__/\__/___/\__/_//_/
 
-           Copyright 2012-2016 / EnjoyDigital
+           Copyright 2012-2017 / EnjoyDigital
 
        A small footprint and configurable Ethernet core
          with UDP/IP hw stack and Etherbone frontend
-                  powered by Migen
+                     powered by LiteX
 
 [> Intro
 ---------
@@ -88,17 +88,11 @@ devel [AT] lists.m-labs.hk.
 
 [> Simulations
 ---------------
-  Simulations are available in test/:
-    - mac_core_tb
-    - mac_wishbone_tb
-    - arp_tb
-    - ip_tb
-    - icmp_tb
-    - udp_tb
-  All ethernet layers have their own model tested against real ethernet dumps (dumps.py)
-  To run a simulation:
-    go to test/
-    make <simulation_name>
+  Unit tests are available in ./test/.
+  To run all the unit tests:
+    ./setup.py test
+  Tests can also be run individually:
+    python3 -m unittest test.test_name
 
 [> Tests
 ---------
