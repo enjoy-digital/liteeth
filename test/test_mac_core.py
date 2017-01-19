@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import unittest
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -7,10 +7,10 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core.mac.core import LiteEthMACCore
 
-from model import phy, mac
+from test.model import phy, mac
 
 
-class TB(Module):
+class DUT(Module):
     def __init__(self):
         self.submodules.phy_model = phy.PHY(8, debug=False)
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
@@ -44,19 +44,20 @@ def main_generator(dut):
         s, l, e = check(packet, dut.logger.packet)
         print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
-if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb),
-                   tb.streamer.generator(),
-                   tb.streamer_randomizer.generator(),
-                   tb.logger_randomizer.generator(),
-                   tb.logger.generator()],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+class TestMACCore(unittest.TestCase):
+    def test(self):
+        dut = DUT()
+        generators = {
+            "sys" :   [main_generator(dut),
+                       dut.streamer.generator(),
+                       dut.streamer_randomizer.generator(),
+                       dut.logger_randomizer.generator(),
+                       dut.logger.generator()],
+            "eth_tx": [dut.phy_model.phy_sink.generator(),
+                       dut.phy_model.generator()],
+            "eth_rx":  dut.phy_model.phy_source.generator()
+        }
+        clocks = {"sys":    10,
+                  "eth_rx": 10,
+                  "eth_tx": 10}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")

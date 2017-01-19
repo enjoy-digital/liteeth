@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import unittest
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -8,13 +8,13 @@ from liteeth.common import *
 from liteeth.core.mac import LiteEthMAC
 from liteeth.core.arp import LiteEthARP
 
-from model import phy, mac, arp
+from test.model import phy, mac, arp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
 
 
-class TB(Module):
+class DUT(Module):
     def __init__(self):
         self.submodules.phy_model = phy.PHY(8, debug=False)
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
@@ -35,15 +35,17 @@ def main_generator(dut):
         yield
     print("Received MAC : 0x{:12x}".format((yield dut.arp.table.response.mac_address)))
 
-if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb)],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+
+class TestARP(unittest.TestCase):
+    def test(self):
+        dut = DUT()
+        generators = {
+            "sys" :   [main_generator(dut)],
+            "eth_tx": [dut.phy_model.phy_sink.generator(),
+                       dut.phy_model.generator()],
+            "eth_rx":  dut.phy_model.phy_source.generator()
+        }
+        clocks = {"sys":    10,
+                  "eth_rx": 10,
+                  "eth_tx": 10}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")

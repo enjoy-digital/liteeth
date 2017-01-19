@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import unittest
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -13,7 +13,7 @@ ip_address = 0x12345678
 mac_address = 0x12345678abcd
 
 
-class TB(Module):
+class DUT(Module):
     def __init__(self, dw=8):
         self.dw = dw
         self.submodules.phy_model = phy.PHY(8, debug=False)
@@ -45,16 +45,16 @@ def main_generator(dut):
     print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
 if __name__ == "__main__":
-    tb = TB(8)
+    dut = DUT(8)
     generators = {
-        "sys" :   [main_generator(tb),
-                   tb.streamer.generator(),
-                   tb.logger.generator()],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
+        "sys" :   [main_generator(dut),
+                   dut.streamer.generator(),
+                   dut.logger.generator()],
+        "eth_tx": [dut.phy_model.phy_sink.generator(),
+                   dut.phy_model.generator()],
+        "eth_rx":  dut.phy_model.phy_source.generator()
     }
     clocks = {"sys":    10,
               "eth_rx": 10,
               "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+    run_simulation(dut, generators, clocks, vcd_name="sim.vcd")

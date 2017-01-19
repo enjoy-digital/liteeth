@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import unittest
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -7,7 +7,7 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core.mac import LiteEthMAC
 
-from model import phy, mac
+from test.model import phy, mac
 
 
 class WishboneMaster:
@@ -85,7 +85,7 @@ class SRAMWriterDriver:
         yield
 
 
-class TB(Module):
+class DUT(Module):
     def __init__(self):
         self.submodules.phy_model = phy.PHY(8, debug=False)
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
@@ -134,15 +134,17 @@ def main_generator(dut):
             s, l, e = check(tx_payload[:length], rx_payload[:min(length, len(rx_payload))])
             print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
-if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :    main_generator(tb),
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    20,
-              "eth_rx": 8,
-              "eth_tx": 8}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+
+class TestMACWishbone(unittest.TestCase):
+    def test(self):
+        dut = DUT()
+        generators = {
+            "sys" :    main_generator(dut),
+            "eth_tx": [dut.phy_model.phy_sink.generator(),
+                       dut.phy_model.generator()],
+            "eth_rx":  dut.phy_model.phy_source.generator()
+        }
+        clocks = {"sys":    20,
+                  "eth_rx": 8,
+                  "eth_tx": 8}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")

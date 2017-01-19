@@ -4,7 +4,7 @@ from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
 
-from model import ip
+from test.model import ip
 
 
 def print_udp(s):

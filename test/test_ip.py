@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import unittest
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -7,13 +7,13 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore
 
-from model import phy, mac, arp, ip
+from test.model import phy, mac, arp, ip
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
 
 
-class TB(Module):
+class DUT(Module):
     def __init__(self):
         self.submodules.phy_model = phy.PHY(8, debug=False)
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
@@ -22,6 +22,7 @@ class TB(Module):
 
         self.submodules.ip = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000)
         self.ip_port = self.ip.ip.crossbar.get_port(udp_protocol)
+
 
 def main_generator(dut):
     yield dut.ip_port.sink.valid.eq(1)
@@ -34,15 +35,17 @@ def main_generator(dut):
         yield
     print("packet from IP 0x{:08x}".format((yield dut.ip_port.sink.ip_address)))
 
-if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb)],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+
+class TestIP(unittest.TestCase):
+    def test(self):
+        dut = DUT()
+        generators = {
+            "sys" :   [main_generator(dut)],
+            "eth_tx": [dut.phy_model.phy_sink.generator(),
+                       dut.phy_model.generator()],
+            "eth_rx":  dut.phy_model.phy_source.generator()
+        }
+        clocks = {"sys":    10,
+                  "eth_rx": 10,
+                  "eth_tx": 10}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")

@@ -4,7 +4,7 @@ from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
 
-from model import mac
+from test.model import mac
 
 
 def print_arp(s):

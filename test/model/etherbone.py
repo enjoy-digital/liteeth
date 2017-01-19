@@ -6,7 +6,7 @@ from litex.soc.tools.remote.etherbone import *
 
 from liteeth.common import *
 
-from model import udp
+from test.model import udp
 
 
 def print_etherbone(s):

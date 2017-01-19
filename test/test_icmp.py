@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+import unittest
 from litex.gen import *
 
 from litex.soc.interconnect import wishbone
@@ -7,17 +7,17 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore
 
-from model.dumps import *
-from model.mac import *
-from model.ip import *
-from model.icmp import *
-from model import phy, mac, arp, ip, icmp
+from test.model.dumps import *
+from test.model.mac import *
+from test.model.ip import *
+from test.model.icmp import *
+from test.model import phy, mac, arp, ip, icmp
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
 
 
-class TB(Module):
+class DUT(Module):
     def __init__(self):
         self.submodules.phy_model = phy.PHY(8, debug=True)
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=True, loopback=False)
@@ -26,6 +26,7 @@ class TB(Module):
         self.submodules.icmp_model = icmp.ICMP(self.ip_model, ip_address, debug=True)
 
         self.submodules.ip = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000)
+
 
 def main_generator(dut):
     packet = MACPacket(ping_request)
@@ -39,15 +40,17 @@ def main_generator(dut):
     for i in range(256):
         yield
 
-if __name__ == "__main__":
-    tb = TB()
-    generators = {
-        "sys" :   [main_generator(tb)],
-        "eth_tx": [tb.phy_model.phy_sink.generator(),
-                   tb.phy_model.generator()],
-        "eth_rx":  tb.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(tb, generators, clocks, vcd_name="sim.vcd")
+
+class TestICMP(unittest.TestCase):
+    def test(self):
+        dut = DUT()
+        generators = {
+            "sys" :   [main_generator(dut)],
+            "eth_tx": [dut.phy_model.phy_sink.generator(),
+                       dut.phy_model.generator()],
+            "eth_rx":  dut.phy_model.phy_source.generator()
+        }
+        clocks = {"sys":    10,
+                  "eth_rx": 10,
+                  "eth_tx": 10}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
