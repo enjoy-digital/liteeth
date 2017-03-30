@@ -10,8 +10,8 @@ class EtherboneSoC(BaseSoC):
         BaseSoC.__init__(self, platform,
             mac_address=0x10e2d5000000,
             ip_address="192.168.1.50")
-        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 20000)
-        self.add_wb_master(self.etherbone.master.bus)
+        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 20000, mode="master")
+        self.add_wb_master(self.etherbone.wishbone.bus)
 
 
 class EtherboneSoCDevel(EtherboneSoC):
@@ -24,39 +24,39 @@ class EtherboneSoCDevel(EtherboneSoC):
         EtherboneSoC.__init__(self, platform)
         debug = [
             # mmap stream from HOST
-            self.etherbone.master.sink.valid,
-            self.etherbone.master.sink.last,
-            self.etherbone.master.sink.ready,
-            self.etherbone.master.sink.we,
-            self.etherbone.master.sink.count,
-            self.etherbone.master.sink.base_addr,
-            self.etherbone.master.sink.be,
-            self.etherbone.master.sink.addr,
-            self.etherbone.master.sink.data,
+            self.etherbone.wishbone.sink.valid,
+            self.etherbone.wishbone.sink.last,
+            self.etherbone.wishbone.sink.ready,
+            self.etherbone.wishbone.sink.we,
+            self.etherbone.wishbone.sink.count,
+            self.etherbone.wishbone.sink.base_addr,
+            self.etherbone.wishbone.sink.be,
+            self.etherbone.wishbone.sink.addr,
+            self.etherbone.wishbone.sink.data,
 
             # mmap stream to HOST
-            self.etherbone.master.source.valid,
-            self.etherbone.master.source.last,
-            self.etherbone.master.source.ready,
-            self.etherbone.master.source.we,
-            self.etherbone.master.source.count,
-            self.etherbone.master.source.base_addr,
-            self.etherbone.master.source.be,
-            self.etherbone.master.source.addr,
-            self.etherbone.master.source.data,
+            self.etherbone.wishbone.source.valid,
+            self.etherbone.wishbone.source.last,
+            self.etherbone.wishbone.source.ready,
+            self.etherbone.wishbone.source.we,
+            self.etherbone.wishbone.source.count,
+            self.etherbone.wishbone.source.base_addr,
+            self.etherbone.wishbone.source.be,
+            self.etherbone.wishbone.source.addr,
+            self.etherbone.wishbone.source.data,
 
             # etherbone wishbone master
-            self.etherbone.master.bus.dat_w,
-            self.etherbone.master.bus.dat_r,
-            self.etherbone.master.bus.adr,
-            self.etherbone.master.bus.sel,
-            self.etherbone.master.bus.cyc,
-            self.etherbone.master.bus.stb,
-            self.etherbone.master.bus.ack,
-            self.etherbone.master.bus.we,
-            self.etherbone.master.bus.cti,
-            self.etherbone.master.bus.bte,
-            self.etherbone.master.bus.err
+            self.etherbone.wishbone.bus.dat_w,
+            self.etherbone.wishbone.bus.dat_r,
+            self.etherbone.wishbone.bus.adr,
+            self.etherbone.wishbone.bus.sel,
+            self.etherbone.wishbone.bus.cyc,
+            self.etherbone.wishbone.bus.stb,
+            self.etherbone.wishbone.bus.ack,
+            self.etherbone.wishbone.bus.we,
+            self.etherbone.wishbone.bus.cti,
+            self.etherbone.wishbone.bus.bte,
+            self.etherbone.wishbone.bus.err
         ]
         self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
 

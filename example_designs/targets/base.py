@@ -1,5 +1,4 @@
 from litex.gen.genlib.io import CRG
-from litex.gen.fhdl.specials import Keep
 
 from litex.build.xilinx.vivado import XilinxVivadoToolchain
 from litex.soc.interconnect import wishbone
@@ -42,11 +41,9 @@ class BaseSoC(SoCCore):
         self.submodules.core = LiteEthUDPIPCore(self.phy, mac_address, convert_ip(ip_address), clk_freq)
 
         if isinstance(platform.toolchain, XilinxVivadoToolchain):
-            self.specials += [
-                Keep(self.crg.cd_sys.clk),
-                Keep(self.phy.crg.cd_eth_rx.clk),
-                Keep(self.phy.crg.cd_eth_tx.clk)
-            ]
+            self.crg.cd_sys.clk.attr.add("keep")
+            self.phy.crg.cd_eth_rx.clk.attr.add("keep")
+            self.phy.crg.cd_eth_tx.clk.attr.add("keep")
             platform.add_platform_command("""
 create_clock -name sys_clk -period 6.0 [get_nets sys_clk]
 create_clock -name eth_rx_clk -period 8.0 [get_nets eth_rx_clk]
