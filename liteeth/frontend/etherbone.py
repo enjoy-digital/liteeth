@@ -350,8 +350,9 @@ class LiteEthEtherboneRecord(Module):
         self.comb += [
             sender.source.connect(packetizer.sink),
             packetizer.source.connect(source),
-            # XXX improve this
-            source.length.eq(sender.source.wcount*4 + 4 + etherbone_record_header.length),
+            source.length.eq(etherbone_record_header.length +
+                             (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
+                             (sender.source.rcount != 0)*4 + sender.source.rcount*4),
             source.ip_address.eq(last_ip_address)
         ]
         if endianness is "big":
@@ -429,10 +430,64 @@ class LiteEthEtherboneWishboneMaster(Module):
         )
 
 
+class LiteEthEtherboneWishboneSlave(Module):
+    def __init__(self):
+        self.bus = bus = wishbone.Interface()
+        self.sink = sink = stream.Endpoint(eth_etherbone_mmap_description(32))
+        self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
+
+        # # #
+
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            sink.ready.eq(1),
+            If(bus.stb & bus.cyc,
+                If(bus.we,
+                    NextState("SEND_WRITE")
+                ).Else(
+                    NextState("SEND_READ")
+                )
+            )
+        )
+        fsm.act("SEND_WRITE",
+            source.valid.eq(1),
+            source.last.eq(1),
+            source.base_addr[2:].eq(bus.adr),
+            source.count.eq(1),
+            source.be.eq(bus.sel),
+            source.we.eq(1),
+            source.data.eq(bus.dat_w),
+            If(source.valid & source.ready,
+                bus.ack.eq(1),
+                NextState("IDLE")
+            )
+        )
+        fsm.act("SEND_READ",
+            source.valid.eq(1),
+            source.last.eq(1),
+            source.base_addr.eq(0),
+            source.count.eq(1),
+            source.be.eq(bus.sel),
+            source.we.eq(0),
+            source.data[2:].eq(bus.adr),
+            If(source.valid & source.ready,
+                NextState("WAIT_READ")
+            )
+        )
+        fsm.act("WAIT_READ",
+            sink.ready.eq(1),
+            If(sink.valid & sink.we,
+                bus.ack.eq(1),
+                bus.dat_r.eq(sink.data),
+                NextState("IDLE")
+            )
+        )
+
+
 # etherbone
 
 class LiteEthEtherbone(Module):
-    def __init__(self, udp, udp_port):
+    def __init__(self, udp, udp_port, mode="master"):
         # decode/encode etherbone packets
         self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port)
 
@@ -447,9 +502,15 @@ class LiteEthEtherbone(Module):
         arbiter = Arbiter([probe.source, record.source], packet.sink)
         self.submodules += dispatcher, arbiter
 
-        # create mmap wishbone master
-        self.submodules.master = master = LiteEthEtherboneWishboneMaster()
+        # create mmap wishbone
+        if mode == "master":
+            self.submodules.wishbone = LiteEthEtherboneWishboneMaster()
+        elif mode == "slave":
+            self.submodules.wishbone = LiteEthEtherboneWishboneSlave()
+        else:
+            raise ValueError
+
         self.comb += [
-            record.receiver.source.connect(master.sink),
-            master.source.connect(record.sender.sink)
+            record.receiver.source.connect(self.wishbone.sink),
+            self.wishbone.source.connect(record.sender.sink)
         ]
