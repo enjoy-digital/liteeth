@@ -4,7 +4,7 @@ from litex.build.xilinx.vivado import XilinxVivadoToolchain
 from litex.soc.interconnect import wishbone
 
 from litex.soc.integration.soc_core import SoCCore
-from litex.soc.cores.uart.bridge import UARTWishboneBridge
+from litex.soc.cores.uart import UARTWishboneBridge
 
 from liteeth.common import *
 from liteeth.phy import LiteEthPHY
