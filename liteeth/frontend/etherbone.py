@@ -1,3 +1,14 @@
+"""
+Etherbone
+
+CERN's Etherbone protocol is initially used to run a Wishbone bus over an
+ethernet network. This re-implementation is meant to be run over ethernet
+and introduces some limitations:
+- no address spaces (rca/bca/wca/wff)
+- 32bits data and address
+- 1 record per frame
+"""
+
 from liteeth.common import *
 
 from litex.soc.interconnect import wishbone
@@ -315,7 +326,6 @@ class LiteEthEtherboneRecordSender(Module):
 
 
 class LiteEthEtherboneRecord(Module):
-    # Limitation: For simplicity we only support 1 record per packet
     def __init__(self, endianness="big"):
         self.sink = sink = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
