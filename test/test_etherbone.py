@@ -24,7 +24,7 @@ class DUT(Module):
         self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
 
         self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000)
-        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 20000)
+        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 1234)
 
         self.submodules.sram = wishbone.SRAM(1024)
         self.submodules.interconnect = wishbone.InterconnectPointToPoint(self.etherbone.master.bus, self.sram.bus)
