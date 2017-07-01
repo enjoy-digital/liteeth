@@ -30,46 +30,47 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
     def __init__(self):
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port")
 
-    def get_port(self, udp_port, dw=8, cd=None):
+    def get_port(self, udp_port, dw=8, cd="sys"):
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
+
         user_port = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(8)
+
+        # tx
+        tx_stream = user_port.sink
+        if cd is not "sys":
+            tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
+            tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
+            self.submodules += tx_cdc
+            self.comb += tx_stream.connect(tx_cdc.sink)
+            tx_stream = tx_cdc.source
         if dw != 8:
-            # tx
             tx_converter = stream.StrideConverter(eth_udp_user_description(user_port.dw),
                                                   eth_udp_user_description(8))
             self.submodules += tx_converter
-            if cd is not None:
-                tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
-                tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
-                self.submodules += tx_cdc
-                self.comb += [
-                    user_port.sink.connect(tx_cdc.sink),
-                    tx_cdc.source.connect(tx_converter.sink)
-                ]
-            else:
-                self.comb += user_port.sink.connect(tx_converter.sink)
-            self.comb += tx_converter.source.connect(internal_port.sink)
+            self.comb += tx_stream.connect(tx_converter.sink)
+            tx_stream = tx_converter.source
+        self.comb += tx_stream.connect(internal_port.sink)
 
-            # rx
+        # rx
+        rx_stream = internal_port.source
+        if dw != 8:
             rx_converter = stream.StrideConverter(eth_udp_user_description(8),
                                                   eth_udp_user_description(user_port.dw))
             self.submodules += rx_converter
-            self.comb += internal_port.source.connect(rx_converter.sink)
-            if cd is not None:
-                rx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
-                rx_cdc = ClockDomainsRenamer({"write": "sys", "read": cd})(rx_cdc)
-                self.submodules += rx_cdc
-                self.comb += [
-                    rx_converter.source.connect(rx_cdc.sink),
-                    rx_cdc.source.connect(user_port.source)
-                ]
-            else:
-                self.comb += rx_converter.source.connect(user_port.source)
-            self.users[udp_port] = internal_port
-        else:
-            self.users[udp_port] = user_port
+            self.comb += rx_stream.connect(rx_converter.sink)
+            rx_stream = rx_converter.source
+        if cd is not "sys":
+            rx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
+            rx_cdc = ClockDomainsRenamer({"write": "sys", "read": cd})(rx_cdc)
+            self.submodules += rx_cdc
+            self.comb += rx_stream.connect(rx_cdc.sink)
+            rx_stream = rx_cdc.source
+        self.comb += rx_stream.connect(user_port.source)
+
+        self.users[udp_port] = internal_port
+
         return user_port
 
 # udp tx
