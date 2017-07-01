@@ -30,7 +30,7 @@ class LiteEthARPTX(Module):
 
         self.submodules.packetizer = packetizer = LiteEthARPPacketizer()
 
-        counter = Signal(max=max(arp_header.length, eth_min_len))
+        counter = Signal(max=max(arp_header.length, eth_min_len), reset_less=True)
         counter_reset = Signal()
         counter_ce = Signal()
         self.sync += \
@@ -111,7 +111,7 @@ class LiteEthARPRX(Module):
                 NextState("CHECK")
             )
         )
-        valid = Signal()
+        valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
             (depacketizer.source.hwtype == arp_hwtype_ethernet) &
@@ -169,7 +169,7 @@ class LiteEthARPTable(Module):
                 request_pending.eq(1)
             )
 
-        request_ip_address = Signal(32)
+        request_ip_address = Signal(32, reset_less=True)
         request_ip_address_reset = Signal()
         request_ip_address_update = Signal()
         self.sync += \
@@ -197,8 +197,8 @@ class LiteEthARPTable(Module):
         # targeting multiple destinations.
         update = Signal()
         cached_valid = Signal()
-        cached_ip_address = Signal(32)
-        cached_mac_address = Signal(48)
+        cached_ip_address = Signal(32, reset_less=True)
+        cached_mac_address = Signal(48, reset_less=True)
         cached_timer = WaitTimer(clk_freq*10)
         self.submodules += cached_timer
 
@@ -241,7 +241,6 @@ class LiteEthARPTable(Module):
                 )
             )
         self.comb += cached_timer.wait.eq(~update)
-        found = Signal()
         fsm.act("CHECK_TABLE",
             If(cached_valid,
                 If(request_ip_address == cached_ip_address,

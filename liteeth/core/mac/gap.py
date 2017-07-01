@@ -11,7 +11,7 @@ class LiteEthMACGap(Module):
         # # #
 
         gap = math.ceil(eth_interpacket_gap/(dw//8))
-        counter = Signal(max=gap)
+        counter = Signal(max=gap, reset_less=True)
         counter_reset = Signal()
         counter_ce = Signal()
         self.sync += \

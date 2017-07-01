@@ -48,15 +48,15 @@ class LiteEthIPV4Checksum(Module):
 
         # # #
 
-        s = Signal(17)
-        r = Signal(17)
+        s = Signal(17, reset_less=True)
+        r = Signal(17, reset_less=True)
         n_cycles = 0
         for i in range(ipv4_header.length//2):
             if skip_checksum and (i == ipv4_header.fields["checksum"].byte//2):
                 pass
             else:
-                s_next = Signal(17)
-                r_next = Signal(17)
+                s_next = Signal(17, reset_less=True)
+                r_next = Signal(17, reset_less=True)
                 self.comb += s_next.eq(r + self.header[i*16:(i+1)*16])
                 r_next_eq = r_next.eq(Cat(s_next[:16]+s_next[16], Signal()))
                 if (i%words_per_clock_cycle) != 0:
@@ -120,7 +120,7 @@ class LiteEthIPTX(Module):
             packetizer.sink.checksum.eq(checksum.value)
         ]
 
-        target_mac = Signal(48)
+        target_mac = Signal(48, reset_less=True)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -205,7 +205,7 @@ class LiteEthIPRX(Module):
                 NextState("CHECK")
             )
         )
-        valid = Signal()
+        valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
             (depacketizer.source.target_ip == ip_address) &

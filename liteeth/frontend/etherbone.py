@@ -93,7 +93,7 @@ class LiteEthEtherbonePacketRX(Module):
                 NextState("CHECK")
             )
         )
-        valid = Signal()
+        valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
             (depacketizer.source.magic == etherbone_magic)
@@ -205,11 +205,11 @@ class LiteEthEtherboneRecordReceiver(Module):
         self.submodules += fifo
         self.comb += sink.connect(fifo.sink)
 
-        base_addr = Signal(32)
+        base_addr = Signal(32, reset_less=True)
         base_addr_update = Signal()
         self.sync += If(base_addr_update, base_addr.eq(fifo.source.data))
 
-        counter = Signal(max=512)
+        counter = Signal(max=512, reset_less=True)
         counter_reset = Signal()
         counter_ce = Signal()
         self.sync += \
@@ -344,7 +344,7 @@ class LiteEthEtherboneRecord(Module):
 
         # save last ip address
         first = Signal(reset=1)
-        last_ip_address = Signal(32)
+        last_ip_address = Signal(32, reset_less=True)
         self.sync += [
             If(sink.valid & sink.ready,
                 If(first,
@@ -380,7 +380,7 @@ class LiteEthEtherboneWishboneMaster(Module):
 
         # # #
 
-        data = Signal(32)
+        data = Signal(32, reset_less=True)
         data_update = Signal()
         self.sync += If(data_update, data.eq(bus.dat_r))
 

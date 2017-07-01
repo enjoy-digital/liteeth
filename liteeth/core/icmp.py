@@ -78,7 +78,7 @@ class LiteEthICMPRX(Module):
                 NextState("CHECK")
             )
         )
-        valid = Signal()
+        valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
             (sink.protocol == icmp_protocol)

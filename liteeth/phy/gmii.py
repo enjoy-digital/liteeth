@@ -13,7 +13,10 @@ class LiteEthPHYGMIITX(Module):
         # # #
 
         if hasattr(pads, "tx_er"):
+            pads.tx_er.reset_less = True
             self.sync += pads.tx_er.eq(0)
+        pads.tx_en.reset_less = True
+        pads.tx_data.reset_less = True
         self.sync += [
             pads.tx_en.eq(sink.valid),
             pads.tx_data.eq(sink.data),

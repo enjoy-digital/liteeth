@@ -43,8 +43,12 @@ class LiteEthPHYGMIIMIITX(Module):
             demux.source1.connect(mii_tx.sink),
         ]
 
+
         if hasattr(pads, "tx_er"):
+            pads.tx_er.reset_less = True
             self.comb += pads.tx_er.eq(0)
+        pads.tx_en.reset_less = True
+        pads.tx_data.reset_less = True
         self.sync += [
             If(mode == modes["MII"],
                 pads.tx_en.eq(mii_tx_pads.tx_en),
@@ -63,6 +67,8 @@ class LiteEthPHYGMIIMIIRX(Module):
         # # #
 
         pads_d = Record(rx_pads_layout)
+        pads_d.dv.reset_less = True
+        pads_d.rx_data.reset_less = True
         self.sync += [
             pads_d.dv.eq(pads.dv),
             pads_d.rx_data.eq(pads.rx_data)
@@ -107,7 +113,7 @@ class LiteEthGMIIMIIModeDetection(Module, AutoCSR):
 
         # Generate a tick every 1024 clock cycles (eth_rx clock domain)
         eth_tick = Signal()
-        eth_counter = Signal(10)
+        eth_counter = Signal(10, reset_less=True)
         self.sync.eth_rx += eth_counter.eq(eth_counter + 1)
         self.comb += eth_tick.eq(eth_counter == 0)
 
@@ -121,7 +127,7 @@ class LiteEthGMIIMIIModeDetection(Module, AutoCSR):
         self.submodules += eth_ps
 
         # sys_clk domain counter
-        sys_counter = Signal(24)
+        sys_counter = Signal(24, reset_less=True)
         sys_counter_reset = Signal()
         sys_counter_ce = Signal()
         self.sync += [

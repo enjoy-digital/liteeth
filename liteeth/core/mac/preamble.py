@@ -12,7 +12,7 @@ class LiteEthMACPreambleInserter(Module):
 
         preamble = Signal(64, reset=eth_preamble)
         cnt_max = (64//dw)-1
-        cnt = Signal(max=cnt_max+1)
+        cnt = Signal(max=cnt_max+1, reset_less=True)
         clr_cnt = Signal()
         inc_cnt = Signal()
 
@@ -65,7 +65,7 @@ class LiteEthMACPreambleChecker(Module):
 
         preamble = Signal(64, reset=eth_preamble)
         cnt_max = (64//dw) - 1
-        cnt = Signal(max=cnt_max+1)
+        cnt = Signal(max=cnt_max+1, reset_less=True)
         clr_cnt = Signal()
         inc_cnt = Signal()
 
@@ -76,7 +76,7 @@ class LiteEthMACPreambleChecker(Module):
                 cnt.eq(cnt+1)
             )
 
-        discard = Signal()
+        discard = Signal(reset_less=True)
         clr_discard = Signal()
         set_discard = Signal()
 

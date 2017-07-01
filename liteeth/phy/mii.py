@@ -17,6 +17,7 @@ class LiteEthPHYMIITX(Module):
         # # #
 
         if hasattr(pads, "tx_er"):
+            pads.tx_er.reset_less = True
             self.sync += pads.tx_er.eq(0)
         converter = stream.StrideConverter(converter_description(8),
                                            converter_description(4))
@@ -27,6 +28,8 @@ class LiteEthPHYMIITX(Module):
             sink.ready.eq(converter.sink.ready),
             converter.source.ready.eq(1)
         ]
+        pads.tx_en.reset_less = True
+        pads.tx_data.reset_less = True
         self.sync += [
             pads.tx_en.eq(converter.source.valid),
             pads.tx_data.eq(converter.source.data)

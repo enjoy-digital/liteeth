@@ -28,6 +28,8 @@ class LiteEthPHYRMIITX(Module):
             sink.ready.eq(converter.sink.ready),
             converter.source.ready.eq(1)
         ]
+        pads.tx_en.reset_less = True
+        pads.tx_data.reset_less = True
         self.sync += [
             pads.tx_en.eq(converter.source.valid),
             pads.tx_data.eq(converter.source.data)
