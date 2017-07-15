@@ -137,7 +137,7 @@ class LiteEthEtherbonePacketRX(Module):
 
 
 class LiteEthEtherbonePacket(Module):
-    def __init__(self, udp, udp_port, cd=None):
+    def __init__(self, udp, udp_port, cd="sys"):
         self.submodules.tx = tx = LiteEthEtherbonePacketTX(udp_port)
         self.submodules.rx = rx = LiteEthEtherbonePacketRX()
         udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
@@ -497,7 +497,7 @@ class LiteEthEtherboneWishboneSlave(Module):
 # etherbone
 
 class LiteEthEtherbone(Module):
-    def __init__(self, udp, udp_port, mode="master", cd=None):
+    def __init__(self, udp, udp_port, mode="master", cd="sys"):
         # decode/encode etherbone packets
         self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
 
