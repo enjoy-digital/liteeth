@@ -283,41 +283,49 @@ class LiteEthEtherboneRecordSender(Module):
         # # #
 
         # TODO: optimize ressources (no need to store parameters as datas)
-        pbuffer = stream.SyncFIFO(eth_etherbone_mmap_description(32), buffer_depth)
-        self.submodules += pbuffer
-        self.comb += sink.connect(pbuffer.sink)
+        fifo = stream.SyncFIFO(eth_etherbone_mmap_description(32), buffer_depth,
+                               buffered=True)
+        self.submodules += fifo
+        self.comb += sink.connect(fifo.sink)
+
+        data_sel = Signal()
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            pbuffer.source.ready.eq(1),
-            If(pbuffer.source.valid,
-                pbuffer.source.ready.eq(0),
+            fifo.source.ready.eq(1),
+            If(fifo.source.valid,
+                fifo.source.ready.eq(0),
                 NextState("SEND_BASE_ADDRESS")
             )
         )
-        self.comb += [
-            source.byte_enable.eq(pbuffer.source.be),
-            If(pbuffer.source.we,
-                source.wcount.eq(pbuffer.source.count)
+        self.sync += [
+            source.byte_enable.eq(fifo.source.be),
+            If(fifo.source.we,
+                source.wcount.eq(fifo.source.count)
             ).Else(
-                source.rcount.eq(pbuffer.source.count)
+                source.rcount.eq(fifo.source.count)
+            ),
+            If(data_sel,
+                source.data.eq(fifo.source.data)
+            ).Else(
+                source.data.eq(fifo.source.base_addr)
             )
         ]
 
         fsm.act("SEND_BASE_ADDRESS",
-            source.valid.eq(pbuffer.source.valid),
+            source.valid.eq(1),
             source.last.eq(0),
-            source.data.eq(pbuffer.source.base_addr),
             If(source.ready,
+                data_sel.eq(1),
                 NextState("SEND_DATA")
             )
         )
         fsm.act("SEND_DATA",
-            source.valid.eq(pbuffer.source.valid),
-            source.last.eq(pbuffer.source.last),
-            source.data.eq(pbuffer.source.data),
+            source.valid.eq(1),
+            source.last.eq(fifo.source.last),
+            data_sel.eq(1),
             If(source.valid & source.ready,
-                pbuffer.source.ready.eq(1),
+                fifo.source.ready.eq(1),
                 If(source.last,
                     NextState("IDLE")
                 )
@@ -380,9 +388,7 @@ class LiteEthEtherboneWishboneMaster(Module):
 
         # # #
 
-        data = Signal(32, reset_less=True)
         data_update = Signal()
-        self.sync += If(data_update, data.eq(bus.dat_r))
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -420,15 +426,19 @@ class LiteEthEtherboneWishboneMaster(Module):
                 NextState("SEND_DATA")
             )
         )
-        fsm.act("SEND_DATA",
-            source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+        self.sync += [
             source.base_addr.eq(sink.base_addr),
             source.addr.eq(sink.addr),
             source.count.eq(sink.count),
             source.be.eq(sink.be),
             source.we.eq(1),
-            source.data.eq(data),
+            If(data_update,
+                source.data.eq(bus.dat_r)
+            )
+        ]
+        fsm.act("SEND_DATA",
+            source.valid.eq(sink.valid),
+            source.last.eq(sink.last),
             If(source.valid & source.ready,
                 sink.ready.eq(1),
                 If(source.last,
