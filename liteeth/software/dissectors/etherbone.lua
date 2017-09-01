@@ -221,3 +221,5 @@ end
 -- register eb protocol on UDP port 20000
 local tab = DissectorTable.get("udp.port")
 tab:add(20000, proto_eb)
+local tab = DissectorTable.get("tcp.port")
+tab:add(1234, proto_eb)
