@@ -132,8 +132,8 @@ class IP(Module):
                 self.icmp_callback(packet)
 
 if __name__ == "__main__":
-    from model.dumps import *
-    from model.mac import *
+    from test.model.dumps import *
+    from test.model.mac import *
     errors = 0
     # UDP packet
     packet = MACPacket(udp)

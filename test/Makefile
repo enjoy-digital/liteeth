@@ -3,12 +3,12 @@ PYTHON = python3
 CMD = $(PYTHON)
 
 model_tb:
-	PYTHONPATH=./ $(CMD) ./model/mac.py
-	PYTHONPATH=./ $(CMD) ./model/arp.py
-	PYTHONPATH=./ $(CMD) ./model/ip.py
-	PYTHONPATH=./ $(CMD) ./model/udp.py
-	PYTHONPATH=./ $(CMD) ./model/icmp.py
-	PYTHONPATH=./ $(CMD) ./model/etherbone.py
+	cd ../ && PYTHONPATH=./ $(CMD) test/model/mac.py
+	cd ../ && PYTHONPATH=./ $(CMD) test/model/arp.py
+	cd ../ && PYTHONPATH=./ $(CMD) test/model/ip.py
+	cd ../ && PYTHONPATH=./ $(CMD) test/model/udp.py
+	cd ../ && PYTHONPATH=./ $(CMD) test/model/icmp.py
+	cd ../ && PYTHONPATH=./ $(CMD) test/model/etherbone.py
 
 example_designs:
 	cd ../example_designs && $(PYTHON) make.py -t base -s BaseSoC -p kc705 -Ob run False build-bitstream

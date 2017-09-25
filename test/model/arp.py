@@ -124,8 +124,8 @@ class ARP(Module):
         request.target_ip = ip_address
 
 if __name__ == "__main__":
-    from model.dumps import *
-    from model.mac import *
+    from test.model.dumps import *
+    from test.model.mac import *
     errors = 0
     # ARP request
     packet = MACPacket(arp_request)

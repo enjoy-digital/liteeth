@@ -85,9 +85,9 @@ class ICMP(Module):
         pass
 
 if __name__ == "__main__":
-    from model.dumps import *
-    from model.mac import *
-    from model.ip import *
+    from test.model.dumps import *
+    from test.model.mac import *
+    from test.model.ip import *
     errors = 0
     # ICMP packet
     packet = MACPacket(ping_request)

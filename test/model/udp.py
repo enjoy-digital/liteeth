@@ -96,9 +96,9 @@ class UDP(Module):
                 self.etherbone_callback(packet)
 
 if __name__ == "__main__":
-    from model.dumps import *
-    from model.mac import *
-    from model.ip import *
+    from test.model.dumps import *
+    from test.model.mac import *
+    from test.model.ip import *
     errors = 0
     # UDP packet
     packet = MACPacket(udp)
