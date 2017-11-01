@@ -15,6 +15,8 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         self._slot = CSRStatus(slotbits)
         self._length = CSRStatus(lengthbits)
 
+        self.errors = CSRStatus(32)
+
         self.submodules.ev = EventManager()
         self.ev.available = EventSourceLevel()
         self.ev.finalize()
@@ -67,23 +69,37 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                     ongoing.eq(1),
                     counter_ce.eq(1),
                     NextState("WRITE")
+                ).Else(
+                    NextValue(self.errors.status, self.errors.status + 1),
+                    NextState("DISCARD_REMAINING")
                 )
             )
         )
         fsm.act("WRITE",
-            counter_ce.eq(sink.valid),
-            ongoing.eq(counter < eth_mtu),
-            If(sink.valid & sink.last,
-                If((sink.error & sink.last_be) != 0,
-                    NextState("DISCARD")
+            If(sink.valid,
+                If(counter == eth_mtu,
+                    NextState("DISCARD_REMAINING")
                 ).Else(
-                    NextState("TERMINATE")
+                    counter_ce.eq(1),
+                    ongoing.eq(1)
+                ),
+                If(sink.last,
+                    If((sink.error & sink.last_be) != 0,
+                        NextState("DISCARD")
+                    ).Else(
+                        NextState("TERMINATE")
+                    )
                 )
             )
         )
         fsm.act("DISCARD",
             counter_reset.eq(1),
             NextState("IDLE")
+        )
+        fsm.act("DISCARD_REMAINING",
+            If(sink.valid & sink.last,
+                NextState("TERMINATE")
+            )
         )
         self.comb += [
             fifo.sink.slot.eq(slot),
@@ -128,7 +144,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         slotbits = max(log2_int(nslots), 1)
-        lengthbits = log2_int(depth*4)  # length in bytes
+        lengthbits = bits_for(depth*4)  # length in bytes
         self.lengthbits = lengthbits
 
         self._start = CSR()
@@ -166,14 +182,22 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
         # fsm
         last  = Signal()
+        last_d = Signal()
 
         fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
 
         fsm.act("IDLE",
+            counter_reset.eq(1),
             If(fifo.source.valid,
-                counter_ce.eq(1),
-                NextState("SEND")
+                NextState("CHECK")
+            )
+        )
+        fsm.act("CHECK",
+            If(~last_d,
+                NextState("SEND"),
+            ).Else(
+                NextState("END"),
             )
         )
         length_lsb = fifo.source.length[0:2]
@@ -194,21 +218,19 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             source.valid.eq(1),
             source.last.eq(last),
             If(source.ready,
-                counter_ce.eq(1),
-                If(last,
-                    NextState("TERMINATE")
-                )
+                counter_ce.eq(~last),
+                NextState("CHECK")
             )
         )
-        fsm.act("TERMINATE",
+        fsm.act("END",
             fifo.source.ready.eq(1),
             self.ev.done.trigger.eq(1),
-            counter_reset.eq(1),
             NextState("IDLE")
         )
 
         # last computation
-        self.comb += last.eq(counter >= fifo.source.length)
+        self.comb += last.eq((counter + 4) >= fifo.source.length)
+        self.sync += last_d.eq(last)
 
         # memory
         rd_slot = fifo.source.slot

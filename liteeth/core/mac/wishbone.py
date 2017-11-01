@@ -14,7 +14,7 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
         # # #
 
         # storage in SRAM
-        sram_depth = buffer_depth//(dw//8)
+        sram_depth = eth_mtu//(dw//8)
         self.submodules.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots)
         self.comb += [
             self.sink.connect(self.sram.sink),
@@ -30,7 +30,7 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
         wb_sram_ifs = wb_rx_sram_ifs + wb_tx_sram_ifs
 
         wb_slaves = []
-        decoderoffset = log2_int(sram_depth)
+        decoderoffset = log2_int(sram_depth, need_pow2=False)
         decoderbits = log2_int(len(wb_sram_ifs))
         for n, wb_sram_if in enumerate(wb_sram_ifs):
             def slave_filter(a, v=n):

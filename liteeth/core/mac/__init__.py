@@ -8,7 +8,9 @@ class LiteEthMAC(Module, AutoCSR):
     def __init__(self, phy, dw,
                  interface="crossbar",
                  endianness="big",
-                 with_preamble_crc=True):
+                 with_preamble_crc=True,
+                 nrxslots=2,
+                 ntxslots=2):
         self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
         self.csrs = []
         if interface == "crossbar":
@@ -22,7 +24,10 @@ class LiteEthMAC(Module, AutoCSR):
                 self.depacketizer.source.connect(self.crossbar.master.sink)
             ]
         elif interface == "wishbone":
-            self.submodules.interface = LiteEthMACWishboneInterface(dw, 2, 2)
+            self.rx_slots = CSRConstant(nrxslots)
+            self.tx_slots = CSRConstant(ntxslots)
+            self.slot_size = CSRConstant(2**bits_for(eth_mtu))
+            self.submodules.interface = LiteEthMACWishboneInterface(dw, nrxslots, ntxslots)
             self.comb += Port.connect(self.interface, self.core)
             self.ev, self.bus = self.interface.sram.ev, self.interface.bus
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()

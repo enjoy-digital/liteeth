@@ -12,7 +12,7 @@ class LiteEthIPCore(Module, AutoCSR):
         self.submodules.arp = LiteEthARP(self.mac, mac_address, ip_address, clk_freq)
         self.submodules.ip = LiteEthIP(self.mac, mac_address, ip_address, self.arp.table)
         if with_icmp:
-        	self.submodules.icmp = LiteEthICMP(self.ip, ip_address)
+            self.submodules.icmp = LiteEthICMP(self.ip, ip_address)
 
 
 class LiteEthUDPIPCore(LiteEthIPCore):

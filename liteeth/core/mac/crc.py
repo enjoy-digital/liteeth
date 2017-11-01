@@ -215,10 +215,14 @@ class LiteEthMACCRCChecker(Module):
     source : out
         Packets output without CRC and "error" set to 0
         on last when CRC OK / set to 1 when CRC KO.
+    crc_error : out
+        Pulses every time a CRC error is detected.
     """
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
+
+        self.crc_error = Signal()
 
         # # #
 
@@ -252,6 +256,7 @@ class LiteEthMACCRCChecker(Module):
             source.payload.eq(fifo.source.payload),
 
             source.error.eq(sink.error | crc.error),
+            self.crc_error.eq(sink.last & crc.error),
         ]
 
         fsm.act("RESET",
