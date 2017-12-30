@@ -133,9 +133,9 @@ class LiteEthMACCRCInserter(Module):
     Attributes
     ----------
     sink : in
-        Packets input without CRC.
+        Packets octets without CRC.
     source : out
-        Packets output with CRC.
+        Packets octets with CRC.
     """
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
@@ -211,18 +211,18 @@ class LiteEthMACCRCChecker(Module):
     Attributes
     ----------
     sink : in
-        Packets input with CRC.
+        Packet octets with CRC.
     source : out
-        Packets output without CRC and "error" set to 0
+        Packet octets without CRC and "error" set to 0
         on last when CRC OK / set to 1 when CRC KO.
-    crc_error : out
+    error : out
         Pulses every time a CRC error is detected.
     """
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
-        self.crc_error = Signal()
+        self.error = Signal()
 
         # # #
 
@@ -256,7 +256,7 @@ class LiteEthMACCRCChecker(Module):
             source.payload.eq(fifo.source.payload),
 
             source.error.eq(sink.error | crc.error),
-            self.crc_error.eq(source.valid & source.last & crc.error),
+            self.error.eq(source.valid & source.last & crc.error),
         ]
 
         fsm.act("RESET",

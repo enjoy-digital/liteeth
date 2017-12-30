@@ -4,7 +4,7 @@ from liteeth.common import *
 
 
 class LiteEthMACGap(Module):
-    def __init__(self, dw, ack_on_gap=False):
+    def __init__(self, dw):
         self.sink = sink = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
@@ -31,7 +31,6 @@ class LiteEthMACGap(Module):
         )
         fsm.act("GAP",
             counter_ce.eq(1),
-            sink.ready.eq(int(ack_on_gap)),
             If(counter == (gap-1),
                 NextState("COPY")
             )
