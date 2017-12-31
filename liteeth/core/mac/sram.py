@@ -149,6 +149,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
         self._start = CSR()
         self._ready = CSRStatus()
+        self._level = CSRStatus(log2_int(nslots) + 1)
         self._slot = CSRStorage(slotbits)
         self._length = CSRStorage(lengthbits)
 
@@ -165,7 +166,8 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             fifo.sink.valid.eq(self._start.re),
             fifo.sink.slot.eq(self._slot.storage),
             fifo.sink.length.eq(self._length.storage),
-            self._ready.status.eq(fifo.sink.ready)
+            self._ready.status.eq(fifo.sink.ready),
+            self._level.status.eq(fifo.level)
         ]
 
         # length computation
