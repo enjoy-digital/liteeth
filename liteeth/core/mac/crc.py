@@ -40,8 +40,8 @@ class LiteEthMACCRCEngine(Module):
 
         def _optimize_eq(l):
             """
-            Replace even numbers of XORs in the equation
-            with an equivalent XOR
+            remove an even numbers of XORs with the same bit
+            replace an odd number of XORs with a single XOR
             """
             d = OrderedDict()
             for e in l:
@@ -55,7 +55,7 @@ class LiteEthMACCRCEngine(Module):
                     r.append(key)
             return r
 
-        # compute and optimize CRC's LFSR
+        # compute and optimize the parallel implementation of the CRC's LFSR
         curval = [[("state", i)] for i in range(width)]
         for i in range(data_width):
             feedback = curval.pop() + [("din", i)]
