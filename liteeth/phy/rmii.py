@@ -1,9 +1,9 @@
 from liteeth.common import *
 
-from litex.gen.genlib.cdc import MultiReg
-from litex.gen.genlib.misc import WaitTimer
-from litex.gen.genlib.io import DDROutput
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.cdc import MultiReg
+from migen.genlib.misc import WaitTimer
+from migen.genlib.io import DDROutput
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from liteeth.phy.common import *
 

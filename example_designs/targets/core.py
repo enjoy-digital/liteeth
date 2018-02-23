@@ -2,7 +2,7 @@
 
 import argparse
 
-from litex.gen import *
+from migen import *
 
 from litex.build.generic_platform import *
 from litex.build.xilinx.platform import XilinxPlatform

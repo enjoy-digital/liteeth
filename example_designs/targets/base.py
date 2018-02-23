@@ -1,4 +1,4 @@
-from litex.gen.genlib.io import CRG
+from migen.genlib.io import CRG
 
 from litex.build.xilinx.vivado import XilinxVivadoToolchain
 from litex.soc.interconnect import wishbone

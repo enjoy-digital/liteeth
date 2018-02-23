@@ -1,7 +1,7 @@
 from liteeth.common import *
 
-from litex.gen.genlib.cdc import MultiReg
-from litex.gen.fhdl.specials import Tristate
+from migen.genlib.cdc import MultiReg
+from migen.fhdl.specials import Tristate
 
 class LiteEthPHYHWReset(Module):
     def __init__(self):
