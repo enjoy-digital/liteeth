@@ -1,7 +1,8 @@
 from liteeth.common import *
 from liteeth.core.mac import gap, preamble, crc, padding, last_be
 from liteeth.phy.model import LiteEthPHYModel
-from litex.gen.genlib.cdc import PulseSynchronizer
+
+from migen.genlib.cdc import PulseSynchronizer
 
 
 class LiteEthMACCore(Module, AutoCSR):

@@ -1,6 +1,6 @@
 from liteeth.common import *
 
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from liteeth.phy.common import *
 

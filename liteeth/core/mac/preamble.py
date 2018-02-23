@@ -1,6 +1,6 @@
 from liteeth.common import *
 
-from litex.gen.genlib.misc import chooser
+from migen.genlib.misc import chooser
 
 
 class LiteEthMACPreambleInserter(Module):

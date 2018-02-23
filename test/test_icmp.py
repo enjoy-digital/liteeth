@@ -1,5 +1,6 @@
 import unittest
-from litex.gen import *
+
+from migen import *
 
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.stream_sim import *

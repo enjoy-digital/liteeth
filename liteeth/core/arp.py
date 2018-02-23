@@ -1,6 +1,7 @@
 from liteeth.common import *
 
-from litex.gen.genlib.misc import WaitTimer
+from migen.genlib.misc import WaitTimer
+
 from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
 
 

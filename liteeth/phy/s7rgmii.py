@@ -1,11 +1,11 @@
 # RGMII PHY for 7-Series Xilinx FPGA
 from liteeth.common import *
 
-from litex.gen.genlib.io import DDROutput
-from litex.gen.genlib.misc import WaitTimer
-from litex.gen.genlib.fsm import FSM, NextState
+from migen.genlib.io import DDROutput
+from migen.genlib.misc import WaitTimer
+from migen.genlib.fsm import FSM, NextState
 
-from litex.gen.genlib.resetsync import AsyncResetSynchronizer
+from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from liteeth.phy.common import *
 
