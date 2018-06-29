@@ -32,6 +32,7 @@ design flow by generating the verilog rtl that you will use as a standard core.
 PHY:
   - MII / RMII
   - GMII / RGMII
+  - 1000BaseX
 Core:
   - MAC with various interfaces (to soft core or hardware stack)
   - ARP
@@ -55,7 +56,6 @@ LiteEth is already used in commercial and open-source designs:
 - optimize ressources on HW ICMP and Etherbone (parameters buffering)
 - add standardized interfaces (AXI, Avalon-ST)
 - add DMA interface to MAC
-- add SGMII PHYs
 - add more documentation
 - ... See below Support and consulting :)
 
