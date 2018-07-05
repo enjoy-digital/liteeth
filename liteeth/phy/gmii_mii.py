@@ -17,7 +17,7 @@ modes = {
 }
 
 tx_pads_layout = [("tx_er", 1), ("tx_en", 1), ("tx_data", 8)]
-rx_pads_layout = [("rx_er", 1), ("dv", 1), ("rx_data", 8)]
+rx_pads_layout = [("rx_er", 1), ("rx_dv", 1), ("rx_data", 8)]
 
 
 class LiteEthPHYGMIIMIITX(Module):
@@ -67,10 +67,10 @@ class LiteEthPHYGMIIMIIRX(Module):
         # # #
 
         pads_d = Record(rx_pads_layout)
-        pads_d.dv.reset_less = True
+        pads_d.rx_dv.reset_less = True
         pads_d.rx_data.reset_less = True
         self.sync += [
-            pads_d.dv.eq(pads.dv),
+            pads_d.rx_dv.eq(pads.rx_dv),
             pads_d.rx_data.eq(pads.rx_data)
         ]
 
