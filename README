@@ -16,13 +16,7 @@ LiteEth is part of LiteX libraries whose aims are to lower entry level of
 complex FPGA cores by providing simple, elegant and efficient implementations
 of components used in today's SoC such as Ethernet, SATA, PCIe, SDRAM Controller...
 
-Since Python is used to describe the HDL, the core is highly and easily
-configurable.
-
-LiteEth is built using LiteX and uses technologies developed in partnership with
-M-Labs Ltd:
- - Migen enables generating HDL with Python in an efficient way.
- - MiSoC provides the basic blocks to build a powerful and small footprint SoC.
+Using Migen to describe the HDL allows the core to be highly and easily configurable.
 
 LiteEth can be used as LiteX library or can be integrated with your standard
 design flow by generating the verilog rtl that you will use as a standard core.
@@ -30,18 +24,13 @@ design flow by generating the verilog rtl that you will use as a standard core.
 [> Features
 -----------
 PHY:
-  - MII / RMII
-  - GMII / RGMII
-  - 1000BaseX
+  - MII, RMII 100Mbps PHYs.
+  - GMII / RGMII /1000BaseX 1Gbps PHYs.
 Core:
-  - MAC with various interfaces (to soft core or hardware stack)
-  - ARP
-  - ICMP
-  - UDP
+  - Configurable MAC (HW or SW interface)
+  - ARP / ICMP / UDP (HW or SW)
 Frontend:
-  - Etherbone (Wishbone over UDP, Slave or Master support)
-  - Virtual Serial ports over UDP.
-
+  - Etherbone (Wishbone over UDP: Slave or Master support)
 
 [> FPGA Proven
 ---------------
@@ -53,7 +42,6 @@ LiteEth is already used in commercial and open-source designs:
 
 [> Possible improvements
 ------------------------
-- optimize ressources on HW ICMP and Etherbone (parameters buffering)
 - add standardized interfaces (AXI, Avalon-ST)
 - add DMA interface to MAC
 - add more documentation
@@ -73,7 +61,7 @@ enjoy-digital.fr.
   python3 setup.py develop
   cd ..
 
-3. TODO: add/describe example design(s)
+3. TODO: add/describe examples
 
 [> Tests
 --------
