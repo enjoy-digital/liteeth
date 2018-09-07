@@ -28,17 +28,21 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 
         # length computation
         inc = Signal(3)
-        inc_cases = {}
         inc_cases["default"] = inc.eq(4)
         if endianness == "big":
-            inc_cases[0b1000] = inc.eq(1)
-            inc_cases[0b0100] = inc.eq(2)
-            inc_cases[0b0010] = inc.eq(3)
+            self.comb += Case(sink.last_be, {
+                0b1000 : inc.eq(1),
+                0b0100 : inc.eq(2),
+                0b0010 : inc.eq(3),
+                "default" : inc.eq(4)
+            })
         else:
-            inc_cases[0b0001] = inc.eq(1)
-            inc_cases[0b0010] = inc.eq(2)
-            inc_cases[0b0100] = inc.eq(3)
-        self.comb += Case(sink.last_be, inc_cases)
+            self.comb += Case(sink.last_be, {
+                0b0001 : inc.eq(1),
+                0b0010 : inc.eq(2),
+                0b0100 : inc.eq(3),
+                "default" : inc.eq(4)
+            })
 
         counter = Signal(lengthbits)
         counter_reset = Signal()
@@ -206,18 +210,22 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         )
 
         length_lsb = fifo.source.length[0:2]
-        length_cases = {}
         if endianness == "big":
-            length_cases[0] = source.last_be.eq(0b0001)
-            length_cases[1] = source.last_be.eq(0b1000)
-            length_cases[2] = source.last_be.eq(0b0100)
-            length_cases[3] = source.last_be.eq(0b0010)
+            self.comb += If(last,
+                Case(length_lsb, {
+                    0 : source.last.be.eq(0b0001),
+                    1 : source.last.be.eq(0b1000),
+                    2 : source.last.be.eq(0b0100),
+                    3 : source.last_be.eq(0b0010)
+                }))
         else:
-            length_cases[0] = source.last_be.eq(0b1000)
-            length_cases[1] = source.last_be.eq(0b0001)
-            length_cases[2] = source.last_be.eq(0b0010)
-            length_cases[3] = source.last_be.eq(0b0100)
-        self.comb += If(last, Case(length_lsb, length_cases))
+            self.comb += If(last,
+                Case(length_lsb, {
+                    0 : source.last.be.eq(0b1000),
+                    1 : source.last.be.eq(0b0001),
+                    2 : source.last.be.eq(0b0010),
+                    3 : source.last_be.eq(0b0100)
+                }))
 
         fsm.act("SEND",
             source.valid.eq(1),
