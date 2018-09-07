@@ -5,7 +5,7 @@ from litex.soc.interconnect.csr_eventmanager import *
 
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
-    def __init__(self, dw, depth, nslots=2):
+    def __init__(self, dw, depth, nslots=2, endianness="big"):
         self.sink = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
@@ -27,17 +27,19 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         sink.ready.reset = 1
 
         # length computation
-        increment = Signal(3)
-        self.comb += \
-            If(sink.last_be[3],
-                increment.eq(1)
-            ).Elif(sink.last_be[2],
-                increment.eq(2)
-            ).Elif(sink.last_be[1],
-                increment.eq(3)
-            ).Else(
-                increment.eq(4)
-            )
+        inc = Signal(3)
+        inc_cases = {}
+        inc_cases["default"] = inc.eq(4)
+        if endianness == "big":
+            inc_cases[0b1000] = inc.eq(1)
+            inc_cases[0b0100] = inc.eq(2)
+            inc_cases[0b0010] = inc.eq(3)
+        else:
+            inc_cases[0b0001] = inc.eq(1)
+            inc_cases[0b0010] = inc.eq(2)
+            inc_cases[0b0100] = inc.eq(3)
+        self.comb += Case(sink.last_be, inc_cases)
+
         counter = Signal(lengthbits)
         counter_reset = Signal()
         counter_ce = Signal()
@@ -45,7 +47,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             If(counter_reset,
                 counter.eq(0)
             ).Elif(counter_ce,
-                counter.eq(counter + increment)
+                counter.eq(counter + inc)
             )
 
         # slot computation
@@ -140,7 +142,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
-    def __init__(self, dw, depth, nslots=2):
+    def __init__(self, dw, depth, nslots=2, endianness="big"):
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         slotbits = max(log2_int(nslots), 1)
@@ -202,20 +204,21 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
                 NextState("END"),
             )
         )
+
         length_lsb = fifo.source.length[0:2]
-        self.comb += [
-            If(last,
-                If(length_lsb == 3,
-                    source.last_be.eq(0b0010)
-                ).Elif(length_lsb == 2,
-                    source.last_be.eq(0b0100)
-                ).Elif(length_lsb == 1,
-                    source.last_be.eq(0b1000)
-                ).Else(
-                    source.last_be.eq(0b0001)
-                )
-            )
-        ]
+        length_cases = {}
+        if endianness == "big":
+            length_cases[0] = source.last_be.eq(0b0001)
+            length_cases[1] = source.last_be.eq(0b1000)
+            length_cases[2] = source.last_be.eq(0b0100)
+            length_cases[3] = source.last_be.eq(0b0010)
+        else:
+            length_cases[0] = source.last_be.eq(0b1000)
+            length_cases[1] = source.last_be.eq(0b0001)
+            length_cases[2] = source.last_be.eq(0b0010)
+            length_cases[3] = source.last_be.eq(0b0100)
+        self.comb += If(last, Case(length_lsb, length_cases))
+
         fsm.act("SEND",
             source.valid.eq(1),
             source.last.eq(last),
@@ -253,8 +256,8 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
 
 class LiteEthMACSRAM(Module, AutoCSR):
-    def __init__(self, dw, depth, nrxslots, ntxslots):
-        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots)
-        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots)
+    def __init__(self, dw, depth, nrxslots, ntxslots, endianness):
+        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness)
+        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness)
         self.submodules.ev = SharedIRQ(self.writer.ev, self.reader.ev)
         self.sink, self.source = self.writer.sink, self.reader.source
