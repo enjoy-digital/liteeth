@@ -28,7 +28,6 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 
         # length computation
         inc = Signal(3)
-        inc_cases["default"] = inc.eq(4)
         if endianness == "big":
             self.comb += Case(sink.last_be, {
                 0b1000 : inc.eq(1),
@@ -213,17 +212,17 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         if endianness == "big":
             self.comb += If(last,
                 Case(length_lsb, {
-                    0 : source.last.be.eq(0b0001),
-                    1 : source.last.be.eq(0b1000),
-                    2 : source.last.be.eq(0b0100),
+                    0 : source.last_be.eq(0b0001),
+                    1 : source.last_be.eq(0b1000),
+                    2 : source.last_be.eq(0b0100),
                     3 : source.last_be.eq(0b0010)
                 }))
         else:
             self.comb += If(last,
                 Case(length_lsb, {
-                    0 : source.last.be.eq(0b1000),
-                    1 : source.last.be.eq(0b0001),
-                    2 : source.last.be.eq(0b0010),
+                    0 : source.last_be.eq(0b1000),
+                    1 : source.last_be.eq(0b0001),
+                    2 : source.last_be.eq(0b0010),
                     3 : source.last_be.eq(0b0100)
                 }))
 
