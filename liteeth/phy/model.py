@@ -24,13 +24,11 @@ class LiteEthPHYModelCRG(Module, AutoCSR):
 
 
 class LiteEthPHYModel(Module, AutoCSR):
-    def __init__(self, pads, tap="tap0", ip_address="192.168.1.100"):
+    def __init__(self, pads):
         self.dw = 8
         self.submodules.crg = LiteEthPHYModelCRG()
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
         self.source = source = stream.Endpoint(eth_phy_description(8))
-        self.tap = tap
-        self.ip_address = ip_address
 
         self.comb += [
             pads.source_valid.eq(self.sink.valid),
@@ -45,13 +43,3 @@ class LiteEthPHYModel(Module, AutoCSR):
         self.comb += [
             self.source.last.eq(~pads.sink_valid & self.source.valid),
         ]
-
-        # TODO avoid use of os.system
-        os.system("openvpn --mktun --dev {}".format(self.tap))
-        os.system("ifconfig {} {} up".format(self.tap, self.ip_address))
-        os.system("mknod /dev/net/{} c 10 200".format(self.tap))
-
-    def do_exit(self, *args, **kwargs):
-        # TODO avoid use of os.system
-        os.system("rm -f /dev/net/{}".format(self.tap))
-        os.system("openvpn --rmtun --dev {}".format(self.tap))
