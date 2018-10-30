@@ -193,7 +193,7 @@ class LiteEthEtherboneRecordDepacketizer(Depacketizer):
 
 
 class LiteEthEtherboneRecordReceiver(Module):
-    def __init__(self, buffer_depth=256):
+    def __init__(self, buffer_depth=4):
         self.sink = sink = stream.Endpoint(eth_etherbone_record_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
 
@@ -276,7 +276,7 @@ class LiteEthEtherboneRecordReceiver(Module):
 
 
 class LiteEthEtherboneRecordSender(Module):
-    def __init__(self, buffer_depth=256):
+    def __init__(self, buffer_depth=4):
         self.sink = sink = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_record_description(32))
 
