@@ -2,19 +2,13 @@ from math import ceil
 
 from migen import *
 
+from litex.gen import *
+
 from litex.soc.interconnect import stream
 from litex.soc.interconnect.stream import EndpointDescription
 from litex.soc.interconnect.csr import *
 
 from litex.soc.interconnect.stream_packet import Header, HeaderField
-
-
-def reverse_bytes(signal):
-    n = (len(signal)+7)//8
-    r = []
-    for i in reversed(range(n)):
-        r.append(signal[i*8:min((i+1)*8, len(signal))])
-    return Cat(*r)
 
 
 class Port:
