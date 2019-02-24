@@ -132,7 +132,7 @@ class LiteEthICMPEcho(Module):
             sink.connect(self.buffer.sink),
             self.buffer.source.connect(source),
             self.source.msgtype.eq(0x0),
-            self.source.checksum.eq(~((~self.buffer.source.checksum)-0x0800))
+            self.source.checksum.eq(self.buffer.source.checksum + 0x800 + (self.buffer.source.checksum >= 0xf800))
         ]
 
 # icmp
