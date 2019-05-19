@@ -13,7 +13,11 @@
 #include "netif/liteethif.h"
 
 #include <hw/flags.h>
-#include <hw/ethmac_mem.h>
+
+#define ETHMAC_RX0_BASE	ETHMAC_BASE
+#define ETHMAC_RX1_BASE	(ETHMAC_BASE+0x0800)
+#define ETHMAC_TX0_BASE	(ETHMAC_BASE+0x1000)
+#define ETHMAC_TX1_BASE	(ETHMAC_BASE+0x1800)
 
 static unsigned int rxslot;
 static unsigned int rxlen;
