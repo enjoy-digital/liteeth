@@ -12,6 +12,7 @@
 #include <hw/flags.h>
 #include <console.h>
 #include <generated/csr.h>
+#include <generated/mem.h>
 
 #define ETHMAC_RX0_BASE ETHMAC_BASE
 #define ETHMAC_RX1_BASE (ETHMAC_BASE+0x0800)
