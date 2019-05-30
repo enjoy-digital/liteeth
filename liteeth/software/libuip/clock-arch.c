@@ -21,7 +21,7 @@ clock_time_t clock_time(void)
 	unsigned int prescaler;
 	clock_time_t ticks;
 
-	freq = identifier_frequency_read();
+	freq = SYSTEM_CLOCK_FREQUENCY;
 	prescaler = freq/CLOCK_CONF_SECOND;
 	timer0_update_value_write(1);
 	ticks = (0xffffffff - timer0_value_read())/prescaler;
