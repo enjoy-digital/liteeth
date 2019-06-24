@@ -1,5 +1,5 @@
 from liteeth.common import *
-from liteeth.core.mac import gap, preamble, crc, padding, last_be
+from liteeth.mac import gap, preamble, crc, padding, last_be
 from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
