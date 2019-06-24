@@ -18,7 +18,7 @@ from liteeth.phy.rmii import LiteEthPHYRMII
 from liteeth.phy.gmii import LiteEthPHYGMII
 from liteeth.phy.s7rgmii import LiteEthPHYRGMII
 
-from liteeth.core.mac import LiteEthMAC
+from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 
 _io = [

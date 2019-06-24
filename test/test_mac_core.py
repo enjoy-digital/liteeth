@@ -6,7 +6,7 @@ from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
-from liteeth.core.mac.core import LiteEthMACCore
+from liteeth.mac.core import LiteEthMACCore
 
 from test.model import phy, mac
 
