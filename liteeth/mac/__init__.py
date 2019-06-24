@@ -1,7 +1,7 @@
 from liteeth.common import *
-from liteeth.core.mac.common import *
-from liteeth.core.mac.core import LiteEthMACCore
-from liteeth.core.mac.wishbone import LiteEthMACWishboneInterface
+from liteeth.mac.common import *
+from liteeth.mac.core import LiteEthMACCore
+from liteeth.mac.wishbone import LiteEthMACWishboneInterface
 
 
 class LiteEthMAC(Module, AutoCSR):

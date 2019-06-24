@@ -1,10 +1,9 @@
 from liteeth.common import *
-from liteeth.core.mac import LiteEthMAC
+from liteeth.mac import LiteEthMAC
 from liteeth.core.arp import LiteEthARP
 from liteeth.core.ip import LiteEthIP
 from liteeth.core.udp import LiteEthUDP
 from liteeth.core.icmp import LiteEthICMP
-
 
 class LiteEthIPCore(Module, AutoCSR):
     def __init__(self, phy, mac_address, ip_address, clk_freq, with_icmp=True):
