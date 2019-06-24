@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 from liteeth.common import *
 from liteeth.phy.gmii import LiteEthPHYGMIICRG
 from liteeth.phy.mii import LiteEthPHYMIITX, LiteEthPHYMIIRX

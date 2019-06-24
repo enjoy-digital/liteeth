@@ -1,4 +1,5 @@
-# This file is Copyright (c) 2019 M-Labs Ltd
+# This file is Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from migen import *

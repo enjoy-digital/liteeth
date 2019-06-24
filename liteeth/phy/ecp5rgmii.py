@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 # RGMII PHY for ECP5 Lattice FPGA
 from liteeth.common import *
 
