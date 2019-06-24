@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2018 M-Labs Ltd
+# This file is Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # License: BSD
 
 from math import ceil
@@ -223,12 +223,12 @@ class PCS(Module):
         self.tbi_rx = self.rx.decoder.input
         self.sink = stream.Endpoint(eth_phy_description(8))
         self.source = stream.Endpoint(eth_phy_description(8))
-        
+
         self.link_up = Signal()
         self.restart = Signal()
 
         # # #
-        
+
         # endpoint interface
         self.comb += [
             self.tx.tx_stb.eq(self.sink.valid),

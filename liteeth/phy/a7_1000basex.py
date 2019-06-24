@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2018 M-Labs Ltd
+# This file is Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # License: BSD
 
 from migen import *

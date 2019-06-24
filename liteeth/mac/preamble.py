@@ -1,3 +1,8 @@
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2017-2018 whitequark <whitequark@whitequark.org>
+# License: BSD
+
 from liteeth.common import *
 
 from migen.genlib.misc import chooser

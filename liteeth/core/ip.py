@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
