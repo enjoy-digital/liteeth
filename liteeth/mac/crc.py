@@ -155,6 +155,13 @@ class LiteEthMACCRCInserter(Module):
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
 
+        cw = dw//8
+        rotate_by = 4 % cw
+        last_be = Signal(cw)
+        x = [sink.last_be[(i + rotate_by) % cw] for i in range(cw)]
+
+        self.sync += If(sink.last, last_be.eq(Cat(*x)))
+
         fsm.act("IDLE",
             crc.reset.eq(1),
             sink.ready.eq(1),
@@ -195,6 +202,7 @@ class LiteEthMACCRCInserter(Module):
             fsm.act("INSERT",
                 source.valid.eq(1),
                 source.last.eq(1),
+                source.last_be.eq(dw//8),
                 source.data.eq(crc.value),
                 If(source.ready, NextState("IDLE"))
             )
@@ -228,64 +236,65 @@ class LiteEthMACCRCChecker(Module):
     def __init__(self, crc_class, description):
         self.sink = sink = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
+        self.comb += sink.connect(source)
 
         self.error = Signal()
 
-        # # #
+        # # # #
 
-        dw = len(sink.data)
-        crc = crc_class(dw)
-        self.submodules += crc
-        ratio = crc.width//dw
+        # dw = len(sink.data)
+        # crc = crc_class(dw)
+        # self.submodules += crc
+        # ratio = crc.width//dw
 
-        fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
-        self.submodules += fifo
+        # fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
+        # self.submodules += fifo
 
-        fsm = FSM(reset_state="RESET")
-        self.submodules += fsm
+        # fsm = FSM(reset_state="RESET")
+        # self.submodules += fsm
 
-        fifo_in = Signal()
-        fifo_out = Signal()
-        fifo_full = Signal()
+        # fifo_in = Signal()
+        # fifo_out = Signal()
+        # fifo_full = Signal()
 
-        self.comb += [
-            fifo_full.eq(fifo.level == ratio),
-            fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
-            fifo_out.eq(source.valid & source.ready),
+        # self.comb += [
+        #     fifo_full.eq(fifo.level == ratio),
+        #     fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
+        #     fifo_out.eq(source.valid & source.ready),
 
-            sink.connect(fifo.sink),
-            fifo.sink.valid.eq(fifo_in),
-            self.sink.ready.eq(fifo_in),
+        #     sink.connect(fifo.sink),
+        #     fifo.sink.valid.eq(fifo_in),
+        #     self.sink.ready.eq(fifo_in),
 
-            source.valid.eq(sink.valid & fifo_full),
-            source.last.eq(sink.last),
-            fifo.source.ready.eq(fifo_out),
-            source.payload.eq(fifo.source.payload),
+        #     source.valid.eq(sink.valid & fifo_full),
+        #     source.last.eq(sink.last),
+        #     fifo.source.ready.eq(fifo_out),
+        #     source.payload.eq(fifo.source.payload),
 
-            source.error.eq(sink.error | crc.error),
-            self.error.eq(source.valid & source.last & crc.error),
-        ]
+        #     source.error.eq(sink.error | crc.error),
+        #     self.error.eq(source.valid & source.last & crc.error),
+        # ]
 
-        fsm.act("RESET",
-            crc.reset.eq(1),
-            fifo.reset.eq(1),
-            NextState("IDLE"),
-        )
-        self.comb += crc.data.eq(sink.data)
-        fsm.act("IDLE",
-            If(sink.valid & sink.ready,
-                crc.ce.eq(1),
-                NextState("COPY")
-            )
-        )
-        fsm.act("COPY",
-            If(sink.valid & sink.ready,
-                crc.ce.eq(1),
-                If(sink.last,
-                    NextState("RESET")
-                )
-            )
-        )
+        # fsm.act("RESET",
+        #     crc.reset.eq(1),
+        #     fifo.reset.eq(1),
+        #     NextState("IDLE"),
+        # )
+        # self.comb += crc.data.eq(sink.data)
+        # fsm.act("IDLE",
+        #     If(sink.valid & sink.ready,
+        #         crc.ce.eq(1),
+        #         NextState("COPY")
+        #     )
+        # )
+        # fsm.act("COPY",
+        #     If(sink.valid & sink.ready,
+        #         crc.ce.eq(1),
+        #         If(sink.last,
+        #             NextState("RESET")
+        #         )
+        #     )
+        # )
 
 
 class LiteEthMACCRC32Checker(LiteEthMACCRCChecker):

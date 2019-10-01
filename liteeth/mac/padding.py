@@ -7,7 +7,6 @@ import math
 
 from liteeth.common import *
 
-
 class LiteEthMACPaddingInserter(Module):
     def __init__(self, dw, padding):
         self.sink = sink = stream.Endpoint(eth_phy_description(dw))
@@ -68,4 +67,3 @@ class LiteEthMACPaddingChecker(Module):
         # TODO: see if we should drop the packet when
         # payload size < minimum ethernet payload size
         self.comb += sink.connect(source)
-

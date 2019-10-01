@@ -27,8 +27,12 @@ class LiteEthMACPreambleInserter(Module):
         # # #
 
         preamble = Signal(64, reset=eth_preamble)
+        # TODO: This section needs update for 64 bit MAC
         cnt_max = (64//dw)-1
-        cnt = Signal(max=cnt_max+1, reset_less=True)
+        if dw != 64:
+            cnt = Signal(max=cnt_max+1, reset_less=True)
+        else:
+            cnt = Signal()
         clr_cnt = Signal()
         inc_cnt = Signal()
 
@@ -51,7 +55,7 @@ class LiteEthMACPreambleInserter(Module):
         )
         fsm.act("INSERT",
             self.source.valid.eq(1),
-            chooser(preamble, cnt, self.source.data),
+            chooser(preamble, None if dw == 64 else cnt, self.source.data),
             If(cnt == cnt_max,
                 If(self.source.ready, NextState("COPY"))
             ).Else(
@@ -87,7 +91,7 @@ class LiteEthMACPreambleChecker(Module):
         Pulses every time a preamble error is detected.
     """
     def __init__(self, dw):
-        assert dw == 8
+        assert dw == 8 or dw == 32 or dw == 64
         self.sink = sink = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
@@ -97,14 +101,31 @@ class LiteEthMACPreambleChecker(Module):
 
         fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
+        if dw == 8:
+            fsm.act("IDLE",
+                sink.ready.eq(1),
+                If(sink.valid & ~sink.last & (sink.data == eth_preamble >> 56),
+                    NextState("COPY")
+                ),
+                If(sink.valid & sink.last, self.error.eq(1))
+            )
+        elif dw == 32:  # Assuming XGMII, but maynot be a deep assumption
+            fsm.act("IDLE",
+                sink.ready.eq(1),
+                If(sink.valid & ~sink.last & (sink.data == eth_preamble >> 32),
+                    NextState("COPY")
+                ),
+                If(sink.valid & sink.last, self.error.eq(1))
+            )
+        elif dw == 64:  # Assuming XGMII, but maynot be a deep assumption
+            fsm.act("IDLE",
+                sink.ready.eq(1),
+                If(sink.valid & ~sink.last & (sink.data == eth_preamble),
+                    NextState("COPY")
+                ),
+                If(sink.valid & sink.last, self.error.eq(1))
+            )
 
-        fsm.act("IDLE",
-            sink.ready.eq(1),
-            If(sink.valid & ~sink.last & (sink.data == eth_preamble >> 56),
-                NextState("COPY")
-            ),
-            If(sink.valid & sink.last, self.error.eq(1))
-        )
         self.comb += [
             source.data.eq(sink.data),
             source.last_be.eq(sink.last_be)
