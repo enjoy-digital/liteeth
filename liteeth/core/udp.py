@@ -30,27 +30,30 @@ class LiteEthUDPUserPort(LiteEthUDPSlavePort):
 
 
 class LiteEthUDPCrossbar(LiteEthCrossbar):
-    def __init__(self):
-        LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port")
+    def __init__(self, dw=8):
+        LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
     def get_port(self, udp_port, dw=8, cd="sys"):
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
+        # TODO: When we switch to 64
+        internal_dw = dw
         user_port = LiteEthUDPUserPort(dw)
-        internal_port = LiteEthUDPUserPort(8)
+        internal_port = LiteEthUDPUserPort(internal_dw)
 
         # tx
         tx_stream = user_port.sink
         if cd is not "sys":
+            exit()
             tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
             tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
             self.submodules += tx_cdc
             self.comb += tx_stream.connect(tx_cdc.sink)
             tx_stream = tx_cdc.source
-        if dw != 8:
+        if dw != internal_dw:
             tx_converter = stream.StrideConverter(eth_udp_user_description(user_port.dw),
-                                                  eth_udp_user_description(8))
+                                                  eth_udp_user_description(internal_dw))
             self.submodules += tx_converter
             self.comb += tx_stream.connect(tx_converter.sink)
             tx_stream = tx_converter.source
@@ -58,8 +61,8 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         # rx
         rx_stream = internal_port.source
-        if dw != 8:
-            rx_converter = stream.StrideConverter(eth_udp_user_description(8),
+        if dw != internal_dw:
+            rx_converter = stream.StrideConverter(eth_udp_user_description(internal_dw),
                                                   eth_udp_user_description(user_port.dw))
             self.submodules += rx_converter
             self.comb += rx_stream.connect(rx_converter.sink)
@@ -79,21 +82,21 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 # udp tx
 
 class LiteEthUDPPacketizer(Packetizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Packetizer.__init__(self,
-            eth_udp_description(8),
-            eth_ipv4_user_description(8),
+            eth_udp_description(dw),
+            eth_ipv4_user_description(dw),
             udp_header)
 
 
 class LiteEthUDPTX(Module):
-    def __init__(self, ip_address):
-        self.sink = sink = stream.Endpoint(eth_udp_user_description(8))
-        self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
+    def __init__(self, ip_address, dw=8):
+        self.sink = sink = stream.Endpoint(eth_udp_user_description(dw))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthUDPPacketizer()
+        self.submodules.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
             packetizer.sink.last.eq(sink.last),
@@ -101,16 +104,17 @@ class LiteEthUDPTX(Module):
             packetizer.sink.src_port.eq(sink.src_port),
             packetizer.sink.dst_port.eq(sink.dst_port),
             packetizer.sink.length.eq(sink.length + udp_header.length),
-            packetizer.sink.checksum.eq(0),  # Disabled (MAC CRC is enough)
+            packetizer.sink.checksum.eq(0),  # TODO: Disabled (MAC CRC is enough)
             packetizer.sink.data.eq(sink.data)
         ]
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
                 packetizer.source.ready.eq(0),
                 NextState("SEND")
+            ).Else(
+                packetizer.source.ready.eq(1),
             )
         )
         fsm.act("SEND",
@@ -126,21 +130,21 @@ class LiteEthUDPTX(Module):
 # udp rx
 
 class LiteEthUDPDepacketizer(Depacketizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Depacketizer.__init__(self,
-            eth_ipv4_user_description(8),
-            eth_udp_description(8),
+            eth_ipv4_user_description(dw),
+            eth_udp_description(dw),
             udp_header)
 
 
 class LiteEthUDPRX(Module):
-    def __init__(self, ip_address):
-        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(8))
-        self.source = source = stream.Endpoint(eth_udp_user_description(8))
+    def __init__(self, ip_address, dw=8):
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.source = source = stream.Endpoint(eth_udp_user_description(dw))
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthUDPDepacketizer()
+        self.submodules.depacketizer = depacketizer = LiteEthUDPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -192,15 +196,15 @@ class LiteEthUDPRX(Module):
 # udp
 
 class LiteEthUDP(Module):
-    def __init__(self, ip, ip_address):
-        self.submodules.tx = tx = LiteEthUDPTX(ip_address)
-        self.submodules.rx = rx = LiteEthUDPRX(ip_address)
-        ip_port = ip.crossbar.get_port(udp_protocol)
+    def __init__(self, ip, ip_address, dw=8):
+        self.submodules.tx = tx = LiteEthUDPTX(ip_address, dw)
+        self.submodules.rx = rx = LiteEthUDPRX(ip_address, dw)
+        ip_port = ip.crossbar.get_port(udp_protocol, dw)
         self.comb += [
             tx.source.connect(ip_port.sink),
             ip_port.source.connect(rx.sink)
         ]
-        self.submodules.crossbar = crossbar = LiteEthUDPCrossbar()
+        self.submodules.crossbar = crossbar = LiteEthUDPCrossbar(dw)
         self.comb += [
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)

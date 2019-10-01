@@ -4,7 +4,7 @@
 # License: BSD
 
 from liteeth.common import *
-from liteeth.mac import gap, preamble, crc, padding, last_be
+from liteeth.mac import gap, preamble, crc, padding, last_be, aligner
 from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
@@ -46,6 +46,10 @@ class LiteEthMACCore(Module, AutoCSR):
             crc32_checker = crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw))
             self.submodules += ClockDomainsRenamer("eth_tx")(crc32_inserter)
             self.submodules += ClockDomainsRenamer("eth_rx")(crc32_checker)
+
+            # DW aligner
+            dw_aligner = aligner.LiteEthMACAligner(phy.dw)
+            self.submodules += ClockDomainsRenamer("eth_tx")(dw_aligner)
 
             tx_pipeline += [preamble_inserter, crc32_inserter]
             rx_pipeline += [preamble_checker, crc32_checker]

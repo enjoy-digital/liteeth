@@ -8,18 +8,18 @@ from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
 
 
 class LiteEthMACDepacketizer(Depacketizer):
-    def __init__(self):
+    def __init__(self, dw):
         Depacketizer.__init__(self,
-            eth_phy_description(8),
-            eth_mac_description(8),
+            eth_phy_description(dw),
+            eth_mac_description(dw),
             mac_header)
 
 
 class LiteEthMACPacketizer(Packetizer):
-    def __init__(self):
+    def __init__(self, dw):
         Packetizer.__init__(self,
-            eth_mac_description(8),
-            eth_phy_description(8),
+            eth_mac_description(dw),
+            eth_phy_description(dw),
             mac_header)
 
 
@@ -41,11 +41,11 @@ class LiteEthMACUserPort(LiteEthMACSlavePort):
 
 
 class LiteEthMACCrossbar(LiteEthCrossbar):
-    def __init__(self):
-        LiteEthCrossbar.__init__(self, LiteEthMACMasterPort, "ethernet_type")
+    def __init__(self, dw=8):
+        LiteEthCrossbar.__init__(self, LiteEthMACMasterPort, "ethernet_type", dw)
 
-    def get_port(self, ethernet_type):
-        port = LiteEthMACUserPort(8)
+    def get_port(self, ethernet_type, dw=8):
+        port = LiteEthMACUserPort(dw)
         if ethernet_type in self.users.keys():
             raise ValueError("Ethernet type {0:#x} already assigned".format(ethernet_type))
         self.users[ethernet_type] = port
