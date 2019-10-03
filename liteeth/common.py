@@ -45,6 +45,7 @@ arp_proto_ip = 0x0800
 arp_opcode_request = 0x0001
 arp_opcode_reply = 0x0002
 
+# TODO: This will take work for a 64bit implementation
 arp_header_length = 28
 arp_header_fields = {
     "hwtype":     HeaderField(0,  0, 16),
