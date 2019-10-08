@@ -31,14 +31,14 @@ class LiteEthUDPUserPort(LiteEthUDPSlavePort):
 
 class LiteEthUDPCrossbar(LiteEthCrossbar):
     def __init__(self, dw=8):
+        self.internal_dw = dw
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
     def get_port(self, udp_port, dw=8, cd="sys"):
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
-        # TODO: When we switch to 64
-        internal_dw = dw
+        internal_dw = self.internal_dw
         user_port = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(internal_dw)
 

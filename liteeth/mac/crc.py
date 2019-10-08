@@ -242,59 +242,60 @@ class LiteEthMACCRCChecker(Module):
 
         # # # #
 
-        # dw = len(sink.data)
-        # crc = crc_class(dw)
-        # self.submodules += crc
-        # ratio = crc.width//dw
+        dw = len(sink.data)
+        crc = crc_class(dw)
+        self.submodules += crc
+        ratio = crc.width//dw
 
-        # fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
-        # self.submodules += fifo
+        if dw != 64:
+            fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
+            self.submodules += fifo
 
-        # fsm = FSM(reset_state="RESET")
-        # self.submodules += fsm
+            fsm = FSM(reset_state="RESET")
+            self.submodules += fsm
 
-        # fifo_in = Signal()
-        # fifo_out = Signal()
-        # fifo_full = Signal()
+            fifo_in = Signal()
+            fifo_out = Signal()
+            fifo_full = Signal()
 
-        # self.comb += [
-        #     fifo_full.eq(fifo.level == ratio),
-        #     fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
-        #     fifo_out.eq(source.valid & source.ready),
+            self.comb += [
+                fifo_full.eq(fifo.level == ratio),
+                fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
+                fifo_out.eq(source.valid & source.ready),
 
-        #     sink.connect(fifo.sink),
-        #     fifo.sink.valid.eq(fifo_in),
-        #     self.sink.ready.eq(fifo_in),
+                sink.connect(fifo.sink),
+                fifo.sink.valid.eq(fifo_in),
+                self.sink.ready.eq(fifo_in),
 
-        #     source.valid.eq(sink.valid & fifo_full),
-        #     source.last.eq(sink.last),
-        #     fifo.source.ready.eq(fifo_out),
-        #     source.payload.eq(fifo.source.payload),
+                source.valid.eq(sink.valid & fifo_full),
+                source.last.eq(sink.last),
+                fifo.source.ready.eq(fifo_out),
+                source.payload.eq(fifo.source.payload),
 
-        #     source.error.eq(sink.error | crc.error),
-        #     self.error.eq(source.valid & source.last & crc.error),
-        # ]
+                source.error.eq(sink.error | crc.error),
+                self.error.eq(source.valid & source.last & crc.error),
+            ]
 
-        # fsm.act("RESET",
-        #     crc.reset.eq(1),
-        #     fifo.reset.eq(1),
-        #     NextState("IDLE"),
-        # )
-        # self.comb += crc.data.eq(sink.data)
-        # fsm.act("IDLE",
-        #     If(sink.valid & sink.ready,
-        #         crc.ce.eq(1),
-        #         NextState("COPY")
-        #     )
-        # )
-        # fsm.act("COPY",
-        #     If(sink.valid & sink.ready,
-        #         crc.ce.eq(1),
-        #         If(sink.last,
-        #             NextState("RESET")
-        #         )
-        #     )
-        # )
+            fsm.act("RESET",
+                crc.reset.eq(1),
+                fifo.reset.eq(1),
+                NextState("IDLE"),
+            )
+            self.comb += crc.data.eq(sink.data)
+            fsm.act("IDLE",
+                If(sink.valid & sink.ready,
+                    crc.ce.eq(1),
+                    NextState("COPY")
+                )
+            )
+            fsm.act("COPY",
+                If(sink.valid & sink.ready,
+                    crc.ce.eq(1),
+                    If(sink.last,
+                        NextState("RESET")
+                    )
+                )
+            )
 
 
 class LiteEthMACCRC32Checker(LiteEthMACCRCChecker):
