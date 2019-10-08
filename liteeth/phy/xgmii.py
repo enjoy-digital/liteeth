@@ -60,7 +60,7 @@ class LiteEthPHYXGMIITX(Module):
         ]
 
 
-class LiteEthPHYRGMIIRX(Module):
+class LiteEthPHYXGMIIRX(Module):
     def __init__(self, pads, dw):
         cw = dw // 8
         self.source = source = stream.Endpoint(eth_phy_description(dw))
@@ -107,5 +107,5 @@ class LiteEthPHYXGMII(Module, AutoCSR):
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(
             LiteEthPHYXGMIITX(pads, self.dw))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(
-            LiteEthPHYRGMIIRX(pads, self.dw))
+            LiteEthPHYXGMIIRX(pads, self.dw))
         self.sink, self.source = self.tx.sink, self.rx.source
