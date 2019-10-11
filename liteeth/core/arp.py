@@ -76,11 +76,10 @@ class LiteEthARPTX(Module):
         ]
         fsm.act("SEND",
             packetizer.sink.valid.eq(1),
-            packetizer.source.connect(source, omit={"last_be"}),
+            packetizer.source.connect(source),
             source.target_mac.eq(packetizer.sink.target_mac),
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
-            If(packetizer.source.last, source.last_be.eq(1 << ((dw//8) - 1))),
             If(source.valid & source.ready,
                 counter_ce.eq(1),
                 If(source.last,

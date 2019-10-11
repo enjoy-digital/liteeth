@@ -59,30 +59,54 @@ class LiteEthPHYXGMIITX(Module):
             )
         ]
 
+PREAMBLE_START=Signal(8, reset=0x55)
 
 class LiteEthPHYXGMIIRX(Module):
     def __init__(self, pads, dw):
         cw = dw // 8
         self.source = source = stream.Endpoint(eth_phy_description(dw))
-        start = Signal()
-        self.comb += start.eq((pads.rx_ctl == 0x1) & (pads.rx_data[0:8] == 0xFB))
+        rx_ctl_d = Signal(len(pads.rx_ctl))
+        rx_data_d = Signal(len(pads.rx_data))
+        self.sync += [rx_ctl_d.eq(pads.rx_ctl),
+                      rx_data_d.eq(pads.rx_data)
+        ]
 
-        end = Signal()
-        self.comb += end.eq(reduce(or_,
-                                   [pads.rx_ctl[i] &
-                                    (pads.rx_data[8*i: 8*(i+1)] == 0xFD)
-                                    for i in range(cw)]
-        ))
-        self.sync += [If(start, source.valid.eq(1)),
-                      source.first.eq(start),
-                      source.data.eq(pads.rx_data),
-                      source.last_be.eq(pads.rx_ctl),
-                      source.last.eq(end),
-                      If(end, source.valid.eq(0))
-                      ]
-        self.sync += [source.error[i].eq(pads.rx_ctl[i] &
-                                         pads.rx_data[8*i: 8*(i+1)])
+        start = Signal()
+        self.comb += start.eq((rx_ctl_d == 0x1) & (rx_data_d[0:8] == START))
+
+        terminate, last_be = Signal(cw, reset=0), Signal(cw, reset=0)
+        self.comb += [terminate[i].eq(rx_ctl_d[i] &
+                                      (rx_data_d[8*i: 8*(i+1)] == TERMINATE))
                       for i in range(cw)]
+        self.comb += last_be.eq(terminate >> 1)
+
+        end, end_d = Signal(), Signal()
+        self.comb += end.eq(((pads.rx_ctl == 0xFF) & (pads.rx_data[0:8] == TERMINATE)) |
+                            reduce(or_, last_be))
+        self.sync += end_d.eq(end)
+
+        self.sync += [
+            source.last_be.eq(last_be),
+            If(start,
+               source.valid.eq(1),
+               source.data.eq(Cat(PREAMBLE_START, rx_data_d[8:])),
+               source.first.eq(1),
+               source.last.eq(0)
+            ).Elif(end,
+                   source.data.eq(rx_data_d),
+                   source.first.eq(0),
+                   source.last.eq(1)
+            ).Elif(end_d,
+                   source.valid.eq(0),
+                   source.last.eq(0),
+            ).Else(source.data.eq(rx_data_d),
+                   source.last.eq(0),
+                   source.first.eq(0),
+            )
+        ]
+        # self.sync += [source.error[i].eq(pads.rx_ctl[i] &
+        #                                  pads.rx_data[8*i: 8*(i+1)])
+        #               for i in range(cw)]
 
 
 class LiteEthPHYXGMIICRG(Module, AutoCSR):

@@ -47,12 +47,14 @@ class LiteEthMACCore(Module, AutoCSR):
             self.submodules += ClockDomainsRenamer("eth_tx")(crc32_inserter)
             self.submodules += ClockDomainsRenamer("eth_rx")(crc32_checker)
 
-            # DW aligner
+            # DW aligner [unused]
             dw_aligner = aligner.LiteEthMACAligner(phy.dw)
             self.submodules += ClockDomainsRenamer("eth_tx")(dw_aligner)
 
             tx_pipeline += [preamble_inserter, crc32_inserter]
-            rx_pipeline += [preamble_checker, crc32_checker]
+            # TODO: add crc for prod
+            # rx_pipeline += [preamble_checker, crc32_checker]
+            rx_pipeline += [preamble_checker]
 
             # Error counters
             self.submodules.ps_preamble_error = PulseSynchronizer("eth_rx", "sys")

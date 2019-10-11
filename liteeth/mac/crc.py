@@ -127,6 +127,90 @@ class LiteEthMACCRC32(Module):
         ]
 
 
+@ResetInserter()
+@CEInserter()
+class LiteEthMACCRC32_64(Module):
+    """IEEE 802.3 CRC
+
+    Implement an IEEE 802.3 CRC generator/checker.
+
+    Parameters
+    ----------
+    data_width : int
+        Width of the data bus.
+
+    Attributes
+    ----------
+    d : in
+        Data input.
+    value : out
+        CRC value (used for generator).
+    error : out
+        CRC error (used for checker).
+    """
+    width = 32
+    polynom = 0x04C11DB7
+    init = 2**width-1
+    check = 0xC704DD7B
+    def __init__(self, data_width):
+        self.data = Signal(data_width)
+        self.last = Signal()
+        self.value = Signal(self.width)
+        self.error_i = Signal(5)
+        self.error = Signal()
+        self.last_be = Signal(8)
+        # # #
+
+        self.submodules.engine4 = LiteEthMACCRCEngine(data_width, self.width, self.polynom)
+        self.submodules.engine3 = LiteEthMACCRCEngine(data_width//2, self.width, self.polynom)
+        self.submodules.engine2 = LiteEthMACCRCEngine(24, self.width, self.polynom)
+        self.submodules.engine1 = LiteEthMACCRCEngine(data_width//4, self.width, self.polynom)
+        self.submodules.engine0 = LiteEthMACCRCEngine(data_width//8, self.width, self.polynom)
+
+        reg = Signal(self.width, reset=self.init)
+        second_nibble, second_nibble_d = Signal(), Signal()
+        last_d = Signal()
+        last_be_d = Signal(len(self.last_be))
+        self.sync += [
+            last_d.eq(self.last),
+            last_be_d.eq(self.last_be),
+            second_nibble_d.eq(second_nibble),
+            If(self.last_be > 8,
+               reg.eq(self.engine3.next),
+               second_nibble.eq(1)
+            ).Else(reg.eq(self.engine4.next),
+                   second_nibble.eq(0))
+            ]
+        self.comb += [
+            self.engine4.data.eq(self.data),
+            self.engine3.data.eq(self.data[0:32]),
+            self.engine2.data.eq(self.data[0:24]),
+            self.engine1.data.eq(self.data[0:16]),
+            self.engine0.data.eq(self.data[0:8]),
+
+            self.engine4.last.eq(reg),
+            self.engine3.last.eq(reg),
+            self.engine2.last.eq(reg),
+            self.engine1.last.eq(reg),
+            self.engine0.last.eq(reg),
+            self.error_i[4].eq(self.engine4.next != self.check),
+            self.error_i[3].eq(self.engine3.next != self.check),
+            self.error_i[2].eq(self.engine2.next != self.check),
+            self.error_i[1].eq(self.engine1.next != self.check),
+            self.error_i[0].eq(self.engine0.next != self.check),
+
+            self.error.eq((~second_nibble & self.last & self.error_i[0] & (self.last_be == 0x00)) |
+                          (~second_nibble & self.last & self.error_i[1] & (self.last_be == 0x01)) |
+                          (~second_nibble & self.last & self.error_i[2] & (self.last_be == 0x02)) |
+                          (~second_nibble & self.last & self.error_i[3] & (self.last_be == 0x04)) |
+                          ( second_nibble & self.last & self.error_i[4] & (self.last_be == 0x80)) |
+                          ( second_nibble_d & last_d & self.error_i[0] & (last_be_d == 0x10)) |
+                          ( second_nibble_d & last_d & self.error_i[1] & (last_be_d == 0x20)) |
+                          ( second_nibble_d & last_d & self.error_i[2] & (last_be_d == 0x40))),
+
+        ]
+
+
 class LiteEthMACCRCInserter(Module):
     """CRC Inserter
 
@@ -243,11 +327,72 @@ class LiteEthMACCRCChecker(Module):
         # # # #
 
         dw = len(sink.data)
-        crc = crc_class(dw)
-        self.submodules += crc
-        ratio = crc.width//dw
 
-        if dw != 64:
+        if dw == 64:
+            crc = LiteEthMACCRC32_64(dw)
+            self.submodules += crc
+            ratio = crc.width//dw + 1  # Keep a FIFO of 1
+            fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
+            self.submodules += fifo
+
+            fsm = FSM(reset_state="RESET")
+            self.submodules += fsm
+
+            fifo_in = Signal()
+            fifo_out = Signal()
+            fifo_full = Signal()
+
+            self.comb += [
+                fifo_full.eq(fifo.level == ratio),
+                fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
+                fifo_out.eq(source.valid & source.ready),
+
+                sink.connect(fifo.sink),
+                fifo.sink.valid.eq(fifo_in),
+                self.sink.ready.eq(fifo_in),
+
+                source.valid.eq(sink.valid & fifo_full),
+                If(sink.last & (sink.last_be > 16),
+                   source.last.eq(fifo.source.last),
+                   source.last_be.eq(fifo.source.last_be << 4)
+                ).Else(
+                    source.last.eq(sink.last),
+                    source.last_be.eq(sink.last_be << 4)
+                ),
+                fifo.source.ready.eq(fifo_out),
+                source.payload.eq(fifo.source.payload),
+
+                source.error.eq(sink.error | crc.error),
+                self.error.eq(source.valid & source.last & crc.error),
+            ]
+
+            fsm.act("RESET",
+                crc.reset.eq(1),
+                fifo.reset.eq(1),
+                NextState("IDLE"),
+            )
+            self.comb += [crc.data.eq(sink.data),
+                          crc.last.eq(sink.last),
+                          crc.last_be.eq(sink.last_be)
+            ]
+            fsm.act("IDLE",
+                If(sink.valid & sink.ready,
+                    crc.ce.eq(1),
+                    NextState("COPY")
+                )
+            )
+            fsm.act("COPY",
+                If(sink.valid & sink.ready,
+                    crc.ce.eq(1),
+                    If(sink.last,
+                        NextState("RESET")
+                    )
+                )
+            )
+        else:
+            crc = crc_class(dw)
+            self.submodules += crc
+            ratio = crc.width//dw
             fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
             self.submodules += fifo
 

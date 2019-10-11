@@ -45,7 +45,6 @@ arp_proto_ip = 0x0800
 arp_opcode_request = 0x0001
 arp_opcode_reply = 0x0002
 
-# TODO: This will take work for a 64bit implementation
 arp_header_length = 28
 arp_header_fields = {
     "hwtype":     HeaderField(0,  0, 16),
@@ -175,6 +174,7 @@ def eth_arp_description(dw):
     param_layout = arp_header.get_layout()
     payload_layout = [
         ("data",     dw),
+        ("last_be", dw//8),
         ("error", dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -205,6 +205,7 @@ def eth_ipv4_user_description(dw):
     ]
     payload_layout = [
         ("data",     dw),
+        ("last_be", dw//8),
         ("error", dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -220,6 +221,7 @@ def eth_icmp_description(dw):
     param_layout = icmp_header.get_layout()
     payload_layout = [
         ("data",     dw),
+        ("last_be", dw//8),
         ("error", dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -239,6 +241,7 @@ def eth_udp_description(dw):
     param_layout = udp_header.get_layout()
     payload_layout = [
         ("data",     dw),
+        ("last_be", dw//8),
         ("error", dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)

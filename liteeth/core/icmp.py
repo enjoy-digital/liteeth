@@ -23,7 +23,7 @@ class LiteEthICMPTX(Module):
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthICMPPacketizer()
+        self.submodules.packetizer = packetizer = LiteEthICMPPacketizer(dw)
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
             packetizer.sink.last.eq(sink.last),
@@ -70,7 +70,7 @@ class LiteEthICMPRX(Module):
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer()
+        self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -130,12 +130,14 @@ class LiteEthICMPEcho(Module):
         # # #
 
         # TODO: optimize ressources (no need to store parameters as datas)
-        self.submodules.buffer = stream.SyncFIFO(eth_icmp_user_description(dw), 128, buffered=True)
+        self.submodules.buffer = stream.SyncFIFO(eth_icmp_user_description(dw), 128//(dw//8), buffered=True)
         self.comb += [
             sink.connect(self.buffer.sink),
             self.buffer.source.connect(source),
             self.source.msgtype.eq(0x0),
-            self.source.checksum.eq(self.buffer.source.checksum + 0x800 + (self.buffer.source.checksum >= 0xf800))
+            self.source.checksum.eq(self.buffer.source.checksum +
+                                    0x800 +
+                                    (self.buffer.source.checksum >= 0xf800))
         ]
 
 # icmp
@@ -149,7 +151,7 @@ class LiteEthICMP(Module):
             rx.source.connect(echo.sink),
             echo.source.connect(tx.sink)
         ]
-        ip_port = ip.crossbar.get_port(icmp_protocol)
+        ip_port = ip.crossbar.get_port(icmp_protocol, dw)
         self.comb += [
             tx.source.connect(ip_port.sink),
             ip_port.source.connect(rx.sink)
