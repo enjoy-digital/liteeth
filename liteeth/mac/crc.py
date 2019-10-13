@@ -286,7 +286,7 @@ class LiteEthMACCRCInserter(Module):
             fsm.act("INSERT",
                 source.valid.eq(1),
                 source.last.eq(1),
-                source.last_be.eq(dw//8),
+                source.last_be.eq(1 << (4 % (dw//8) - 1)),
                 source.data.eq(crc.value),
                 If(source.ready, NextState("IDLE"))
             )
