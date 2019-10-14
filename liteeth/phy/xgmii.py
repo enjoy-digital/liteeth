@@ -23,19 +23,21 @@ class LiteEthPHYXGMIITX(Module):
         ctl_character_data = int('00000111'*cw, 2)  # IDLE
 
         sig = [
-            If(sink.last_be == (1 << (i + 1)),
+            If(sink.last_be >= (1 << i),
+               pads.tx_ctl[i+1].eq(0),
+               pads.tx_data[8*i: 8*(i+1)].eq(sink.data[8*i:8*(i+1)])
+            ).Elif(sink.last_be << 1 == (1 << i),
                pads.tx_ctl[i+1].eq(1),
                pads.tx_data[8*i: 8*(i+1)].eq(TERMINATE)
-            ).Elif(sink.last_be <  (1 << (i + 1)),
-                   pads.tx_ctl[i+1].eq(0),
-                   pads.tx_data[8*i: 8*(i+1)].eq(sink.data[8*i:8*(i+1)])
-            ).Else(pads.tx_ctl[i+1].eq(1),
-                   pads.tx_data[8*i: 8*(i+1)].eq(IDLE)
+            ).Else(
+               pads.tx_ctl[i+1].eq(1),
+               pads.tx_data[8*i: 8*(i+1)].eq(IDLE)
             )
-            for i in range(cw-1)
+            for i in range(cw - 1)
         ]
 
         all_but_one_idles = [IDLE for _ in range(cw-1)]
+        # TODO: This is best rewritten as an FSM
         self.sync += [
             If((sink.valid ^ valid_buf) & sink.valid,  # First word
                pads.tx_ctl.eq(1),
@@ -43,9 +45,11 @@ class LiteEthPHYXGMIITX(Module):
             ).Elif(sink.valid & ~sink.last,  # Between the frame
                    pads.tx_ctl.eq(0),
                    pads.tx_data.eq(sink.data)
-            ).Elif(sink.valid & sink.last & (sink.last_be != cw),  # Last word
+            ).Elif(sink.valid & sink.last & (sink.last_be != (1 << (cw - 1))),  # Last word
+                   pads.tx_ctl[cw-1].eq(1),
+                   pads.tx_data[8*(cw-1):].eq(IDLE),
                    *sig
-            ).Elif(sink.valid & sink.last & (sink.last_be == cw),  # Last word
+            ).Elif(sink.valid & sink.last & (sink.last_be == (1 << (cw - 1))),  # Last word
                    pads.tx_ctl.eq(0),
                    pads.tx_data.eq(sink.data),
                    edge_terminated.eq(1)
@@ -58,6 +62,7 @@ class LiteEthPHYXGMIITX(Module):
                 pads.tx_data.eq(ctl_character_data),
             )
         ]
+
 
 PREAMBLE_START=Signal(8, reset=0x55)
 
