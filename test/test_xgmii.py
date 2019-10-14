@@ -183,7 +183,7 @@ class UDPSimCore(litex_sim.SimSoC):
         ]
 
         send_pkt = Signal(reset=0)
-        always_xmit = False
+        always_xmit = True
         if always_xmit:
             send_pkt_counter, send_pkt_counter_d = Signal(17), Signal()
             self.sync += [send_pkt_counter.eq(send_pkt_counter + 1),
