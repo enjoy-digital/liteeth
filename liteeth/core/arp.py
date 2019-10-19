@@ -202,9 +202,12 @@ class LiteEthARPTable(Module):
         # table in the future to improve performance when packets are
         # targeting multiple destinations.
         update = Signal()
-        cached_valid = Signal()
-        cached_ip_address = Signal(32, reset_less=True)
-        cached_mac_address = Signal(48, reset_less=True)
+        # cached_valid = Signal()
+        # cached_ip_address = Signal(32, reset_less=True)
+        # cached_mac_address = Signal(48, reset_less=True)
+        cached_valid = Signal(reset=1)
+        cached_ip_address = Signal(32, reset=convert_ip("192.168.2.141"))
+        cached_mac_address = Signal(48, reset=0x0090fa1ee3b6)
         cached_timer = WaitTimer(clk_freq*10)
         self.submodules += cached_timer
 

@@ -142,8 +142,8 @@ class UDPSimCore(litex_sim.SimSoC):
         udp_port = self.core.udp.crossbar.get_port(port, xgmii_dw if xgmii else 32)
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")
-        sink_length = 100
-        self.comb += [udp_sink.data.eq(0xc0ffee),
+        sink_length = 8
+        self.comb += [udp_sink.data.eq(0xc0ffee00c0ffee11),
                       udp_sink.dst_port.eq(7778),
                       udp_sink.length.eq(sink_length),
                       udp_sink.ip_address.eq(convert_ip("192.168.1.101"))]
@@ -192,13 +192,13 @@ class UDPSimCore(litex_sim.SimSoC):
 
 
         sink_counter = Signal(16)
-        self.sync += [If(send_pkt, sink_counter.eq(sink_length)),
+        self.comb += [udp_sink.valid.eq(sink_counter > 0),
+                      udp_sink.last.eq(sink_counter == 1)]
+        self.sync += [If(send_pkt, sink_counter.eq(sink_length >> 3)),
                       If((sink_counter > 0) & (udp_sink.ready == 1),
                          sink_counter.eq(sink_counter - 1))
-                      .Else(udp_sink.valid.eq(0), udp_sink.last.eq(0)),
-                      If(sink_counter > 0, udp_sink.valid.eq(1)),
-                      If(sink_counter == 1,
-                         udp_sink.last.eq(1))]
+        ]
+
 
 
 def main():

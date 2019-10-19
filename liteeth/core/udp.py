@@ -45,7 +45,6 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         # tx
         tx_stream = user_port.sink
         if cd is not "sys":
-            exit()
             tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
             tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
             self.submodules += tx_cdc
@@ -103,6 +102,7 @@ class LiteEthUDPTX(Module):
             sink.ready.eq(packetizer.sink.ready),
             packetizer.sink.src_port.eq(sink.src_port),
             packetizer.sink.dst_port.eq(sink.dst_port),
+            # TODO: Bad dw can screw the thing up below
             packetizer.sink.length.eq(sink.length + udp_header.length),
             packetizer.sink.checksum.eq(0),  # TODO: Disabled (MAC CRC is enough)
             packetizer.sink.data.eq(sink.data)

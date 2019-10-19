@@ -44,5 +44,5 @@ class LiteEthMACRXLastBE(Module):
 
         self.comb += [
             sink.connect(source),
-            source.last_be.eq(sink.last)
+            source.last_be.eq(sink.last if len(sink.last_be) == 1 else sink.last_be)
         ]

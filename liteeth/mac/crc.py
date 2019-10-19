@@ -168,6 +168,7 @@ class LiteEthMACCRC32_64(Module):
         self.submodules.engine0 = LiteEthMACCRCEngine(data_width//8, self.width, self.polynom)
 
         reg = Signal(self.width, reset=self.init)
+        engine_data_in = Signal(data_width)
         second_nibble, second_nibble_d = Signal(), Signal()
         last_d = Signal()
         last_be_d = Signal(len(self.last_be))
@@ -175,18 +176,22 @@ class LiteEthMACCRC32_64(Module):
             last_d.eq(self.last),
             last_be_d.eq(self.last_be),
             second_nibble_d.eq(second_nibble),
+            self.engine4.data.eq(self.data),
             If(self.last_be > 8,
                reg.eq(self.engine3.next),
-               second_nibble.eq(1)
+               self.engine3.data.eq(self.data[33:]),
+               self.engine2.data.eq(self.data[33:57]),
+               self.engine1.data.eq(self.data[33:49]),
+               self.engine0.data.eq(self.data[33:41]),
+               second_nibble.eq(1),
             ).Else(reg.eq(self.engine4.next),
+                   self.engine3.data.eq(self.data[0:32]),
+                   self.engine2.data.eq(self.data[0:24]),
+                   self.engine1.data.eq(self.data[0:16]),
+                   self.engine0.data.eq(self.data[0:8]),
                    second_nibble.eq(0))
             ]
         self.comb += [
-            self.engine4.data.eq(self.data),
-            self.engine3.data.eq(self.data[0:32]),
-            self.engine2.data.eq(self.data[0:24]),
-            self.engine1.data.eq(self.data[0:16]),
-            self.engine0.data.eq(self.data[0:8]),
 
             self.engine4.last.eq(reg),
             self.engine3.last.eq(reg),
@@ -352,18 +357,13 @@ class LiteEthMACCRCChecker(Module):
                 self.sink.ready.eq(fifo_in),
 
                 source.valid.eq(sink.valid & fifo_full),
-                If(sink.last & (sink.last_be > 16),
-                   source.last.eq(fifo.source.last),
-                   source.last_be.eq(fifo.source.last_be << 4)
-                ).Else(
-                    source.last.eq(sink.last),
-                    source.last_be.eq(sink.last_be << 4)
-                ),
+                source.last.eq(sink.last),
                 fifo.source.ready.eq(fifo_out),
                 source.payload.eq(fifo.source.payload),
-
+                source.last_be.eq(sink.last_be),
                 source.error.eq(sink.error | crc.error),
                 self.error.eq(source.valid & source.last & crc.error),
+
             ]
 
             fsm.act("RESET",
@@ -383,9 +383,9 @@ class LiteEthMACCRCChecker(Module):
             )
             fsm.act("COPY",
                 If(sink.valid & sink.ready,
-                    crc.ce.eq(1),
-                    If(sink.last,
-                        NextState("RESET")
+                   crc.ce.eq(1),
+                   If(sink.last,
+                      NextState("RESET")
                     )
                 )
             )

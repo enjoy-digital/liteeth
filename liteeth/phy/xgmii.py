@@ -24,13 +24,13 @@ class LiteEthPHYXGMIITX(Module):
 
         sig = [
             If(sink.last_be >= (1 << i),
-               pads.tx_ctl[i+1].eq(0),
+               pads.tx_ctl[i].eq(0),
                pads.tx_data[8*i: 8*(i+1)].eq(sink.data[8*i:8*(i+1)])
             ).Elif(sink.last_be << 1 == (1 << i),
-               pads.tx_ctl[i+1].eq(1),
+               pads.tx_ctl[i].eq(1),
                pads.tx_data[8*i: 8*(i+1)].eq(TERMINATE)
             ).Else(
-               pads.tx_ctl[i+1].eq(1),
+               pads.tx_ctl[i].eq(1),
                pads.tx_data[8*i: 8*(i+1)].eq(IDLE)
             )
             for i in range(cw - 1)
