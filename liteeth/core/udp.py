@@ -87,21 +87,23 @@ class LiteEthUDPPacketizer(Packetizer):
 
 
 class LiteEthUDPTX(Module):
-    def __init__(self, ip_address):
+    def __init__(self, ip_address, dw=8):
         self.sink = sink = stream.Endpoint(eth_udp_user_description(8))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
 
         # # #
-
-        self.submodules.packetizer = packetizer = LiteEthUDPPacketizer()
+        shift = log2_int(dw // 8)  # bits required to represent bytes per word
+        self.submodules.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
             packetizer.sink.last.eq(sink.last),
             sink.ready.eq(packetizer.sink.ready),
             packetizer.sink.src_port.eq(sink.src_port),
             packetizer.sink.dst_port.eq(sink.dst_port),
-            packetizer.sink.length.eq(sink.length + udp_header.length),
-            packetizer.sink.checksum.eq(0),  # Disabled (MAC CRC is enough)
+            # TODO: Bad dw can screw the thing up below
+            packetizer.sink.length.eq(((sink.length >> shift) << shift) +
+                                      udp_header.length),
+            packetizer.sink.checksum.eq(0),  # TODO: Disabled (MAC CRC is enough)
             packetizer.sink.data.eq(sink.data)
         ]
 
