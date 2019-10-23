@@ -91,6 +91,98 @@ class LiteEthIPV4Packetizer(Packetizer):
             ipv4_header)
 
 
+class LiteEthIPV4Fragmenter(Module):
+    '''
+    IP Fragmenter that respects liteth.common.eth_mtu and breaking up data
+    from sink into multiple packets, by manipulating the source which is
+    tied into IPV4Packetizer
+    TODO:
+    1. Further investigate if the DELAY state is necessary.
+    2. IP_MTU calculation -30 seems pretty arbitrary, need to find refs
+    3. NextValue is it recommended?
+    '''
+    def __init__(self, dw=8):
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.comb += sink.connect(source)
+        ww = dw // 8
+        # counter logic ;)
+        counter = Signal(max=8192)
+        counter_done = Signal()
+        counter_reset = Signal()
+        counter_ce = Signal()
+        self.sync += \
+            If(counter_reset,
+                counter.eq(0)
+            ).Elif(counter_ce,
+                counter.eq(counter + ww)
+            )
+        self.mf = Signal(reset=0)  # mf == More Fragments
+        self.fragment_offset = Signal(13, reset=0)
+        self.identification = Signal(15, reset=0)
+        bytes_in_fragment = Signal(16, reset=0)
+        IP_MTU = eth_mtu - 30 - ipv4_header_length
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+                sink.ready.eq(1),
+                source.length.eq(sink.length),
+                If(sink.valid,
+                   If(sink.length < IP_MTU,
+                       NextValue(self.mf, 0),
+                       NextValue(self.fragment_offset, 0),
+                       NextValue(self.identification, 0),
+                       sink.connect(source)
+                   ).Else(
+                       sink.ready.eq(0),
+                       source.length.eq(bytes_in_fragment),
+                       counter_reset.eq(1),
+                       NextValue(self.mf, 1),
+                       NextValue(self.fragment_offset, 0),
+                       NextValue(self.identification, self.identification + 1),
+                       NextValue(bytes_in_fragment, IP_MTU),
+                       NextState("FRAGMENTED_PACKET_SEND")
+                   )
+                )
+            )
+
+        fsm.act("FRAGMENTED_PACKET_SEND",
+                sink.connect(source),
+                source.length.eq(bytes_in_fragment),
+                If(sink.valid & source.ready,
+                   counter_ce.eq(1)
+                ),
+                If(counter >= (bytes_in_fragment - ww),
+                   NextValue(self.fragment_offset,
+                             self.fragment_offset + (bytes_in_fragment >> 3)),
+                   source.last.eq(1),
+                   If(((self.fragment_offset << 3) + counter + ww) >= sink.length,
+                      NextValue(self.fragment_offset, 0),
+                      NextState("IDLE")
+                   ).Else(
+                       counter_ce.eq(0),
+                       NextState("NEXT_FRAGMENT")
+                   )
+                )
+        )
+
+        fsm.act("NEXT_FRAGMENT",
+                counter_ce.eq(0),
+                sink.ready.eq(0),
+                source.valid.eq(0),
+                source.length.eq(bytes_in_fragment),
+                If((sink.length - (self.fragment_offset << 3)) > IP_MTU,
+                    NextValue(bytes_in_fragment, IP_MTU),
+                    counter_reset.eq(1)
+                ).Else(
+                    NextValue(bytes_in_fragment,
+                              sink.length - (self.fragment_offset << 3)),
+                    NextValue(self.mf, 0),
+                    counter_reset.eq(1)
+                ),
+                NextState("FRAGMENTED_PACKET_SEND")
+        )
+
+
 class LiteEthIPTX(Module):
     def __init__(self, mac_address, ip_address, arp_table, dw=8):
         self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
@@ -105,20 +197,24 @@ class LiteEthIPTX(Module):
             checksum.reset.eq(source.valid & source.last & source.ready)
         ]
 
+        self.submodules.ip_fragmenter = ip_fragmenter = LiteEthIPV4Fragmenter(dw)
+        self.comb += sink.connect(ip_fragmenter.sink)
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [
-            packetizer.sink.valid.eq(sink.valid & checksum.done),
-            packetizer.sink.last.eq(sink.last),
-            sink.ready.eq(packetizer.sink.ready & checksum.done),
-            packetizer.sink.target_ip.eq(sink.ip_address),
-            packetizer.sink.protocol.eq(sink.protocol),
-            packetizer.sink.total_length.eq(sink.length + (0x5*4)),
+            packetizer.sink.valid.eq(ip_fragmenter.source.valid & checksum.done),
+            packetizer.sink.last.eq(ip_fragmenter.source.last),
+            ip_fragmenter.source.ready.eq(packetizer.sink.ready & checksum.done),
+            packetizer.sink.target_ip.eq(ip_fragmenter.source.ip_address),
+            packetizer.sink.protocol.eq(ip_fragmenter.source.protocol),
+            packetizer.sink.total_length.eq(ip_fragmenter.source.length + (0x5*4)),
             packetizer.sink.version.eq(0x4),     # ipv4
             packetizer.sink.ihl.eq(0x5),         # 20 bytes
-            packetizer.sink.identification.eq(0),
+            packetizer.sink.identification.eq(ip_fragmenter.identification),
+            packetizer.sink.flags_offset.eq(Cat(ip_fragmenter.fragment_offset,
+                                                ip_fragmenter.mf)),
             packetizer.sink.ttl.eq(0x80),
             packetizer.sink.sender_ip.eq(ip_address),
-            packetizer.sink.data.eq(sink.data),
+            packetizer.sink.data.eq(ip_fragmenter.source.data),
             checksum.header.eq(packetizer.header),
             packetizer.sink.checksum.eq(checksum.value)
         ]
@@ -133,7 +229,7 @@ class LiteEthIPTX(Module):
                 NextState("SEND_MAC_ADDRESS_REQUEST")
             )
         )
-        self.comb += arp_table.request.ip_address.eq(sink.ip_address)
+        self.comb += arp_table.request.ip_address.eq(ip_fragmenter.source.ip_address)
         fsm.act("SEND_MAC_ADDRESS_REQUEST",
             arp_table.request.valid.eq(1),
             If(arp_table.request.valid & arp_table.request.ready,

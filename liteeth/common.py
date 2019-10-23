@@ -64,15 +64,16 @@ arp_header = Header(arp_header_fields,
 
 ipv4_header_length = 20
 ipv4_header_fields = {
-    "ihl":            HeaderField(0,  0,  4),
-    "version":        HeaderField(0,  4,  4),
-    "total_length":   HeaderField(2,  0, 16),
-    "identification": HeaderField(4,  0, 16),
-    "ttl":            HeaderField(8,  0,  8),
-    "protocol":       HeaderField(9,  0,  8),
-    "checksum":       HeaderField(10, 0, 16),
-    "sender_ip":      HeaderField(12, 0, 32),
-    "target_ip":      HeaderField(16, 0, 32)
+    "ihl":             HeaderField(0,  0,  4),
+    "version":         HeaderField(0,  4,  4),
+    "total_length":    HeaderField(2,  0, 16),
+    "identification":  HeaderField(4,  0, 16),
+    "flags_offset":    HeaderField(6,  0, 16),
+    "ttl":             HeaderField(8,  0,  8),
+    "protocol":        HeaderField(9,  0,  8),
+    "checksum":        HeaderField(10, 0, 16),
+    "sender_ip":       HeaderField(12, 0, 32),
+    "target_ip":       HeaderField(16, 0, 32)
 }
 ipv4_header = Header(ipv4_header_fields,
                      ipv4_header_length,

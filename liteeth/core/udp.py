@@ -95,6 +95,7 @@ class LiteEthUDPTX(Module):
 
         # # #
 
+        shift = log2_int(dw // 8)  # bits required to represent bytes per word
         self.submodules.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
@@ -102,8 +103,9 @@ class LiteEthUDPTX(Module):
             sink.ready.eq(packetizer.sink.ready),
             packetizer.sink.src_port.eq(sink.src_port),
             packetizer.sink.dst_port.eq(sink.dst_port),
-            # TODO: Bad dw can screw the thing up below
-            packetizer.sink.length.eq(sink.length + udp_header.length),
+            # TODO: Bad dw can screw the thing up below, hence the shift
+            packetizer.sink.length.eq(((sink.length >> shift) << shift) +
+                                      udp_header.length),
             packetizer.sink.checksum.eq(0),  # TODO: Disabled (MAC CRC is enough)
             packetizer.sink.data.eq(sink.data)
         ]

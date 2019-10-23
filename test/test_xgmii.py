@@ -142,7 +142,7 @@ class UDPSimCore(litex_sim.SimSoC):
         udp_port = self.core.udp.crossbar.get_port(port, xgmii_dw if xgmii else 32)
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")
-        sink_length = 8
+        sink_length = 0x888
         self.comb += [udp_sink.data.eq(0xc0ffee00c0ffee11),
                       udp_sink.dst_port.eq(7778),
                       udp_sink.length.eq(sink_length),
@@ -184,6 +184,8 @@ class UDPSimCore(litex_sim.SimSoC):
 
         send_pkt = Signal(reset=0)
         always_xmit = True
+        dw = xgmii_dw if xgmii else 32
+        shift = log2_int(dw // 8)  # bits required to represent bytes per word
         if always_xmit:
             send_pkt_counter, send_pkt_counter_d = Signal(17), Signal()
             self.sync += [send_pkt_counter.eq(send_pkt_counter + 1),
@@ -194,7 +196,7 @@ class UDPSimCore(litex_sim.SimSoC):
         sink_counter = Signal(16)
         self.comb += [udp_sink.valid.eq(sink_counter > 0),
                       udp_sink.last.eq(sink_counter == 1)]
-        self.sync += [If(send_pkt, sink_counter.eq(sink_length >> 3)),
+        self.sync += [If(send_pkt, sink_counter.eq(sink_length >> shift)),
                       If((sink_counter > 0) & (udp_sink.ready == 1),
                          sink_counter.eq(sink_counter - 1))
         ]
