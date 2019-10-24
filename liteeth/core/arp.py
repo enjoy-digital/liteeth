@@ -213,7 +213,7 @@ class LiteEthARPTable(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            # Note: for simplicicy, if APR table is busy response from arp_rx
+            # Note: for simplicicy, if ARP table is busy response from arp_rx
             # is lost. This is compensated by the protocol (retries)
             If(sink.valid & sink.request,
                 NextState("SEND_REPLY")
@@ -244,10 +244,6 @@ class LiteEthARPTable(Module):
                 cached_valid.eq(1),
                 cached_ip_address.eq(sink.ip_address),
                 cached_mac_address.eq(sink.mac_address),
-            ).Else(
-                If(cached_timer.done,
-                    cached_valid.eq(0)
-                )
             )
         self.comb += cached_timer.wait.eq(~update)
         fsm.act("CHECK_TABLE",

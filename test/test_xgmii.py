@@ -142,7 +142,7 @@ class UDPSimCore(litex_sim.SimSoC):
         udp_port = self.core.udp.crossbar.get_port(port, xgmii_dw if xgmii else 32)
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")
-        sink_length = 0x888
+        sink_length = 0x8888
         self.comb += [udp_sink.data.eq(0xc0ffee00c0ffee11),
                       udp_sink.dst_port.eq(7778),
                       udp_sink.length.eq(sink_length),

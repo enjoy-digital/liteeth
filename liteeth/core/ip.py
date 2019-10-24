@@ -107,8 +107,7 @@ class LiteEthIPV4Fragmenter(Module):
         self.comb += sink.connect(source)
         ww = dw // 8
         # counter logic ;)
-        counter = Signal(max=8192)
-        counter_done = Signal()
+        counter = Signal(max=16384)
         counter_reset = Signal()
         counter_ce = Signal()
         self.sync += \
@@ -117,28 +116,29 @@ class LiteEthIPV4Fragmenter(Module):
             ).Elif(counter_ce,
                 counter.eq(counter + ww)
             )
-        self.mf = Signal(reset=0)  # mf == More Fragments
-        self.fragment_offset = Signal(13, reset=0)
-        self.identification = Signal(15, reset=0)
+        self.mf = mf = Signal(reset=0)  # mf == More Fragments
+        self.fragment_offset = fragment_offset = Signal(13, reset=0)
+        self.identification = identification = Signal(16, reset=0)
         bytes_in_fragment = Signal(16, reset=0)
-        IP_MTU = eth_mtu - 30 - ipv4_header_length
+        # Making sure we only fragment in blocks of 8 bytes
+        IP_MTU = ((eth_mtu - 30 - ipv4_header_length) >> 3) << 3
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
                 sink.ready.eq(1),
                 source.length.eq(sink.length),
                 If(sink.valid,
                    If(sink.length < IP_MTU,
-                       NextValue(self.mf, 0),
-                       NextValue(self.fragment_offset, 0),
-                       NextValue(self.identification, 0),
+                       NextValue(mf, 0),
+                       NextValue(fragment_offset, 0),
+                       NextValue(identification, 0),
                        sink.connect(source)
                    ).Else(
                        sink.ready.eq(0),
                        source.length.eq(bytes_in_fragment),
                        counter_reset.eq(1),
-                       NextValue(self.mf, 1),
-                       NextValue(self.fragment_offset, 0),
-                       NextValue(self.identification, self.identification + 1),
+                       NextValue(mf, 1),
+                       NextValue(fragment_offset, 0),
+                       NextValue(identification, identification + 1),
                        NextValue(bytes_in_fragment, IP_MTU),
                        NextState("FRAGMENTED_PACKET_SEND")
                    )
@@ -151,12 +151,12 @@ class LiteEthIPV4Fragmenter(Module):
                 If(sink.valid & source.ready,
                    counter_ce.eq(1)
                 ),
-                If(counter >= (bytes_in_fragment - ww),
-                   NextValue(self.fragment_offset,
-                             self.fragment_offset + (bytes_in_fragment >> 3)),
+                If(counter == (bytes_in_fragment - ww),
+                   NextValue(fragment_offset,
+                             fragment_offset + (bytes_in_fragment >> 3)),
                    source.last.eq(1),
-                   If(((self.fragment_offset << 3) + counter + ww) >= sink.length,
-                      NextValue(self.fragment_offset, 0),
+                   If(((fragment_offset << 3) + counter + ww) == sink.length,
+                      NextValue(fragment_offset, 0),
                       NextState("IDLE")
                    ).Else(
                        counter_ce.eq(0),
@@ -170,16 +170,28 @@ class LiteEthIPV4Fragmenter(Module):
                 sink.ready.eq(0),
                 source.valid.eq(0),
                 source.length.eq(bytes_in_fragment),
-                If((sink.length - (self.fragment_offset << 3)) > IP_MTU,
+                If((sink.length - (fragment_offset << 3)) > IP_MTU,
                     NextValue(bytes_in_fragment, IP_MTU),
                     counter_reset.eq(1)
                 ).Else(
                     NextValue(bytes_in_fragment,
-                              sink.length - (self.fragment_offset << 3)),
-                    NextValue(self.mf, 0),
+                              sink.length - (fragment_offset << 3)),
+                    NextValue(mf, 0),
                     counter_reset.eq(1)
                 ),
-                NextState("FRAGMENTED_PACKET_SEND")
+                NextState("FLUSH_PIPELINE")
+        )
+
+        fsm.act("FLUSH_PIPELINE",
+                counter_ce.eq(1),
+                sink.ready.eq(0),
+                source.valid.eq(0),
+                source.length.eq(bytes_in_fragment),
+                If(counter == (100 << 3),
+                   counter_ce.eq(0),
+                   counter_reset.eq(1),
+                   NextState("FRAGMENTED_PACKET_SEND")
+                )
         )
 
 
