@@ -187,7 +187,7 @@ class LiteEthIPV4Fragmenter(Module):
                 sink.ready.eq(0),
                 source.valid.eq(0),
                 source.length.eq(bytes_in_fragment),
-                If(counter == (100 << 3),
+                If(counter == (20 << 3),
                    counter_ce.eq(0),
                    counter_reset.eq(1),
                    NextState("FRAGMENTED_PACKET_SEND")
