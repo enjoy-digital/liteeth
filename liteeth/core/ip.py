@@ -179,7 +179,7 @@ class LiteEthIPV4Fragmenter(Module):
                     NextValue(mf, 0),
                     counter_reset.eq(1)
                 ),
-                NextState("FLUSH_PIPELINE")
+                NextState("FRAGMENTED_PACKET_SEND")
         )
 
         fsm.act("FLUSH_PIPELINE",
