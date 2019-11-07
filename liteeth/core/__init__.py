@@ -7,6 +7,8 @@ from liteeth.core.icmp import LiteEthICMP
 
 class LiteEthIPCore(Module, AutoCSR):
     def __init__(self, phy, mac_address, ip_address, clk_freq, with_icmp=True):
+        if isinstance(ip_address, str):
+            ip_address = convert_ip(ip_address)
         self.submodules.mac = LiteEthMAC(phy, 8, interface="crossbar", with_preamble_crc=True)
         self.submodules.arp = LiteEthARP(self.mac, mac_address, ip_address, clk_freq)
         self.submodules.ip = LiteEthIP(self.mac, mac_address, ip_address, self.arp.table)
@@ -16,5 +18,7 @@ class LiteEthIPCore(Module, AutoCSR):
 
 class LiteEthUDPIPCore(LiteEthIPCore):
     def __init__(self, phy, mac_address, ip_address, clk_freq, with_icmp=True):
+        if isinstance(ip_address, str):
+            ip_address = convert_ip(ip_address)
         LiteEthIPCore.__init__(self, phy, mac_address, ip_address, clk_freq, with_icmp)
         self.submodules.udp = LiteEthUDP(self.ip, ip_address)
