@@ -37,7 +37,7 @@ _io = [
         Subsignal("rst_n", Pins(1)),
         Subsignal("mdio", Pins(1)),
         Subsignal("mdc", Pins(1)),
-        Subsignal("dv", Pins(1)),
+        Subsignal("rx_dv", Pins(1)),
         Subsignal("rx_er", Pins(1)),
         Subsignal("rx_data", Pins(4)),
         Subsignal("tx_en", Pins(4)),
@@ -71,7 +71,7 @@ _io = [
         Subsignal("int_n", Pins(1)),
         Subsignal("mdio", Pins(1)),
         Subsignal("mdc", Pins(1)),
-        Subsignal("dv", Pins(1)),
+        Subsignal("rx_dv", Pins(1)),
         Subsignal("rx_er", Pins(1)),
         Subsignal("rx_data", Pins(8)),
         Subsignal("tx_en", Pins(1)),
@@ -210,8 +210,8 @@ class MACCore(PHYCore):
             def __init__(self, interface):
                 self.wishbone = interface
 
-        self.add_cpu_or_bridge(_WishboneBridge(self.platform.request("wishbone")))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.add_cpu(_WishboneBridge(self.platform.request("wishbone")))
+        self.add_wb_master(self.cpu.wishbone)
 
 
 class UDPCore(PHYCore):
@@ -267,7 +267,7 @@ def main():
     parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
     args = parser.parse_args()
 
-    if args.core == "mac":
+    if args.core == "wishbone":
         soc = MACCore(phy=args.phy, clk_freq=100*1000000)
     elif args.core == "udp":
         soc =  UDPCore(phy=args.phy, clk_freq=100*10000000,
