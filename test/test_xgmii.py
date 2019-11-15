@@ -3,25 +3,154 @@
 import argparse
 
 from migen import *
+from migen.genlib.io import CRG
 
 from litex.build.generic_platform import *
-from litex.build.xilinx.platform import XilinxPlatform
-
-from litex.soc.interconnect import wishbone
-from litex.soc.integration.soc_core import *
-from litex.soc.integration.builder import *
-
-from liteeth.common import *
-
-from liteeth.phy.usrgmii import LiteEthPHYRGMII
-from liteeth.phy.xgmii import LiteEthPHYXGMII
-from liteeth.core import LiteEthUDPIPCore
-
-from litex.tools import litex_sim
+from litex.build.sim import SimPlatform
 from litex.build.sim.config import SimConfig
 
-SimPins = litex_sim.SimPins
+from litex.soc.integration.soc_core import *
+from litex.soc.integration.builder import *
+from litex.soc.cores import uart
 
+from liteeth.common import *
+from liteeth.phy.model import LiteEthPHYModel
+from liteeth.phy.xgmii import LiteEthPHYXGMII
+from liteeth.phy.usrgmii import LiteEthPHYRGMII
+from liteeth.core import LiteEthUDPIPCore
+
+class SimPins(Pins):
+    def __init__(self, n=1):
+        Pins.__init__(self, "s "*n)
+
+
+_io = [
+    ("sys_clk", 0, SimPins(1)),
+    ("sys_rst", 0, SimPins(1)),
+    ("serial", 0,
+        Subsignal("source_valid", SimPins()),
+        Subsignal("source_ready", SimPins()),
+        Subsignal("source_data", SimPins(8)),
+
+        Subsignal("sink_valid", SimPins()),
+        Subsignal("sink_ready", SimPins()),
+        Subsignal("sink_data", SimPins(8)),
+     ),
+    ("eth_clocks", 0,
+        Subsignal("none", SimPins()),
+     ),
+    ("eth", 0,
+        Subsignal("source_valid", SimPins()),
+        Subsignal("source_ready", SimPins()),
+        Subsignal("source_data", SimPins(8)),
+
+        Subsignal("sink_valid", SimPins()),
+        Subsignal("sink_ready", SimPins()),
+        Subsignal("sink_data", SimPins(8)),
+     ),
+    ("eth_clocks", 1,
+        Subsignal("none", SimPins()),
+     ),
+    ("eth", 1,
+        Subsignal("source_valid", SimPins()),
+        Subsignal("source_ready", SimPins()),
+        Subsignal("source_data", SimPins(8)),
+
+        Subsignal("sink_valid", SimPins()),
+        Subsignal("sink_ready", SimPins()),
+        Subsignal("sink_data", SimPins(8)),
+     ),
+]
+
+
+def xgmii_io(dw):
+    return [
+        ("sys_clk", 0, SimPins(1)),
+        ("sys_rst", 0, SimPins(1)),
+        ("serial", 0,
+         Subsignal("source_valid", SimPins()),
+         Subsignal("source_ready", SimPins()),
+         Subsignal("source_data", SimPins(8)),
+         Subsignal("sink_valid", SimPins()),
+         Subsignal("sink_ready", SimPins()),
+         Subsignal("sink_data", SimPins(8)),
+        ),
+        ("eth_clocks", 0,
+         Subsignal("none", SimPins()),
+        ),
+        ("eth", 0,
+         Subsignal("tx_data", SimPins(dw)),
+         Subsignal("tx_ctl", SimPins(dw//8)),
+         Subsignal("rx_data", SimPins(dw)),
+         Subsignal("rx_ctl", SimPins(dw//8)),
+        ),
+        ("eth_clocks", 1,
+         Subsignal("none", SimPins()),
+        ),
+        ("eth", 1,
+         Subsignal("source_valid", SimPins()),
+         Subsignal("source_ready", SimPins()),
+         Subsignal("source_data", SimPins(8)),
+
+         Subsignal("sink_valid", SimPins()),
+         Subsignal("sink_ready", SimPins()),
+         Subsignal("sink_data", SimPins(8)),
+        ),
+    ]
+
+class Platform(SimPlatform):
+    default_clk_name = "sys_clk"
+    default_clk_period = 1000  # ~ 1MHz
+
+    def __init__(self, io=_io):
+        SimPlatform.__init__(self, "SIM", io)
+
+    def do_finalize(self, fragment):
+        pass
+
+class SimSoC(SoCCore):
+    def __init__(self,
+                 with_udp=False,
+                 mac_address=0x10e2d5000000, ip_address="192.168.1.50",
+                 xgmii=False,
+                 xgmii_dw=32,
+                 platform=Platform(),
+                 **kwargs):
+        # platform = Platform()
+        sys_clk_freq = int(1e6)
+        SoCCore.__init__(self, platform, clk_freq=sys_clk_freq,
+                          integrated_rom_size=0x8000,
+                          ident="LiteX Simulation", ident_version=True,
+                          with_uart=False,
+                          **kwargs)
+        # crg
+        self.submodules.crg = CRG(platform.request("sys_clk"))
+
+        # serial
+        self.submodules.uart_phy = uart.RS232PHYModel(
+            platform.request("serial"))
+        self.submodules.uart = uart.UART(self.uart_phy)
+        self.add_csr("uart")
+        self.add_interrupt("uart")
+
+        if with_udp:
+            # eth phy
+            if xgmii:
+                self.submodules.ethphy = LiteEthPHYXGMII(
+                    self.platform.request("eth_clocks", 0),
+                    self.platform.request("eth", 0),
+                    model=True,
+                    dw=xgmii_dw)
+                self.submodules.core = LiteEthUDPIPCore(
+                    self.ethphy, mac_address, convert_ip(ip_address),
+                    sys_clk_freq, mac_dw=xgmii_dw)
+            else:
+                self.submodules.ethphy = LiteEthPHYModel(self.platform.request("eth", 0))
+                self.submodules.core = LiteEthUDPIPCore(
+                    self.ethphy, mac_address, convert_ip(ip_address),
+                    sys_clk_freq)
+            self.add_csr("ethphy")
+            # udp ip
 
 def _udp_port(dw=32):
     return [
@@ -71,8 +200,7 @@ rgmii_io = [
     ),
 ] + _udp_port()
 
-
-def xgmii_io(dw=32):
+def xgmii_io2(dw=32):
     return [
         ("sys_clock", 0, Pins(1)),
         ("sys_reset", 1, Pins(1)),
@@ -87,7 +215,6 @@ def xgmii_io(dw=32):
          Subsignal("tx_data", Pins(dw))
         ),
     ] + _udp_port(dw)
-
 
 def sim_udp_port(dw=32):
     return [
@@ -121,23 +248,22 @@ def sim_udp_port(dw=32):
     ]
 
 
-class UDPSimCore(litex_sim.SimSoC):
+class UDPSimCore(SimSoC):
     def __init__(self, mac_address, ip_address, port, xgmii=True, xgmii_dw=32, **kwargs):
         if xgmii:
-            XGMII_IO = litex_sim.xgmii_io(xgmii_dw) + sim_udp_port(xgmii_dw)
-            platform = litex_sim.Platform(XGMII_IO)
-            litex_sim.SimSoC.__init__(self, with_udp=True, platform=platform,
+            XGMII_IO = xgmii_io(xgmii_dw) + sim_udp_port(xgmii_dw)
+            platform = Platform(XGMII_IO)
+            SimSoC.__init__(self, with_udp=True, platform=platform,
                                       ip_address=ip_address,
                                       mac_address=mac_address,
                                       xgmii=xgmii,
                                       xgmii_dw=xgmii_dw, **kwargs)
         else:
-            RGMII_IO = litex_sim._io + sim_udp_port()
-            platform = litex_sim.Platform(RGMII_IO)
-            litex_sim.SimSoC.__init__(self,
-                                      ip_address=ip_address,
-                                      mac_address=mac_address,
-                                      with_udp=True, platform=platform, **kwargs)
+            RGMII_IO = _io + sim_udp_port()
+            platform = Platform(RGMII_IO)
+            SimSoC.__init__(self, ip_address=ip_address,
+                                  mac_address=mac_address,
+                                  with_udp=True, platform=platform, **kwargs)
 
         udp_port = self.core.udp.crossbar.get_port(port, xgmii_dw if xgmii else 32)
         # XXX avoid manual connect
