@@ -15,7 +15,7 @@ and introduces some limitations:
 from liteeth.common import *
 
 from litex.soc.interconnect import wishbone
-from litex.soc.interconnect.stream_packet import *
+from litex.soc.interconnect.packet import *
 
 # etherbone packet
 

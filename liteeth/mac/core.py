@@ -53,8 +53,8 @@ class LiteEthMACCore(Module, AutoCSR):
 
             tx_pipeline += [preamble_inserter, crc32_inserter]
             # TODO: add crc for prod
-            rx_pipeline += [preamble_checker, crc32_checker]
-            # rx_pipeline += [preamble_checker]
+            # rx_pipeline += [preamble_checker, crc32_checker]
+            rx_pipeline += [preamble_checker]
 
             # Error counters
             self.submodules.ps_preamble_error = PulseSynchronizer("eth_rx", "sys")

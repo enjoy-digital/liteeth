@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 from liteeth.common import *
 
-from litex.soc.interconnect.stream_packet import Arbiter, Dispatcher
+from litex.soc.interconnect.packet import Arbiter, Dispatcher
 
 
 class LiteEthCrossbar(Module):
