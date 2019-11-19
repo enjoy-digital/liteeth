@@ -2,7 +2,7 @@
 Example of UDP loopback on versa ECP5 FPGA using the Liteeth UDP module.
 The FPGA will echo back any UDP packet it recieves over RJ45 ethernet to the sender.
 
-You can also view a rather detail tutorial [here](http://127.0.0.1:8000/fpga/migen/ethernet_ecp5/).
+You can also view a rather detail tutorial [here](https://yehowshuaimmanuel.com/fpga/migen/ethernet_ecp5/).
 
 ## Usage
 
