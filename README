@@ -61,7 +61,8 @@ enjoy-digital.fr.
   python3 setup.py develop
   cd ..
 
-3. TODO: add/describe examples
+3. Check out /examples/versa_ecp5_udp_loopback for a good practical example of how to get
+started with the Liteeth core solo in an FPGA.
 
 [> Tests
 --------
