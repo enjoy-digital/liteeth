@@ -1,3 +1,6 @@
+# This file is Copyright (c) 2019 Yehowshua Immanuel <yimmanuel3@gatech.edu>
+# License: BSD
+
 import socket
 
 UDP_IP = "169.253.2.100"

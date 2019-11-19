@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # This file is Copyright (c) 2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2019 Yehowshua Immanuel <yimmanuel3@gatech.edu>
 # License: BSD
 
 import sys

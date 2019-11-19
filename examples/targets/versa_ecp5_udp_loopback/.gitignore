@@ -3,3 +3,4 @@ build/*
 ecp5-versa5g.cfg
 tools/*
 .*.sw[m-p]
+.DS_Store
