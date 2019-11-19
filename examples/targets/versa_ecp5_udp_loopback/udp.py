@@ -62,7 +62,7 @@ class UDPLoopback(SoCMini):
 		self.submodules.eth_core = LiteEthUDPIPCore(
 			phy         = self.eth_phy,
 			mac_address = 0x10e2d5000000,
-			ip_address  = "169.253.2.50",
+			ip_address  = "192.168.1.50",
 			clk_freq    = sys_clk_freq)
 
 		# add udp loopback on port 6000 with dw=8

@@ -2,7 +2,7 @@
 # License: BSD
 import socket
 
-UDP_IP = "169.253.2.50"
+UDP_IP = "192.168.1.50"
 UDP_PORT = 8000
 MESSAGE = "Hey."
 
