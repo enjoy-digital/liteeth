@@ -29,13 +29,13 @@ class LiteEthIPV4UserPort(LiteEthIPV4SlavePort):
 
 
 class LiteEthIPV4Crossbar(LiteEthCrossbar):
-    def __init__(self):
-        LiteEthCrossbar.__init__(self, LiteEthIPV4MasterPort, "protocol")
+    def __init__(self, dw=8):
+        LiteEthCrossbar.__init__(self, LiteEthIPV4MasterPort, "protocol", dw)
 
-    def get_port(self, protocol):
+    def get_port(self, protocol, dw=8):
         if protocol in self.users.keys():
             raise ValueError("Protocol {0:#x} already assigned".format(protocol))
-        port = LiteEthIPV4UserPort(8)
+        port = LiteEthIPV4UserPort(dw)
         self.users[protocol] = port
         return port
 
@@ -84,17 +84,17 @@ class LiteEthIPV4Checksum(Module):
 # ip tx
 
 class LiteEthIPV4Packetizer(Packetizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Packetizer.__init__(self,
-            eth_ipv4_description(8),
-            eth_mac_description(8),
+            eth_ipv4_description(dw),
+            eth_mac_description(dw),
             ipv4_header)
 
 
 class LiteEthIPTX(Module):
-    def __init__(self, mac_address, ip_address, arp_table):
-        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(8))
-        self.source = source = stream.Endpoint(eth_mac_description(8))
+    def __init__(self, mac_address, ip_address, arp_table, dw=8):
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.source = source = stream.Endpoint(eth_mac_description(dw))
         self.target_unreachable = Signal()
 
         # # #
@@ -105,7 +105,7 @@ class LiteEthIPTX(Module):
             checksum.reset.eq(source.valid & source.last & source.ready)
         ]
 
-        self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer()
+        self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [
             packetizer.sink.valid.eq(sink.valid & checksum.done),
             packetizer.sink.last.eq(sink.last),
@@ -176,21 +176,21 @@ class LiteEthIPTX(Module):
 # ip rx
 
 class LiteEthIPV4Depacketizer(Depacketizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Depacketizer.__init__(self,
-            eth_mac_description(8),
-            eth_ipv4_description(8),
+            eth_mac_description(dw),
+            eth_ipv4_description(dw),
             ipv4_header)
 
 
 class LiteEthIPRX(Module):
-    def __init__(self, mac_address, ip_address):
-        self.sink = sink = stream.Endpoint(eth_mac_description(8))
-        self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
+    def __init__(self, mac_address, ip_address, dw=8):
+        self.sink = sink = stream.Endpoint(eth_mac_description(dw))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthIPV4Depacketizer()
+        self.submodules.depacketizer = depacketizer = LiteEthIPV4Depacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
@@ -253,15 +253,15 @@ class LiteEthIPRX(Module):
 # ip
 
 class LiteEthIP(Module):
-    def __init__(self, mac, mac_address, ip_address, arp_table):
-        self.submodules.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table)
-        self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address)
-        mac_port = mac.crossbar.get_port(ethernet_type_ip)
+    def __init__(self, mac, mac_address, ip_address, arp_table, dw=8):
+        self.submodules.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
+        self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address, dw=dw)
+        mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [
             tx.source.connect(mac_port.sink),
             mac_port.source.connect(rx.sink)
         ]
-        self.submodules.crossbar = crossbar = LiteEthIPV4Crossbar()
+        self.submodules.crossbar = crossbar = LiteEthIPV4Crossbar(dw)
         self.comb += [
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)

@@ -14,9 +14,9 @@ class LiteEthMAC(Module, AutoCSR):
         self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
         self.csrs = []
         if interface == "crossbar":
-            self.submodules.crossbar = LiteEthMACCrossbar()
-            self.submodules.packetizer = LiteEthMACPacketizer()
-            self.submodules.depacketizer = LiteEthMACDepacketizer()
+            self.submodules.crossbar = LiteEthMACCrossbar(dw)
+            self.submodules.packetizer = LiteEthMACPacketizer(dw)
+            self.submodules.depacketizer = LiteEthMACDepacketizer(dw)
             self.comb += [
                 self.crossbar.master.source.connect(self.packetizer.sink),
                 self.packetizer.source.connect(self.core.sink),

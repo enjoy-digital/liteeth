@@ -9,21 +9,21 @@ from litex.soc.interconnect.packet import Depacketizer, Packetizer
 # icmp tx
 
 class LiteEthICMPPacketizer(Packetizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Packetizer.__init__(self,
-            eth_icmp_description(8),
-            eth_ipv4_user_description(8),
+            eth_icmp_description(dw),
+            eth_ipv4_user_description(dw),
             icmp_header)
 
 
 class LiteEthICMPTX(Module):
-    def __init__(self, ip_address):
-        self.sink = sink = stream.Endpoint(eth_icmp_user_description(8))
-        self.source = source = stream.Endpoint(eth_ipv4_user_description(8))
+    def __init__(self, ip_address, dw=8):
+        self.sink = sink = stream.Endpoint(eth_icmp_user_description(dw))
+        self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthICMPPacketizer()
+        self.submodules.packetizer = packetizer = LiteEthICMPPacketizer(dw)
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
             packetizer.sink.last.eq(sink.last),
@@ -56,21 +56,21 @@ class LiteEthICMPTX(Module):
 # icmp rx
 
 class LiteEthICMPDepacketizer(Depacketizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Depacketizer.__init__(self,
-            eth_ipv4_user_description(8),
-            eth_icmp_description(8),
+            eth_ipv4_user_description(dw),
+            eth_icmp_description(dw),
             icmp_header)
 
 
 class LiteEthICMPRX(Module):
-    def __init__(self, ip_address):
-        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(8))
-        self.source = source = stream.Endpoint(eth_icmp_user_description(8))
+    def __init__(self, ip_address, dw=8):
+        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.source = source = stream.Endpoint(eth_icmp_user_description(dw))
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer()
+        self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -123,14 +123,14 @@ class LiteEthICMPRX(Module):
 # icmp echo
 
 class LiteEthICMPEcho(Module):
-    def __init__(self):
-        self.sink = sink = stream.Endpoint(eth_icmp_user_description(8))
-        self.source = source = stream.Endpoint(eth_icmp_user_description(8))
+    def __init__(self, dw=8):
+        self.sink = sink = stream.Endpoint(eth_icmp_user_description(dw))
+        self.source = source = stream.Endpoint(eth_icmp_user_description(dw))
 
         # # #
 
         # TODO: optimize ressources (no need to store parameters as datas)
-        self.submodules.buffer = stream.SyncFIFO(eth_icmp_user_description(8), 128, buffered=True)
+        self.submodules.buffer = stream.SyncFIFO(eth_icmp_user_description(dw), 128//(dw//8), buffered=True)
         self.comb += [
             sink.connect(self.buffer.sink),
             self.buffer.source.connect(source),
@@ -141,15 +141,15 @@ class LiteEthICMPEcho(Module):
 # icmp
 
 class LiteEthICMP(Module):
-    def __init__(self, ip, ip_address):
-        self.submodules.tx = tx = LiteEthICMPTX(ip_address)
-        self.submodules.rx = rx = LiteEthICMPRX(ip_address)
-        self.submodules.echo = echo = LiteEthICMPEcho()
+    def __init__(self, ip, ip_address, dw=8):
+        self.submodules.tx = tx = LiteEthICMPTX(ip_address, dw)
+        self.submodules.rx = rx = LiteEthICMPRX(ip_address, dw)
+        self.submodules.echo = echo = LiteEthICMPEcho(dw)
         self.comb += [
             rx.source.connect(echo.sink),
             echo.source.connect(tx.sink)
         ]
-        ip_port = ip.crossbar.get_port(icmp_protocol)
+        ip_port = ip.crossbar.get_port(icmp_protocol, dw)
         self.comb += [
             tx.source.connect(ip_port.sink),
             ip_port.source.connect(rx.sink)

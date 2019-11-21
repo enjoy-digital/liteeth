@@ -18,21 +18,21 @@ _arp_table_layout = [
 # arp tx
 
 class LiteEthARPPacketizer(Packetizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Packetizer.__init__(self,
-            eth_arp_description(8),
-            eth_mac_description(8),
+            eth_arp_description(dw),
+            eth_mac_description(dw),
             arp_header)
 
 
 class LiteEthARPTX(Module):
-    def __init__(self, mac_address, ip_address):
+    def __init__(self, mac_address, ip_address, dw=8):
         self.sink = sink = stream.Endpoint(_arp_table_layout)
-        self.source = source = stream.Endpoint(eth_mac_description(8))
+        self.source = source = stream.Endpoint(eth_mac_description(dw))
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthARPPacketizer()
+        self.submodules.packetizer = packetizer = LiteEthARPPacketizer(dw)
 
         counter = Signal(max=max(arp_header.length, eth_min_len), reset_less=True)
         counter_reset = Signal()
@@ -89,21 +89,21 @@ class LiteEthARPTX(Module):
 # arp rx
 
 class LiteEthARPDepacketizer(Depacketizer):
-    def __init__(self):
+    def __init__(self, dw=8):
         Depacketizer.__init__(self,
-            eth_mac_description(8),
-            eth_arp_description(8),
+            eth_mac_description(dw),
+            eth_arp_description(dw),
             arp_header)
 
 
 class LiteEthARPRX(Module):
-    def __init__(self, mac_address, ip_address):
-        self.sink = sink = stream.Endpoint(eth_mac_description(8))
+    def __init__(self, mac_address, ip_address, dw=8):
+        self.sink = sink = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(_arp_table_layout)
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthARPDepacketizer()
+        self.submodules.depacketizer = depacketizer = LiteEthARPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -291,15 +291,15 @@ class LiteEthARPTable(Module):
 # arp
 
 class LiteEthARP(Module):
-    def __init__(self, mac, mac_address, ip_address, clk_freq):
-        self.submodules.tx = tx = LiteEthARPTX(mac_address, ip_address)
-        self.submodules.rx = rx = LiteEthARPRX(mac_address, ip_address)
+    def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8):
+        self.submodules.tx = tx = LiteEthARPTX(mac_address, ip_address, dw)
+        self.submodules.rx = rx = LiteEthARPRX(mac_address, ip_address, dw)
         self.submodules.table = table = LiteEthARPTable(clk_freq)
         self.comb += [
             rx.source.connect(table.sink),
             table.source.connect(tx.sink)
         ]
-        mac_port = mac.crossbar.get_port(ethernet_type_arp)
+        mac_port = mac.crossbar.get_port(ethernet_type_arp, dw=dw)
         self.comb += [
             tx.source.connect(mac_port.sink),
             mac_port.source.connect(rx.sink)
