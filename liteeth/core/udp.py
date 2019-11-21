@@ -31,16 +31,15 @@ class LiteEthUDPUserPort(LiteEthUDPSlavePort):
 
 class LiteEthUDPCrossbar(LiteEthCrossbar):
     def __init__(self, dw=8):
-        self.internal_dw = dw
+        self.dw = dw
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
     def get_port(self, udp_port, dw=8, cd="sys"):
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
-        internal_dw = self.internal_dw
         user_port = LiteEthUDPUserPort(dw)
-        internal_port = LiteEthUDPUserPort(internal_dw)
+        internal_port = LiteEthUDPUserPort(self.dw)
 
         # tx
         tx_stream = user_port.sink
@@ -50,9 +49,9 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
             self.submodules += tx_cdc
             self.comb += tx_stream.connect(tx_cdc.sink)
             tx_stream = tx_cdc.source
-        if dw != internal_dw:
+        if dw != self.dw:
             tx_converter = stream.StrideConverter(eth_udp_user_description(user_port.dw),
-                                                  eth_udp_user_description(internal_dw))
+                                                  eth_udp_user_description(self.dw))
             self.submodules += tx_converter
             self.comb += tx_stream.connect(tx_converter.sink)
             tx_stream = tx_converter.source
@@ -60,8 +59,8 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         # rx
         rx_stream = internal_port.source
-        if dw != internal_dw:
-            rx_converter = stream.StrideConverter(eth_udp_user_description(internal_dw),
+        if dw != self.dw:
+            rx_converter = stream.StrideConverter(eth_udp_user_description(self.dw),
                                                   eth_udp_user_description(user_port.dw))
             self.submodules += rx_converter
             self.comb += rx_stream.connect(rx_converter.sink)
@@ -112,11 +111,10 @@ class LiteEthUDPTX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
+            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
                 packetizer.source.ready.eq(0),
                 NextState("SEND")
-            ).Else(
-                packetizer.source.ready.eq(1),
             )
         )
         fsm.act("SEND",
