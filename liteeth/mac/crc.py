@@ -329,7 +329,7 @@ class LiteEthMACCRCChecker(Module):
 
         self.error = Signal()
 
-        # # # #
+        # # #
 
         dw = len(sink.data)
 

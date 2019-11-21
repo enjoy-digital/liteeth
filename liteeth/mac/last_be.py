@@ -34,7 +34,6 @@ class LiteEthMACTXLastBE(Module):
             ]
 
 
-
 class LiteEthMACRXLastBE(Module):
     def __init__(self, dw):
         self.sink = sink = stream.Endpoint(eth_phy_description(dw))
