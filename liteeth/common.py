@@ -11,7 +11,7 @@ from litex.soc.interconnect import stream
 from litex.soc.interconnect.stream import EndpointDescription
 from litex.soc.interconnect.csr import *
 
-from litex.soc.interconnect.stream_packet import Header, HeaderField
+from litex.soc.interconnect.packet import Header, HeaderField
 
 
 class Port:

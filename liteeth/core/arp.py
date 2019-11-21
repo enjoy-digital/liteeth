@@ -5,7 +5,7 @@ from liteeth.common import *
 
 from migen.genlib.misc import WaitTimer
 
-from litex.soc.interconnect.stream_packet import Depacketizer, Packetizer
+from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 
 _arp_table_layout = [
