@@ -66,7 +66,6 @@ class LiteEthARPTX(Module):
                 packetizer.sink.target_mac.eq(sink.mac_address),
                 packetizer.sink.target_ip.eq(sink.ip_address)
             ).Elif(sink.request,
-
                 packetizer.sink.opcode.eq(arp_opcode_request),
                 packetizer.sink.target_mac.eq(0xffffffffffff),
                 packetizer.sink.target_ip.eq(sink.ip_address)
@@ -208,7 +207,7 @@ class LiteEthARPTable(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            # Note: for simplicicy, if APR table is busy response from arp_rx
+            # Note: for simplicicy, if ARP table is busy response from arp_rx
             # is lost. This is compensated by the protocol (retries)
             If(sink.valid & sink.request,
                 NextState("SEND_REPLY")
