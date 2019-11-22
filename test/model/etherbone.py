@@ -5,7 +5,7 @@ import math
 import copy
 
 from litex.soc.interconnect.stream_sim import *
-from litex.soc.tools.remote.etherbone import *
+from litex.tools.remote.etherbone import *
 
 from liteeth.common import *
 

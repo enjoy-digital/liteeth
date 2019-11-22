@@ -103,7 +103,7 @@ def main_generator(dut):
 
 
 class TestEtherbone(unittest.TestCase):
-    def test(self):
+    def _test(self): # FIXME
         dut = DUT()
         generators = {
             "sys" :   [main_generator(dut)],
