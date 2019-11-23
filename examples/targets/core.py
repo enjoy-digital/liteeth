@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import argparse
@@ -23,6 +23,8 @@ from liteeth.phy.s7rgmii import LiteEthPHYRGMII
 
 from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
+
+# IOs ----------------------------------------------------------------------------------------------
 
 _io = [
     ("sys_clock", 0, Pins(1)),
@@ -142,6 +144,8 @@ _io = [
     ),
 ]
 
+# Platform -----------------------------------------------------------------------------------------
+
 class CorePlatform(XilinxPlatform):
     name = "core"
     def __init__(self):
@@ -150,6 +154,7 @@ class CorePlatform(XilinxPlatform):
     def do_finalize(self, *args, **kwargs):
         pass
 
+# PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCCore):
     def __init__(self, phy, clk_freq):
@@ -166,29 +171,25 @@ class PHYCore(SoCCore):
                                   platform.request("sys_reset"))
         # ethernet
         if phy == "MII":
-            self.submodules.ethphy = LiteEthPHYMII(platform.request("mii_eth_clocks"),
-                                                   platform.request("mii_eth"))
+            ethphy = LiteEthPHYMII(platform.request("mii_eth_clocks"),
+                                   platform.request("mii_eth"))
         elif phy == "RMII":
-            self.submodules.ethphy = LiteEthPHYRMII(platform.request("rmii_eth_clocks"),
-                                                    platform.request("rmii_eth"))
+            ethphy = LiteEthPHYRMII(platform.request("rmii_eth_clocks"),
+                                    platform.request("rmii_eth"))
         elif phy == "GMII":
-            self.submodules.ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
-                                                    platform.request("gmii_eth"))
+            ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
+                                    platform.request("gmii_eth"))
         elif phy == "RGMII":
-            self.submodules.ethphy = LiteEthPHYRGMII(platform.request("rgmii_eth_clocks"),
-                                                     platform.request("rgmii_eth"))
+            ethphy = LiteEthPHYRGMII(platform.request("rgmii_eth_clocks"),
+                                     platform.request("rgmii_eth"))
         else:
             ValueError("Unsupported " + phy + " PHY");
+        self.submodules.ethphy = ethphy
+        self.add_csr("ethphy")
 
+# MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
-    csr_peripherals = (
-        "ethphy",
-        "ethmac"
-    )
-    csr_map = dict((n, v) for v, n in enumerate(csr_peripherals, start=16))
-    csr_map.update(SoCCore.csr_map)
-
     interrupt_map = {
         "ethmac": 2,
     }
@@ -204,15 +205,18 @@ class MACCore(PHYCore):
 
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
         self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
-        self.add_memory_region("ethmac", self.mem_map["ethmac"] | self.shadow_base, 0x2000)
+        self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
+        self.add_csr("ethmac")
 
         class _WishboneBridge(Module):
             def __init__(self, interface):
                 self.wishbone = interface
 
-        self.add_cpu(_WishboneBridge(self.platform.request("wishbone")))
-        self.add_wb_master(self.cpu.wishbone)
+        bridge = _WishboneBridge(self.platform.request("wishbone"))
+        self.submodules += bridge
+        self.add_wb_master(bridge.wishbone)
 
+# UDP Core -----------------------------------------------------------------------------------------
 
 class UDPCore(PHYCore):
     def __init__(self, phy, clk_freq, mac_address, ip_address, port):
@@ -223,39 +227,40 @@ class UDPCore(PHYCore):
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")
         self.comb += [
-            # control
+            # Control
             udp_port.sink.valid.eq(udp_sink.valid),
             udp_port.sink.last.eq(udp_sink.last),
             udp_sink.ready.eq(udp_port.sink.ready),
 
-            # param
+            # Param
             udp_port.sink.src_port.eq(udp_sink.src_port),
             udp_port.sink.dst_port.eq(udp_sink.dst_port),
             udp_port.sink.ip_address.eq(udp_sink.ip_address),
             udp_port.sink.length.eq(udp_sink.length),
 
-            # payload
+            # Payload
             udp_port.sink.data.eq(udp_sink.data),
             udp_port.sink.error.eq(udp_sink.error)
         ]
         udp_source = self.platform.request("udp_source")
         self.comb += [
-            # control
+            # Control
             udp_source.valid.eq(udp_port.source.valid),
             udp_source.last.eq(udp_port.source.last),
             udp_port.source.ready.eq(udp_source.ready),
 
-            # param
+            # Param
             udp_source.src_port.eq(udp_port.source.src_port),
             udp_source.dst_port.eq(udp_port.source.dst_port),
             udp_source.ip_address.eq(udp_port.source.ip_address),
             udp_source.length.eq(udp_port.source.length),
 
-            # payload
+            # Payload
             udp_source.data.eq(udp_port.source.data),
             udp_source.error.eq(udp_port.source.error)
         ]
 
+# Build --------------------------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth core builder")
@@ -268,12 +273,12 @@ def main():
     args = parser.parse_args()
 
     if args.core == "wishbone":
-        soc = MACCore(phy=args.phy, clk_freq=100*1000000)
+        soc = MACCore(phy=args.phy, clk_freq=int(100e6))
     elif args.core == "udp":
-        soc =  UDPCore(phy=args.phy, clk_freq=100*10000000,
-                       mac_address=args.mac_address,
-                       ip_address=args.ip_address,
-                       port=6000)
+        soc =  UDPCore(phy=args.phy, clk_freq=int(100e6),
+                       mac_address = args.mac_address,
+                       ip_address  = args.ip_address,
+                       port        = 6000)
     else:
         raise ValueError
     builder = Builder(soc, output_dir="liteeth", compile_gateware=False, csr_csv="liteeth/csr.csv")
