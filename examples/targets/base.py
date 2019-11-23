@@ -31,8 +31,8 @@ class BaseSoC(SoCCore):
             ident="LiteEth Base Design",
             with_timer=False
         )
-        self.add_cpu_or_bridge(UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200))
-        self.add_wb_master(self.cpu_or_bridge.wishbone)
+        self.submodules.bridge = UARTWishboneBridge(platform.request("serial"), clk_freq, baudrate=115200)
+        self.add_wb_master(self.bridge.wishbone)
         self.submodules.crg = CRG(platform.request(platform.default_clk_name))
 
         # wishbone SRAM (to test Wishbone over UART and Etherbone)
