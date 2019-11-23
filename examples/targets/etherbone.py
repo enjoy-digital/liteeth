@@ -18,10 +18,6 @@ class EtherboneSoC(BaseSoC):
 
 
 class EtherboneSoCDevel(EtherboneSoC):
-    csr_map = {
-        "analyzer": 20
-    }
-    csr_map.update(EtherboneSoC.csr_map)
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         EtherboneSoC.__init__(self, platform)
@@ -61,9 +57,7 @@ class EtherboneSoCDevel(EtherboneSoC):
             self.etherbone.wishbone.bus.bte,
             self.etherbone.wishbone.bus.err
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096, csr_csv="test/analyzer.csv")
+        self.add_csr("analyzer")
 
 default_subtarget = EtherboneSoC

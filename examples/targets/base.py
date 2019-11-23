@@ -59,10 +59,6 @@ set_false_path -from [get_clocks eth_tx_clk] -to [get_clocks sys_clk]
 
 
 class BaseSoCDevel(BaseSoC):
-    csr_map = {
-        "analyzer": 20
-    }
-    csr_map.update(BaseSoC.csr_map)
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         BaseSoC.__init__(self, platform)
@@ -122,7 +118,8 @@ class BaseSoCDevel(BaseSoC):
             self.core_udp_rx_fsm_state,
             self.core_udp_tx_fsm_state
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096, csr_csv="test/analyzer.csv")
+        self.add_csr("analyzer")
 
     def do_finalize(self):
         BaseSoC.do_finalize(self)
@@ -140,8 +137,5 @@ class BaseSoCDevel(BaseSoC):
             self.core_udp_rx_fsm_state.eq(self.core.udp.rx.fsm.state),
             self.core_udp_tx_fsm_state.eq(self.core.udp.tx.fsm.state)
         ]
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
 
 default_subtarget = BaseSoC

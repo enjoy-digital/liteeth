@@ -18,10 +18,6 @@ class TTYSoC(BaseSoC):
 
 
 class TTYSoCDevel(TTYSoC):
-    csr_map = {
-        "analyzer": 20
-    }
-    csr_map.update(TTYSoC.csr_map)
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         TTYSoC.__init__(self, platform)
@@ -34,9 +30,7 @@ class TTYSoCDevel(TTYSoC):
             self.tty.source.ready,
             self.tty.source.data
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096, csr_csv="test/analyzer.csv")
+        self.add_csr("analyzer")
 
 default_subtarget = TTYSoC
