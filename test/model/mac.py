@@ -8,12 +8,12 @@ from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_mac(s):
     print_with_prefix(s, "[MAC]")
 
 preamble = split_bytes(eth_preamble, 8, "little")
-
 
 def crc32(l):
     crc = []
@@ -22,13 +22,13 @@ def crc32(l):
         crc.append(int(byte))
     return crc
 
+# MAC Packet ---------------------------------------------------------------------------------------
 
-# MAC model
 class MACPacket(Packet):
     def __init__(self, init=[]):
         Packet.__init__(self, init)
         self.preamble_error = False
-        self.crc_error = False
+        self.crc_error      = False
 
     def check_remove_preamble(self):
         if comp(self[0:8], preamble):
@@ -93,15 +93,16 @@ class MACPacket(Packet):
             r += "{:02x}".format(d)
         return r
 
+# MAC ----------------------------------------------------------------------------------------------
 
 class MAC(Module):
     def __init__(self, phy, debug=False, loopback=False):
-        self.phy = phy
-        self.debug = debug
-        self.loopback = loopback
-        self.rx_packet = MACPacket()
+        self.phy          = phy
+        self.debug        = debug
+        self.loopback     = loopback
+        self.rx_packet    = MACPacket()
 
-        self.ip_callback = None
+        self.ip_callback  = None
         self.arp_callback = None
 
         phy.set_mac_callback(self.callback)

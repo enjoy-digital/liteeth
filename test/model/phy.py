@@ -1,36 +1,40 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from litex.soc.interconnect.stream_sim import *
 
 from liteeth.common import *
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_phy(s):
     print_with_prefix(s, "[PHY]")
 
 
-# PHY model
+# PHY Source ---------------------------------------------------------------------------------------
+
 class PHYSource(PacketStreamer):
     def __init__(self, dw):
         PacketStreamer.__init__(self, eth_phy_description(dw))
 
+# PHY Sink -----------------------------------------------------------------------------------------
 
 class PHYSink(PacketLogger):
     def __init__(self, dw):
         PacketLogger.__init__(self, eth_phy_description(dw))
 
+# PHY ----------------------------------------------------------------------------------------------
 
 class PHY(Module):
     def __init__(self, dw, debug=False):
-        self.dw = dw
+        self.dw    = dw
         self.debug = debug
 
         self.submodules.phy_source = PHYSource(dw)
-        self.submodules.phy_sink = PHYSink(dw)
+        self.submodules.phy_sink   = PHYSink(dw)
 
         self.source = self.phy_source.source
-        self.sink = self.phy_sink.sink
+        self.sink   = self.phy_sink.sink
 
         self.mac_callback = None
 

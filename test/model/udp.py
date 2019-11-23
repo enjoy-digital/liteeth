@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import math
@@ -9,12 +9,14 @@ from liteeth.common import *
 
 from test.model import ip
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_udp(s):
     print_with_prefix(s, "[UDP]")
 
 
-# UDP model
+# UDP Packet ---------------------------------------------------------------------------------------
+
 class UDPPacket(Packet):
     def __init__(self, init=[]):
         Packet.__init__(self, init)
@@ -45,16 +47,17 @@ class UDPPacket(Packet):
             r += "{:02x}".format(d)
         return r
 
+# UDP ----------------------------------------------------------------------------------------------
 
 class UDP(Module):
     def __init__(self, ip, ip_address, debug=False, loopback=False):
-        self.ip = ip
+        self.ip         = ip
         self.ip_address = ip_address
-        self.debug = debug
-        self.loopback = loopback
+        self.debug      = debug
+        self.loopback   = loopback
         self.tx_packets = []
-        self.tx_packet = UDPPacket()
-        self.rx_packet = UDPPacket()
+        self.tx_packet  = UDPPacket()
+        self.rx_packet  = UDPPacket()
 
         self.etherbone_callback = None
 
@@ -69,17 +72,17 @@ class UDP(Module):
             print_udp(">>>>>>>>")
             print_udp(packet)
         ip_packet = ip.IPPacket(packet)
-        ip_packet.version = 0x4
-        ip_packet.ihl = 0x5
-        ip_packet.total_length = len(packet) + ip_packet.ihl
-        ip_packet.identification = 0
-        ip_packet.flags = 0
+        ip_packet.version         = 0x4
+        ip_packet.ihl             = 0x5
+        ip_packet.total_length    = len(packet) + ip_packet.ihl
+        ip_packet.identification  = 0
+        ip_packet.flags           = 0
         ip_packet.fragment_offset = 0
-        ip_packet.ttl = 0x80
-        ip_packet.sender_ip = self.ip_address
-        ip_packet.target_ip = 0x12345678  # XXX
-        ip_packet.checksum = 0
-        ip_packet.protocol = udp_protocol
+        ip_packet.ttl             = 0x80
+        ip_packet.sender_ip       = self.ip_address
+        ip_packet.target_ip       = 0x12345678  # XXX
+        ip_packet.checksum        = 0
+        ip_packet.protocol        = udp_protocol
         self.ip.send(ip_packet)
 
     def callback(self, packet):

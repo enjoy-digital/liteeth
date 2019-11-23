@@ -1,8 +1,9 @@
-# This file is Copyright (c) 2015 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import re
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def format_dump(dump):
     return [int(s, 16) for s in re.split(r'[;,\s\n]\s*', dump) if s is not ""]
@@ -16,6 +17,8 @@ def verify_packet(packet, infos):
                 print("[Error] " + k)
                 errors += 1
     return errors
+
+# ARP Dumps ----------------------------------------------------------------------------------------
 
 arp_request = format_dump("""
 00 22 19 22 54 9e 00 12 3f 97 92 01 08 06 00 01
@@ -53,6 +56,8 @@ arp_reply_infos = {
     "target_ip":     0xa9feff42
 }
 
+# UDP Dumps ----------------------------------------------------------------------------------------
+
 udp = format_dump("""
 d0 7a b5 96 cd 0a 00 14 0b 33 33 27 08 00 45 00
 00 5f 31 16 00 00 80 11 87 77 c0 a8 01 65 b2 7b
@@ -71,6 +76,9 @@ udp_infos = {
     "src_port":   0xa63f,
     "dst_port":   0x690f
 }
+
+
+# Ping Dumps ---------------------------------------------------------------------------------------
 
 ping_request = format_dump("""
 00 50 56 e0 14 49 00 0c 29 34 0b de 08 00 45 00

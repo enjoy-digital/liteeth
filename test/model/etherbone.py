@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import math
@@ -10,19 +10,21 @@ from liteeth.common import *
 
 from test.model import udp
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_etherbone(s):
     print_with_prefix(s, "[ETHERBONE]")
 
 
-# Etherbone model
+# Etherbone ----------------------------------------------------------------------------------------
+
 class Etherbone(Module):
     def __init__(self, udp, debug=False):
-        self.udp = udp
+        self.udp   = udp
         self.debug = debug
         self.tx_packets = []
-        self.tx_packet = EtherbonePacket()
-        self.rx_packet = EtherbonePacket()
+        self.tx_packet  = EtherbonePacket()
+        self.rx_packet  = EtherbonePacket()
 
         udp.set_etherbone_callback(self.callback)
 
@@ -34,7 +36,7 @@ class Etherbone(Module):
         udp_packet = udp.UDPPacket(packet)
         udp_packet.src_port = 0x1234  # XXX
         udp_packet.dst_port = 20000  # XXX
-        udp_packet.length = len(packet)
+        udp_packet.length   = len(packet)
         udp_packet.checksum = 0
         self.udp.send(udp_packet)
 
