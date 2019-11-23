@@ -97,30 +97,3 @@ class UDP(Module):
         if packet.dst_port == 20000:
             if self.etherbone_callback is not None:
                 self.etherbone_callback(packet)
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    from test.model.ip import *
-    errors = 0
-    # UDP packet
-    packet = MACPacket(udp)
-    packet.decode_remove_header()
-    # print(packet)
-    packet = IPPacket(packet)
-    packet.decode()
-    # print(packet)
-    packet = UDPPacket(packet)
-    packet.decode()
-    # print(packet)
-    if packet.length != (len(packet)+udp_header.length):
-        errors += 1
-    errors += verify_packet(packet, udp_infos)
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    if packet.length != (len(packet)+udp_header.length):
-        errors += 1
-    errors += verify_packet(packet, udp_infos)
-
-    print("udp errors " + str(errors))

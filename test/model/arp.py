@@ -125,37 +125,3 @@ class ARP(Module):
         request.sender_ip = self.ip_address
         request.target_mac = 0xffffffffffff
         request.target_ip = ip_address
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    errors = 0
-    # ARP request
-    packet = MACPacket(arp_request)
-    packet.decode_remove_header()
-    packet = ARPPacket(packet)
-    # check decoding
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_request_infos)
-    # check encoding
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_request_infos)
-
-    # ARP Reply
-    packet = MACPacket(arp_reply)
-    packet.decode_remove_header()
-    packet = ARPPacket(packet)
-    # check decoding
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_reply_infos)
-    # check encoding
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_reply_infos)
-
-    print("arp errors " + str(errors))

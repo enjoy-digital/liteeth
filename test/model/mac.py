@@ -136,26 +136,3 @@ class MAC(Module):
                     self.arp_callback(packet)
             else:
                 raise ValueError  # XXX handle this properly
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    errors = 0
-    packet = MACPacket(arp_request)
-    packet.decode_remove_header()
-    # print(packet)
-    errors += verify_packet(packet, arp_request_infos)
-    packet.encode_header()
-    packet.decode_remove_header()
-    # print(packet)
-    errors += verify_packet(packet, arp_request_infos)
-
-    # print(packet)
-    packet = MACPacket(arp_reply)
-    packet.decode_remove_header()
-    errors += verify_packet(packet, arp_reply_infos)
-    packet.encode_header()
-    packet.decode_remove_header()
-    # print(packet)
-    errors += verify_packet(packet, arp_reply_infos)
-
-    print("mac errors " + str(errors))

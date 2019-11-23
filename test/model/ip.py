@@ -133,27 +133,3 @@ class IP(Module):
         elif packet.protocol == icmp_protocol:
             if self.icmp_callback is not None:
                 self.icmp_callback(packet)
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    errors = 0
-    # UDP packet
-    packet = MACPacket(udp)
-    packet.decode_remove_header()
-    # print(packet)
-    packet = IPPacket(packet)
-    # check decoding
-    errors += not packet.check_checksum()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, {})
-    # check encoding
-    packet.encode()
-    packet.insert_checksum()
-    errors += not packet.check_checksum()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, {})
-
-    print("ip errors " + str(errors))

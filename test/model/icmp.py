@@ -86,26 +86,3 @@ class ICMP(Module):
 
     def process(self, packet):
         pass
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    from test.model.ip import *
-    errors = 0
-    # ICMP packet
-    packet = MACPacket(ping_request)
-    packet.decode_remove_header()
-    # print(packet)
-    packet = IPPacket(packet)
-    packet.decode()
-    # print(packet)
-    packet = ICMPPacket(packet)
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, ping_request_infos)
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, ping_request_infos)
-
-    print("icmp errors " + str(errors))
