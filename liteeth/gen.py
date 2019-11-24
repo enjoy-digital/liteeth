@@ -3,6 +3,22 @@
 # This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
+"""
+LiteEth standalone core generator
+
+LiteEth aims to be directly used as a python package when the SoC is created using LiteX. However,
+for some use cases it could be interesting to generate a standalone verilog file of the core:
+- integration of the core in a SoC using a more traditional flow.
+- need to version/package the core.
+- avoid Migen/LiteX dependencies.
+- etc...
+
+The standalone core is generated from a YAML configuration file that allows the user to generate
+easily a custom configuration of the core.
+
+TODO: identify limitations
+"""
+
 import argparse
 
 from migen import *
@@ -36,16 +52,16 @@ _io = [
         Subsignal("rx", Pins(1)),
     ),
     ("mii_eth", 0,
-        Subsignal("rst_n", Pins(1)),
-        Subsignal("mdio", Pins(1)),
-        Subsignal("mdc", Pins(1)),
-        Subsignal("rx_dv", Pins(1)),
-        Subsignal("rx_er", Pins(1)),
+        Subsignal("rst_n",   Pins(1)),
+        Subsignal("mdio",    Pins(1)),
+        Subsignal("mdc",     Pins(1)),
+        Subsignal("rx_dv",   Pins(1)),
+        Subsignal("rx_er",   Pins(1)),
         Subsignal("rx_data", Pins(4)),
-        Subsignal("tx_en", Pins(4)),
+        Subsignal("tx_en",   Pins(4)),
         Subsignal("tx_data", Pins(4)),
-        Subsignal("col", Pins(1)),
-        Subsignal("crs", Pins(1))
+        Subsignal("col",     Pins(1)),
+        Subsignal("crs",     Pins(1))
     ),
 
     # RMII PHY Pads
@@ -53,34 +69,34 @@ _io = [
         Subsignal("ref_clk", Pins(1))
     ),
     ("rmii_eth", 0,
-        Subsignal("rst_n", Pins(1)),
+        Subsignal("rst_n",   Pins(1)),
         Subsignal("rx_data", Pins(2)),
-        Subsignal("crs_dv", Pins(1)),
-        Subsignal("tx_en", Pins(1)),
+        Subsignal("crs_dv",  Pins(1)),
+        Subsignal("tx_en",   Pins(1)),
         Subsignal("tx_data", Pins(2)),
-        Subsignal("mdc", Pins(1)),
-        Subsignal("mdio", Pins(1)),
+        Subsignal("mdc",     Pins(1)),
+        Subsignal("mdio",    Pins(1)),
     ),
 
     # GMII PHY Pads
     ("gmii_eth_clocks", 0,
-        Subsignal("tx", Pins(1)),
+        Subsignal("tx",  Pins(1)),
         Subsignal("gtx", Pins(1)),
-        Subsignal("rx", Pins(1))
+        Subsignal("rx",  Pins(1))
     ),
     ("gmii_eth", 0,
-        Subsignal("rst_n", Pins(1)),
-        Subsignal("int_n", Pins(1)),
-        Subsignal("mdio", Pins(1)),
-        Subsignal("mdc", Pins(1)),
-        Subsignal("rx_dv", Pins(1)),
-        Subsignal("rx_er", Pins(1)),
+        Subsignal("rst_n",   Pins(1)),
+        Subsignal("int_n",   Pins(1)),
+        Subsignal("mdio",    Pins(1)),
+        Subsignal("mdc",     Pins(1)),
+        Subsignal("rx_dv",   Pins(1)),
+        Subsignal("rx_er",   Pins(1)),
         Subsignal("rx_data", Pins(8)),
-        Subsignal("tx_en", Pins(1)),
-        Subsignal("tx_er", Pins(1)),
+        Subsignal("tx_en",   Pins(1)),
+        Subsignal("tx_er",   Pins(1)),
         Subsignal("tx_data", Pins(8)),
-        Subsignal("col", Pins(1)),
-        Subsignal("crs", Pins(1))
+        Subsignal("col",     Pins(1)),
+        Subsignal("crs",     Pins(1))
     ),
 
     # RGMII PHY Pads
@@ -89,13 +105,13 @@ _io = [
         Subsignal("rx", Pins(1))
     ),
     ("rgmii_eth", 0,
-        Subsignal("rst_n", Pins(1)),
-        Subsignal("int_n", Pins(1)),
-        Subsignal("mdio", Pins(1)),
-        Subsignal("mdc", Pins(1)),
-        Subsignal("rx_ctl", Pins(1)),
+        Subsignal("rst_n",   Pins(1)),
+        Subsignal("int_n",   Pins(1)),
+        Subsignal("mdio",    Pins(1)),
+        Subsignal("mdc",     Pins(1)),
+        Subsignal("rx_ctl",  Pins(1)),
         Subsignal("rx_data", Pins(4)),
-        Subsignal("tx_ctl", Pins(1)),
+        Subsignal("tx_ctl",  Pins(1)),
         Subsignal("tx_data", Pins(4))
     ),
 
@@ -116,31 +132,31 @@ _io = [
 
     # UDP
     ("udp_sink", 0,
-        Subsignal("valid",   Pins(1)),
-        Subsignal("last",    Pins(1)),
-        Subsignal("ready",   Pins(1)),
+        Subsignal("valid",      Pins(1)),
+        Subsignal("last",       Pins(1)),
+        Subsignal("ready",      Pins(1)),
         # param
-        Subsignal("src_port", Pins(16)),
-        Subsignal("dst_port", Pins(16)),
+        Subsignal("src_port",   Pins(16)),
+        Subsignal("dst_port",   Pins(16)),
         Subsignal("ip_address", Pins(32)),
-        Subsignal("length", Pins(16)),
+        Subsignal("length",     Pins(16)),
         # payload
-        Subsignal("data", Pins(32)),
-        Subsignal("error", Pins(4))
+        Subsignal("data",       Pins(32)),
+        Subsignal("error",      Pins(4))
     ),
 
     ("udp_source", 0,
-        Subsignal("valid",   Pins(1)),
-        Subsignal("last",    Pins(1)),
-        Subsignal("ready",   Pins(1)),
+        Subsignal("valid",      Pins(1)),
+        Subsignal("last",       Pins(1)),
+        Subsignal("ready",      Pins(1)),
         # param
-        Subsignal("src_port", Pins(16)),
-        Subsignal("dst_port", Pins(16)),
+        Subsignal("src_port",   Pins(16)),
+        Subsignal("dst_port",   Pins(16)),
         Subsignal("ip_address", Pins(32)),
-        Subsignal("length", Pins(16)),
+        Subsignal("length",     Pins(16)),
         # payload
-        Subsignal("data", Pins(32)),
-        Subsignal("error", Pins(4))
+        Subsignal("data",       Pins(32)),
+        Subsignal("error",      Pins(4))
     ),
 ]
 
@@ -151,39 +167,29 @@ class CorePlatform(XilinxPlatform):
     def __init__(self):
         XilinxPlatform.__init__(self, "xc7", _io)
 
-    def do_finalize(self, *args, **kwargs):
-        pass
-
 # PHY Core -----------------------------------------------------------------------------------------
 
-class PHYCore(SoCCore):
+class PHYCore(SoCMini):
     def __init__(self, phy, clk_freq):
         platform = CorePlatform()
-        SoCCore.__init__(self, platform,
-            clk_freq=clk_freq,
-            cpu_type=None,
-            integrated_rom_size=0x0,
-            integrated_sram_size=0x0,
-            integrated_main_ram_size=0x0,
-            csr_address_width=14, csr_data_width=8,
-            with_uart=False, with_timer=False)
+        SoCMini.__init__(self, platform, clk_freq=clk_freq)
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
         # ethernet
-        if phy == "MII":
+        if phy == "mii":
             ethphy = LiteEthPHYMII(platform.request("mii_eth_clocks"),
                                    platform.request("mii_eth"))
-        elif phy == "RMII":
+        elif phy == "rmii":
             ethphy = LiteEthPHYRMII(platform.request("rmii_eth_clocks"),
                                     platform.request("rmii_eth"))
-        elif phy == "GMII":
+        elif phy == "gmii":
             ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
                                     platform.request("gmii_eth"))
-        elif phy == "RGMII":
+        elif phy == "rgmii":
             ethphy = LiteEthPHYRGMII(platform.request("rgmii_eth_clocks"),
                                      platform.request("rgmii_eth"))
         else:
-            ValueError("Unsupported " + phy + " PHY");
+            raise ValueError("Unsupported " + phy + " PHY");
         self.submodules.ethphy = ethphy
         self.add_csr("ethphy")
 
@@ -263,10 +269,10 @@ class UDPCore(PHYCore):
 # Build --------------------------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="LiteEth core builder")
+    parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
     builder_args(parser)
     soc_core_args(parser)
-    parser.add_argument("--phy", default="MII", help="Ethernet PHY(MII/RMII/GMII/RMGII)")
+    parser.add_argument("--phy", default="mii", help="Ethernet PHY(mii/rmii/gmii/rgmii)")
     parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
     parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
     parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
@@ -281,8 +287,8 @@ def main():
                        port        = 6000)
     else:
         raise ValueError
-    builder = Builder(soc, output_dir="liteeth", compile_gateware=False, csr_csv="liteeth/csr.csv")
-    builder.build(build_name="liteeth")
+    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
+    builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":
     main()
