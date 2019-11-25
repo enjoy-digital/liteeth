@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import math
@@ -9,6 +9,7 @@ from liteeth.common import *
 
 from test.model import mac
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_arp(s):
     print_with_prefix(s, "[ARP]")
@@ -16,7 +17,8 @@ def print_arp(s):
 preamble = split_bytes(eth_preamble, 8)
 
 
-# ARP model
+# ARP Packet ---------------------------------------------------------------------------------------
+
 class ARPPacket(Packet):
     def __init__(self, init=[]):
         Packet.__init__(self, init)
@@ -47,17 +49,18 @@ class ARPPacket(Packet):
             r += "{:02x}".format(d)
         return r
 
+# ARP ----------------------------------------------------------------------------------------------
 
 class ARP(Module):
     def __init__(self, mac, mac_address, ip_address, debug=False):
-        self.mac = mac
-        self.mac_address = mac_address
-        self.ip_address = ip_address
-        self.debug = debug
-        self.tx_packets = []
-        self.tx_packet = ARPPacket()
-        self.rx_packet = ARPPacket()
-        self.table = {}
+        self.mac             = mac
+        self.mac_address     = mac_address
+        self.ip_address      = ip_address
+        self.debug           = debug
+        self.tx_packets      = []
+        self.tx_packet       = ARPPacket()
+        self.rx_packet       = ARPPacket()
+        self.table           = {}
         self.request_pending = False
 
         self.mac.set_arp_callback(self.callback)
@@ -68,8 +71,8 @@ class ARP(Module):
             print_arp(">>>>>>>>")
             print_arp(packet)
         mac_packet = mac.MACPacket(packet)
-        mac_packet.target_mac = packet.target_mac
-        mac_packet.sender_mac = packet.sender_mac
+        mac_packet.target_mac    = packet.target_mac
+        mac_packet.sender_mac    = packet.sender_mac
         mac_packet.ethernet_type = ethernet_type_arp
         self.mac.send(mac_packet)
 
@@ -100,15 +103,15 @@ class ARP(Module):
     def process_request(self, request):
         if request.target_ip == self.ip_address:
             reply = ARPPacket([0]*(eth_min_len-arp_header.length))
-            reply.hwtype = arp_hwtype_ethernet
-            reply.proto = arp_proto_ip
-            reply.opcode = arp_opcode_reply
-            reply.hwsize = 6
-            reply.protosize = 4
+            reply.hwtype     = arp_hwtype_ethernet
+            reply.proto      = arp_proto_ip
+            reply.opcode     = arp_opcode_reply
+            reply.hwsize     = 6
+            reply.protosize  = 4
             reply.sender_mac = self.mac_address
-            reply.sender_ip = self.ip_address
+            reply.sender_ip  = self.ip_address
             reply.target_mac = request.sender_mac
-            reply.target_ip = request.sender_ip
+            reply.target_ip  = request.sender_ip
             self.send(reply)
 
     def process_reply(self, reply):
@@ -116,46 +119,12 @@ class ARP(Module):
 
     def request(self, ip_address):
         request = ARPPacket([0]*(eth_min_len-arp_header.length))
-        request.hwtype = arp_hwtype_ethernet
-        request.proto = arp_proto_ip
-        request.opcode = arp_opcode_request
-        request.hwsize = 6
-        request.protosize = 4
+        request.hwtype     = arp_hwtype_ethernet
+        request.proto      = arp_proto_ip
+        request.opcode     = arp_opcode_request
+        request.hwsize     = 6
+        request.protosize  = 4
         request.sender_mac = self.mac_address
-        request.sender_ip = self.ip_address
+        request.sender_ip  = self.ip_address
         request.target_mac = 0xffffffffffff
-        request.target_ip = ip_address
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    errors = 0
-    # ARP request
-    packet = MACPacket(arp_request)
-    packet.decode_remove_header()
-    packet = ARPPacket(packet)
-    # check decoding
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_request_infos)
-    # check encoding
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_request_infos)
-
-    # ARP Reply
-    packet = MACPacket(arp_reply)
-    packet.decode_remove_header()
-    packet = ARPPacket(packet)
-    # check decoding
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_reply_infos)
-    # check encoding
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, arp_reply_infos)
-
-    print("arp errors " + str(errors))
+        request.target_ip  = ip_address

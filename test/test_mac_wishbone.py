@@ -13,6 +13,8 @@ from liteeth.mac import LiteEthMAC
 
 from test.model import phy, mac
 
+from litex.gen.sim import *
+
 
 class WishboneMaster:
     def __init__(self, obj):

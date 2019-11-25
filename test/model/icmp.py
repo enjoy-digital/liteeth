@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import math
@@ -9,12 +9,14 @@ from liteeth.common import *
 
 from test.model import ip
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_icmp(s):
     print_with_prefix(s, "[ICMP]")
 
 
-# ICMP model
+# ICMP Packet --------------------------------------------------------------------------------------
+
 class ICMPPacket(Packet):
     def __init__(self, init=[]):
         Packet.__init__(self, init)
@@ -45,15 +47,16 @@ class ICMPPacket(Packet):
             r += "{:02x}".format(d)
         return r
 
+# ICMP ---------------------------------------------------------------------------------------------
 
 class ICMP(Module):
     def __init__(self, ip, ip_address, debug=False):
-        self.ip = ip
+        self.ip         = ip
         self.ip_address = ip_address
-        self.debug = debug
+        self.debug      = debug
         self.tx_packets = []
-        self.tx_packet = ICMPPacket()
-        self.rx_packet = ICMPPacket()
+        self.tx_packet  = ICMPPacket()
+        self.rx_packet  = ICMPPacket()
 
         self.ip.set_icmp_callback(self.callback)
 
@@ -63,17 +66,17 @@ class ICMP(Module):
             print_icmp(">>>>>>>>")
             print_icmp(packet)
         ip_packet = ip.IPPacket(packet)
-        ip_packet.version = 0x4
-        ip_packet.ihl = 0x5
-        ip_packet.total_length = len(packet) + ip_packet.ihl
-        ip_packet.identification = 0
-        ip_packet.flags = 0
+        ip_packet.version         = 0x4
+        ip_packet.ihl             = 0x5
+        ip_packet.total_length    = len(packet) + ip_packet.ihl
+        ip_packet.identification  = 0
+        ip_packet.flags           = 0
         ip_packet.fragment_offset = 0
-        ip_packet.ttl = 0x80
-        ip_packet.sender_ip = self.ip_address
-        ip_packet.target_ip = 0x12345678  # XXX
-        ip_packet.checksum = 0
-        ip_packet.protocol = icmp_protocol
+        ip_packet.ttl             = 0x80
+        ip_packet.sender_ip       = self.ip_address
+        ip_packet.target_ip       = 0x12345678  # XXX
+        ip_packet.checksum        = 0
+        ip_packet.protocol        = icmp_protocol
         self.ip.send(ip_packet)
 
     def callback(self, packet):
@@ -86,26 +89,3 @@ class ICMP(Module):
 
     def process(self, packet):
         pass
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    from test.model.ip import *
-    errors = 0
-    # ICMP packet
-    packet = MACPacket(ping_request)
-    packet.decode_remove_header()
-    # print(packet)
-    packet = IPPacket(packet)
-    packet.decode()
-    # print(packet)
-    packet = ICMPPacket(packet)
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, ping_request_infos)
-    packet.encode()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, ping_request_infos)
-
-    print("icmp errors " + str(errors))

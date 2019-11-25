@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
@@ -6,6 +6,7 @@ from liteeth.frontend.etherbone import LiteEthEtherbone
 
 from targets.base import BaseSoC
 
+# EtherboneSoC -------------------------------------------------------------------------------------
 
 class EtherboneSoC(BaseSoC):
     default_platform = "kc705"
@@ -13,20 +14,17 @@ class EtherboneSoC(BaseSoC):
         BaseSoC.__init__(self, platform,
             mac_address=0x10e2d5000000,
             ip_address="192.168.1.50")
-        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 1234, mode="master")
+        self.submodules.etherbone = LiteEthEtherbone(self.ethcore.udp, 1234, mode="master")
         self.add_wb_master(self.etherbone.wishbone.bus)
 
+# EtherboneSoCDevel --------------------------------------------------------------------------------
 
 class EtherboneSoCDevel(EtherboneSoC):
-    csr_map = {
-        "analyzer": 20
-    }
-    csr_map.update(EtherboneSoC.csr_map)
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         EtherboneSoC.__init__(self, platform)
         debug = [
-            # mmap stream from HOST
+            # MMAP stream from HOST
             self.etherbone.wishbone.sink.valid,
             self.etherbone.wishbone.sink.last,
             self.etherbone.wishbone.sink.ready,
@@ -37,7 +35,7 @@ class EtherboneSoCDevel(EtherboneSoC):
             self.etherbone.wishbone.sink.addr,
             self.etherbone.wishbone.sink.data,
 
-            # mmap stream to HOST
+            # MMAP stream to HOST
             self.etherbone.wishbone.source.valid,
             self.etherbone.wishbone.source.last,
             self.etherbone.wishbone.source.ready,
@@ -48,7 +46,7 @@ class EtherboneSoCDevel(EtherboneSoC):
             self.etherbone.wishbone.source.addr,
             self.etherbone.wishbone.source.data,
 
-            # etherbone wishbone master
+            # Etherbone wishbone master
             self.etherbone.wishbone.bus.dat_w,
             self.etherbone.wishbone.bus.dat_r,
             self.etherbone.wishbone.bus.adr,
@@ -61,9 +59,7 @@ class EtherboneSoCDevel(EtherboneSoC):
             self.etherbone.wishbone.bus.bte,
             self.etherbone.wishbone.bus.err
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
+        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096, csr_csv="test/analyzer.csv")
+        self.add_csr("analyzer")
 
 default_subtarget = EtherboneSoC

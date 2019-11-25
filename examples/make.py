@@ -16,7 +16,7 @@ from migen.fhdl.structure import _Fragment
 from litex.build.tools import write_to_file
 from litex.build.xilinx.common import *
 
-from litex.soc.integration import cpu_interface
+from litex.soc.integration import export
 
 liteeth_path = "../"
 sys.path.append(liteeth_path) # XXX
@@ -94,8 +94,6 @@ if __name__ == "__main__":
     top_kwargs = dict((k, autotype(v)) for k, v in args.target_option)
     soc = top_class(platform, **top_kwargs)
     soc.finalize()
-    memory_regions = soc.get_memory_regions()
-    csr_regions = soc.get_csr_regions()
 
     # decode actions
     action_list = ["clean", "build-csr-csv", "build-bitstream", "load-bitstream", "all"]
@@ -116,7 +114,7 @@ if __name__ == "__main__":
       /____/_/\__/\__/___/\__/_//_/
 
   A small footprint and configurable Ethernet
-          core powered by Migen
+          core powered by Migen & LiteX
 ====== Building options: ======
 Platform:  {}
 Target:    {}
@@ -143,7 +141,7 @@ System Clk: {} MHz
         subprocess.call(["rm", "-rf", "build/*"])
 
     if actions["build-csr-csv"]:
-        csr_csv = cpu_interface.get_csr_csv(csr_regions)
+        csr_csv = export.get_csr_csv(soc.csr_regions)
         write_to_file(args.csr_csv, csr_csv)
 
     if actions["build-bitstream"]:

@@ -1,10 +1,11 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
 
 from targets.base import BaseSoC
 
+# UDPSoC -------------------------------------------------------------------------------------------
 
 class UDPSoC(BaseSoC):
     default_platform = "kc705"
@@ -19,7 +20,7 @@ class UDPSoC(BaseSoC):
         self.add_udp_loopback(8000, 32, 8192, "loopback_32")
 
     def add_udp_loopback(self, port, dw, depth, name=None):
-        port = self.core.udp.crossbar.get_port(port, dw)
+        port = self.ethcore.udp.crossbar.get_port(port, dw)
         buf = stream.SyncFIFO(eth_udp_user_description(dw), depth//(dw//8))
         if name is None:
             self.submodules += buf
@@ -27,16 +28,13 @@ class UDPSoC(BaseSoC):
             setattr(self.submodules, name, buf)
         self.comb += Port.connect(port, buf)
 
+# UDPSoCDevel --------------------------------------------------------------------------------------
 
 class UDPSoCDevel(UDPSoC):
-    csr_map = {
-        "analyzer": 20
-    }
-    csr_map.update(UDPSoC.csr_map)
     def __init__(self, platform):
         from litescope import LiteScopeAnalyzer
         UDPSoC.__init__(self, platform)
-        debug = [
+        analyzer_signals = [
             self.loopback_8.sink.valid,
             self.loopback_8.sink.last,
             self.loopback_8.sink.ready,
@@ -57,9 +55,7 @@ class UDPSoCDevel(UDPSoC):
             self.loopback_32.source.ready,
             self.loopback_32.source.data
         ]
-        self.submodules.analyzer = LiteScopeAnalyzer(debug, 4096)
-
-    def do_exit(self, vns):
-        self.analyzer.export_csv(vns, "test/analyzer.csv")
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals, 4096, csr_csv="test/analyzer.csv")
+        self.add_csr("analyzer")
 
 default_subtarget = UDPSoC

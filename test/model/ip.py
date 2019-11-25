@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import math
@@ -9,6 +9,7 @@ from liteeth.common import *
 
 from test.model import mac
 
+# Helpers ------------------------------------------------------------------------------------------
 
 def print_ip(s):
     print_with_prefix(s, "[IP]")
@@ -27,7 +28,8 @@ def checksum(msg):
     return ~s & 0xffff
 
 
-# IP model
+# IP Packet ----------------------------------------------------------------------------------------
+
 class IPPacket(Packet):
     def __init__(self, init=[]):
         Packet.__init__(self, init)
@@ -71,20 +73,21 @@ class IPPacket(Packet):
             r += "{:02x}".format(d)
         return r
 
+# IP -----------------------------------------------------------------------------------------------
 
 class IP(Module):
     def __init__(self, mac, mac_address, ip_address, debug=False, loopback=False):
-        self.mac = mac
-        self.mac_address = mac_address
-        self.ip_address = ip_address
-        self.debug = debug
-        self.loopback = loopback
-        self.rx_packet = IPPacket()
-        self.table = {}
+        self.mac             = mac
+        self.mac_address     = mac_address
+        self.ip_address      = ip_address
+        self.debug           = debug
+        self.loopback        = loopback
+        self.rx_packet       = IPPacket()
+        self.table           = {}
         self.request_pending = False
 
-        self.udp_callback = None
-        self.icmp_callback = None
+        self.udp_callback    = None
+        self.icmp_callback   = None
 
         self.mac.set_ip_callback(self.callback)
 
@@ -101,8 +104,8 @@ class IP(Module):
             print_ip(">>>>>>>>")
             print_ip(packet)
         mac_packet = mac.MACPacket(packet)
-        mac_packet.target_mac = 0x12345678abcd  # XXX
-        mac_packet.sender_mac = self.mac_address
+        mac_packet.target_mac    = 0x12345678abcd  # XXX
+        mac_packet.sender_mac    = self.mac_address
         mac_packet.ethernet_type = ethernet_type_ip
         self.mac.send(mac_packet)
 
@@ -133,27 +136,3 @@ class IP(Module):
         elif packet.protocol == icmp_protocol:
             if self.icmp_callback is not None:
                 self.icmp_callback(packet)
-
-if __name__ == "__main__":
-    from test.model.dumps import *
-    from test.model.mac import *
-    errors = 0
-    # UDP packet
-    packet = MACPacket(udp)
-    packet.decode_remove_header()
-    # print(packet)
-    packet = IPPacket(packet)
-    # check decoding
-    errors += not packet.check_checksum()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, {})
-    # check encoding
-    packet.encode()
-    packet.insert_checksum()
-    errors += not packet.check_checksum()
-    packet.decode()
-    # print(packet)
-    errors += verify_packet(packet, {})
-
-    print("ip errors " + str(errors))

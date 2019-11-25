@@ -11,7 +11,9 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 
-from model import phy, mac, arp, ip, udp
+from test.model import phy, mac, arp, ip, udp
+
+from litex.gen.sim import *
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
@@ -48,17 +50,18 @@ def main_generator(dut):
     s, l, e = check(packet, dut.logger.packet)
     print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
-if __name__ == "__main__":
-    dut = DUT(8)
-    generators = {
-        "sys" :   [main_generator(dut),
-                   dut.streamer.generator(),
-                   dut.logger.generator()],
-        "eth_tx": [dut.phy_model.phy_sink.generator(),
-                   dut.phy_model.generator()],
-        "eth_rx":  dut.phy_model.phy_source.generator()
-    }
-    clocks = {"sys":    10,
-              "eth_rx": 10,
-              "eth_tx": 10}
-    run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+class TestUDP(unittest.TestCase):
+    def test(self):
+        dut = DUT(8)
+        generators = {
+            "sys" :   [main_generator(dut),
+                       dut.streamer.generator(),
+                       dut.logger.generator()],
+            "eth_tx": [dut.phy_model.phy_sink.generator(),
+                       dut.phy_model.generator()],
+            "eth_rx":  dut.phy_model.phy_source.generator()
+        }
+        clocks = {"sys":    10,
+                  "eth_rx": 10,
+                  "eth_tx": 10}
+        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
