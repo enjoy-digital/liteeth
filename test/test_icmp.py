@@ -17,6 +17,8 @@ from test.model.ip import *
 from test.model.icmp import *
 from test.model import phy, mac, arp, ip, icmp
 
+from litex.gen.sim import *
+
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
 

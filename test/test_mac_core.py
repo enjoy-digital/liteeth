@@ -13,6 +13,8 @@ from liteeth.mac.core import LiteEthMACCore
 
 from test.model import phy, mac
 
+from litex.gen.sim import *
+
 
 class DUT(Module):
     def __init__(self):

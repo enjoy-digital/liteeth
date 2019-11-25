@@ -34,8 +34,8 @@ class Etherbone(Module):
             print_etherbone(">>>>>>>>")
             print_etherbone(packet)
         udp_packet = udp.UDPPacket(packet)
-        udp_packet.src_port = 0x1234  # XXX
-        udp_packet.dst_port = 20000  # XXX
+        udp_packet.src_port = 0x1234 # FIXME
+        udp_packet.dst_port = 0x1234 # FIXME
         udp_packet.length   = len(packet)
         udp_packet.checksum = 0
         self.udp.send(udp_packet)

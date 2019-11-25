@@ -80,7 +80,7 @@ class UDP(Module):
         ip_packet.fragment_offset = 0
         ip_packet.ttl             = 0x80
         ip_packet.sender_ip       = self.ip_address
-        ip_packet.target_ip       = 0x12345678  # XXX
+        ip_packet.target_ip       = 0x12345678  # FIXME
         ip_packet.checksum        = 0
         ip_packet.protocol        = udp_protocol
         self.ip.send(ip_packet)
@@ -97,6 +97,6 @@ class UDP(Module):
             self.process(packet)
 
     def process(self, packet):
-        if packet.dst_port == 20000:
+        if packet.dst_port == 0x1234: # FIXME
             if self.etherbone_callback is not None:
                 self.etherbone_callback(packet)

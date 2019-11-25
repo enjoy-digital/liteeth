@@ -13,6 +13,8 @@ from liteeth.core import LiteEthIPCore
 
 from test.model import phy, mac, arp, ip
 
+from litex.gen.sim import *
+
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
 

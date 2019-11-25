@@ -14,6 +14,7 @@ from test.model.udp import UDPPacket
 from litex.tools.remote.etherbone import *
 from test.model.etherbone import Etherbone
 
+from litex.gen.sim import *
 
 class TestModel(unittest.TestCase):
     def test_mac(self):
