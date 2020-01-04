@@ -85,8 +85,8 @@ class ARP(Module):
         self.process(packet)
 
     def process(self, packet):
-        if len(packet) != eth_min_len-arp_header.length:
-            raise ValueError
+        # if len(packet) != eth_min_len-arp_header.length:
+        #     raise ValueError
         if packet.hwtype != arp_hwtype_ethernet:
             raise ValueError
         if packet.proto != arp_proto_ip:

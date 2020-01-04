@@ -76,8 +76,7 @@ class UDP(Module):
         ip_packet.ihl             = 0x5
         ip_packet.total_length    = len(packet) + ip_packet.ihl
         ip_packet.identification  = 0
-        ip_packet.flags           = 0
-        ip_packet.fragment_offset = 0
+        ip_packet.flags_offset    = 0
         ip_packet.ttl             = 0x80
         ip_packet.sender_ip       = self.ip_address
         ip_packet.target_ip       = 0x12345678  # FIXME
