@@ -43,10 +43,13 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads):
+    def __init__(self, pads, delay=2.0e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
+
+        delay_taps = int(delay/78e-12) # (78ps per tap)
+        assert delay_taps < 32
 
         rx_ctl_ibuf = Signal()
         rx_ctl_idelay = Signal()
@@ -58,7 +61,7 @@ class LiteEthPHYRGMIIRX(Module):
         self.specials += [
             Instance("IBUF", i_I=pads.rx_ctl, o_O=rx_ctl_ibuf),
             Instance("IDELAYE2",
-                p_IDELAY_TYPE="FIXED", #p_IDELAY_VALUE=0,
+                p_IDELAY_TYPE="FIXED", p_IDELAY_VALUE=delay_taps,
                 i_C=0, i_LD=0, i_CE=0, i_LDPIPEEN=0, i_INC=0,
                 i_IDATAIN=rx_ctl_ibuf, o_DATAOUT=rx_ctl_idelay
             ),
@@ -72,7 +75,7 @@ class LiteEthPHYRGMIIRX(Module):
             self.specials += [
                 Instance("IBUF", i_I=pads.rx_data[i], o_O=rx_data_ibuf[i]),
                 Instance("IDELAYE2",
-                    p_IDELAY_TYPE="FIXED", #p_IDELAY_VALUE=0,
+                    p_IDELAY_TYPE="FIXED", p_IDELAY_VALUE=delay_taps,
                     i_C=0, i_LD=0, i_CE=0, i_LDPIPEEN=0, i_INC=0,
                     i_IDATAIN=rx_data_ibuf[i], o_DATAOUT=rx_data_idelay[i]
                 ),
