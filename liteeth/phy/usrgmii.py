@@ -45,7 +45,7 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads):
+    def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -63,9 +63,9 @@ class LiteEthPHYRGMIIRX(Module):
                 p_DELAY_SRC="IDATAIN",
                 p_CASCADE="NONE",
                 p_DELAY_TYPE="FIXED",
-                p_DELAY_VALUE=0,
+                p_DELAY_VALUE=int(rx_delay*1e12),
                 p_REFCLK_FREQUENCY=300.0,
-                p_DELAY_FORMAT="COUNT",
+                p_DELAY_FORMAT="TIME",
                 p_UPDATE_MODE="ASYNC",
                 i_CASC_IN=0,
                 i_CASC_RETURN=0,
@@ -93,12 +93,13 @@ class LiteEthPHYRGMIIRX(Module):
             self.specials += [
                 Instance("IBUF", i_I=pads.rx_data[i], o_O=rx_data_ibuf[i]),
                 Instance("IDELAYE3",
-                       p_DELAY_SRC="IDATAIN",
+                    p_DELAY_SRC="IDATAIN",
                     p_CASCADE="NONE",
                     p_DELAY_TYPE="FIXED",
-                    p_DELAY_VALUE=0,
+                    p_DELAY_VALUE=int(rx_delay*1e12),
+                    p_REFCLK_FREQUENCY=300.0,
                     p_UPDATE_MODE="ASYNC",
-                    p_DELAY_FORMAT="COUNT",
+                    p_DELAY_FORMAT="TIME",
                     i_CASC_IN=0,
                     i_CASC_RETURN=0,
                     i_CE=0,
@@ -132,14 +133,14 @@ class LiteEthPHYRGMIIRX(Module):
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset):
+    def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9):
         self._reset = CSRStorage()
 
         # # #
 
-        self.clock_domains.cd_eth_rx   = ClockDomain()
-        self.clock_domains.cd_eth_tx   = ClockDomain()
-        self.clock_domains.cd_eth_tx90 = ClockDomain(reset_less=True)
+        self.clock_domains.cd_eth_rx         = ClockDomain()
+        self.clock_domains.cd_eth_tx         = ClockDomain()
+        self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
 
         # RX
         eth_rx_clk_ibuf = Signal()
@@ -153,11 +154,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # TX
-        pll_locked      = Signal()
-        pll_fb          = Signal()
-        pll_clk_tx      = Signal()
-        pll_clk_tx90    = Signal()
-        eth_tx_clk_obuf = Signal()
+        tx_phase = 125e6*tx_delay*360
+        assert tx_phase < 360
+
+        pll_locked         = Signal()
+        pll_fb             = Signal()
+        pll_clk_tx         = Signal()
+        pll_clk_tx_delayed = Signal()
+        eth_tx_clk_obuf    = Signal()
         self.specials += [
             Instance("PLLE2_BASE",
                 p_STARTUP_WAIT="FALSE",
@@ -179,12 +183,12 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
                 # 125 MHz
                 p_CLKOUT1_DIVIDE=8,
-                p_CLKOUT1_PHASE=90.0,
-                o_CLKOUT1=pll_clk_tx90),
+                p_CLKOUT1_PHASE=tx_phase,
+                o_CLKOUT1=pll_clk_tx_delayed),
             Instance("BUFG", i_I=pll_clk_tx, o_O=self.cd_eth_tx.clk),
-            Instance("BUFG", i_I=pll_clk_tx90, o_O=self.cd_eth_tx90.clk),
+            Instance("BUFG", i_I=pll_clk_tx_delayed, o_O=self.cd_eth_tx_delayed.clk),
             Instance("ODDRE1",
-                i_C=ClockSignal("eth_tx90"),
+                i_C=ClockSignal("eth_tx_delayed"),
                 i_SR=0,
                 i_D1=1,
                 i_D2=0,
@@ -210,11 +214,11 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRGMII(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
         self.dw = 8
-        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset)
+        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads))
+        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
