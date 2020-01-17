@@ -2,14 +2,11 @@
 # License: BSD
 
 # RGMII PHY for 7-Series Xilinx FPGA
-from liteeth.common import *
 
-from migen.genlib.io import DDROutput
-from migen.genlib.misc import WaitTimer
-from migen.genlib.fsm import FSM, NextState
-
+from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.common import *
 from liteeth.phy.common import *
 
 
@@ -152,7 +149,6 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 class LiteEthPHYRGMII(Module, AutoCSR):
     dw = 8
-
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
