@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 # RGMII PHY for Ultrascale Xilinx FPGAs
@@ -156,37 +156,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # TX
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
+        from litex.soc.cores.clock import USPLL
+        self.submodules.pll = pll = USPLL()
+        pll.register_clkin(ClockSignal("eth_rx"), 125e6)
+        pll.create_clkout(self.cd_eth_tx, 125e6)
+        pll.create_clkout(self.cd_eth_tx_delayed, 125e6, phase=tx_phase)
 
-        pll_locked         = Signal()
-        pll_fb             = Signal()
-        pll_clk_tx         = Signal()
-        pll_clk_tx_delayed = Signal()
-        eth_tx_clk_obuf    = Signal()
+        eth_tx_clk_obuf = Signal()
         self.specials += [
-            Instance("PLLE2_BASE",
-                p_STARTUP_WAIT="FALSE",
-                o_LOCKED=pll_locked,
-
-                # VCO @ 1000 MHz
-                p_REF_JITTER1=0.01,
-                p_CLKIN1_PERIOD=8.0,
-                p_CLKFBOUT_MULT=8,
-                p_DIVCLK_DIVIDE=1,
-                i_CLKIN1=ClockSignal("eth_rx"),
-                i_CLKFBIN=pll_fb,
-                o_CLKFBOUT=pll_fb,
-
-                # 125 MHz
-                p_CLKOUT0_DIVIDE=8,
-                p_CLKOUT0_PHASE=0.0,
-                o_CLKOUT0=pll_clk_tx,
-
-                # 125 MHz
-                p_CLKOUT1_DIVIDE=8,
-                p_CLKOUT1_PHASE=tx_phase,
-                o_CLKOUT1=pll_clk_tx_delayed),
-            Instance("BUFG", i_I=pll_clk_tx, o_O=self.cd_eth_tx.clk),
-            Instance("BUFG", i_I=pll_clk_tx_delayed, o_O=self.cd_eth_tx_delayed.clk),
             Instance("ODDRE1",
                 i_C=ClockSignal("eth_tx_delayed"),
                 i_SR=0,
