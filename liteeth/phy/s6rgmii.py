@@ -231,7 +231,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # Reset
-        reset = Signal()
+        self.reset = reset = Signal()
         if with_hw_init_reset:
             self.submodules.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)

@@ -105,7 +105,6 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         self.clock_domains.cd_eth_tx         = ClockDomain()
         self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
 
-
         # RX
         eth_rx_clk_ibuf = Signal()
         self.specials += [
@@ -139,8 +138,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
-
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
