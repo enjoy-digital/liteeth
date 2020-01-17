@@ -208,7 +208,7 @@ class LiteEthIPRX(Module):
                 NextState("CHECK")
             )
         )
-        valid = Signal(reset_less=True)
+        self.valid = valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
             (depacketizer.source.target_ip == ip_address) &

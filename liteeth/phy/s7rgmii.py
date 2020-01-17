@@ -120,7 +120,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
 
-        pll_locked         = Signal()
+        self.pll_locked = pll_locked = Signal()
         pll_fb             = Signal()
         pll_clk_tx         = Signal()
         pll_clk_tx_delayed = Signal()
@@ -153,7 +153,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # Reset
-        reset = Signal()
+        self.reset = reset = Signal()
         if with_hw_init_reset:
             self.submodules.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
@@ -168,8 +168,9 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRGMII(Module, AutoCSR):
+    dw = 8
+
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
-        self.dw = 8
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
         self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))

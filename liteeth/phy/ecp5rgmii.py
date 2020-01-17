@@ -175,8 +175,9 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRGMII(Module, AutoCSR):
+    dw = 8
+
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
-        self.dw = 8
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
         self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, tx_delay))
