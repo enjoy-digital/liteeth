@@ -43,7 +43,7 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads, rx_delay=2.0e-9):
+    def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -117,10 +117,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # TX
-
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
-        print(tx_phase)
 
         pll_locked         = Signal()
         pll_fb             = Signal()
