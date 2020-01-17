@@ -58,10 +58,13 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads):
+    def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
+
+        rx_delay_taps = int(rx_delay/25e-12) # 25ps per tap
+        assert rx_delay_taps < 128
 
         rx_ctl_delayf  = Signal()
         rx_ctl         = Signal()
@@ -73,7 +76,7 @@ class LiteEthPHYRGMIIRX(Module):
         self.specials += [
             Instance("DELAYF",
                 p_DEL_MODE="SCLK_ALIGNED",
-                p_DEL_VALUE="DELAY{}".format(int(2e-9/25e-12)), # 2ns (25ps per tap)
+                p_DEL_VALUE="DELAY{}".format(rx_delay_taps),
                 i_LOADN=1,
                 i_MOVE=0,
                 i_DIRECTION=0,
@@ -91,7 +94,7 @@ class LiteEthPHYRGMIIRX(Module):
             self.specials += [
                 Instance("DELAYF",
                     p_DEL_MODE="SCLK_ALIGNED",
-                    p_DEL_VALUE="DELAY{}".format(int(2e-9/25e-12)), # 2ns (25ps per tap)
+                    p_DEL_VALUE="DELAY{}".format(rx_delay_taps),
                     i_LOADN=1,
                     i_MOVE=0,
                     i_DIRECTION=0,
@@ -120,7 +123,7 @@ class LiteEthPHYRGMIIRX(Module):
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset):
+    def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9):
         self._reset = CSRStorage()
 
         # # #
@@ -134,6 +137,9 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         self.comb += self.cd_eth_rx.clk.eq(clock_pads.rx)
 
         # TX
+        tx_delay_taps = int(tx_delay/25e-12) # 25ps per tap
+        assert tx_delay_taps < 128
+
         eth_tx_clk_o = Signal()
         self.specials += [
             Instance("ODDRX1F",
@@ -145,7 +151,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             ),
             Instance("DELAYF",
                 p_DEL_MODE="SCLK_ALIGNED",
-                p_DEL_VALUE="DELAY{}".format(int(2e-9/25e-12)),
+                p_DEL_VALUE="DELAY{}".format(tx_delay_taps),
                 i_LOADN=1,
                 i_MOVE=0,
                 i_DIRECTION=0,
@@ -169,11 +175,11 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRGMII(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
         self.dw = 8
-        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset)
+        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, tx_delay))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
