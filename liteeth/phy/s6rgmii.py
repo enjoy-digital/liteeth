@@ -16,7 +16,7 @@ class LiteEthPHYRGMIITX(Module):
 
         # # #
 
-        tx_ctl_obuf = Signal()
+        tx_ctl_obuf  = Signal()
         tx_data_obuf = Signal(4)
 
         self.specials += [
@@ -89,14 +89,14 @@ class LiteEthPHYRGMIIRX(Module):
 
         # # #
 
-        rx_ctl_ibuf = Signal()
-        rx_ctl_idelay = Signal()
-        rx_ctl = Signal()
-        rx_ctl_reg = Signal()
-        rx_data_ibuf = Signal(4)
+        rx_ctl_ibuf    = Signal()
+        rx_ctl_idelay  = Signal()
+        rx_ctl         = Signal()
+        rx_ctl_reg     = Signal()
+        rx_data_ibuf   = Signal(4)
         rx_data_idelay = Signal(4)
-        rx_data = Signal(8)
-        rx_data_reg = Signal(8)
+        rx_data        = Signal(8)
+        rx_data_reg    = Signal(8)
 
         self.specials += [
             Instance("IBUF", i_I=pads.rx_ctl, o_O=rx_ctl_ibuf),
@@ -243,8 +243,8 @@ class LiteEthPHYRGMII(Module, AutoCSR):
     def __init__(self, clock_pads, pads, with_hw_init_reset=True):
         self.dw = 8
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset)
-        self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads))
+        self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
