@@ -16,7 +16,7 @@ class LiteEthPHYRGMIITX(Module):
 
         # # #
 
-        tx_ctl_obuf = Signal()
+        tx_ctl_obuf  = Signal()
         tx_data_obuf = Signal(4)
 
         self.specials += [
@@ -84,25 +84,28 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads):
+    def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
-        rx_ctl_ibuf = Signal()
-        rx_ctl_idelay = Signal()
-        rx_ctl = Signal()
-        rx_ctl_reg = Signal()
-        rx_data_ibuf = Signal(4)
+        rx_delay_taps = int(rx_delay/50e-12) # 50ps per tap
+        assert rx_delay_taps < 256
+
+        rx_ctl_ibuf    = Signal()
+        rx_ctl_idelay  = Signal()
+        rx_ctl         = Signal()
+        rx_ctl_reg     = Signal()
+        rx_data_ibuf   = Signal(4)
         rx_data_idelay = Signal(4)
-        rx_data = Signal(8)
-        rx_data_reg = Signal(8)
+        rx_data        = Signal(8)
+        rx_data_reg    = Signal(8)
 
         self.specials += [
             Instance("IBUF", i_I=pads.rx_ctl, o_O=rx_ctl_ibuf),
             Instance("IODELAY2",
                 p_IDELAY_TYPE="FIXED",
-                p_ODELAY_VALUE=int(2.0e-9/50e-12), # 1.5ns (50ps per tap)
+                p_ODELAY_VALUE=rx_delay_taps,
                 p_DELAY_SRC="IDATAIN",
                 o_DATAOUT=rx_ctl_idelay,
                 i_CAL=0,
@@ -133,7 +136,7 @@ class LiteEthPHYRGMIIRX(Module):
                 Instance("IBUF", i_I=pads.rx_data[i], o_O=rx_data_ibuf[i]),
                 Instance("IODELAY2",
                     p_IDELAY_TYPE="FIXED",
-                    p_ODELAY_VALUE=int(2.0e-9/50e-12), # 1.5ns (50ps per tap)
+                    p_ODELAY_VALUE=rx_delay_taps,
                     p_DELAY_SRC="IDATAIN",
                     o_DATAOUT=rx_data_idelay[i],
                     i_CAL=0,
@@ -174,7 +177,7 @@ class LiteEthPHYRGMIIRX(Module):
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset):
+    def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9):
         self._reset = CSRStorage()
 
         # # #
@@ -192,6 +195,9 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # TX
+        tx_delay_taps = int(tx_delay/50e-12) # 50ps per tap
+        assert tx_delay_taps < 256
+
         eth_tx_clk_o = Signal()
         self.specials += [
             Instance("ODDR2",
@@ -208,7 +214,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             ),
             Instance("IODELAY2",
                 p_IDELAY_TYPE="FIXED",
-                p_ODELAY_VALUE=int(1.5e-9/50e-12), # 1.5ns (50ps per tap)
+                p_ODELAY_VALUE=tx_delay_taps,
                 p_DELAY_SRC="ODATAIN",
                 o_DOUT=clock_pads.tx,
                 i_CAL=0,
@@ -240,11 +246,11 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRGMII(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
         self.dw = 8
-        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset)
-        self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads))
+        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
+        self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
