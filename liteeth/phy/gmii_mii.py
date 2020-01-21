@@ -1,16 +1,16 @@
 # This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-from liteeth.common import *
-from liteeth.phy.gmii import LiteEthPHYGMIICRG
-from liteeth.phy.mii import LiteEthPHYMIITX, LiteEthPHYMIIRX
-from liteeth.phy.gmii import LiteEthPHYGMIITX, LiteEthPHYGMIIRX
-
+from migen import *
 from migen.genlib.io import DDROutput
 from migen.genlib.cdc import PulseSynchronizer
 
 from litex.soc.interconnect.stream import Multiplexer, Demultiplexer
 
+from liteeth.common import *
+from liteeth.phy.gmii import LiteEthPHYGMIICRG
+from liteeth.phy.mii import LiteEthPHYMIITX, LiteEthPHYMIIRX
+from liteeth.phy.gmii import LiteEthPHYGMIITX, LiteEthPHYGMIIRX
 from liteeth.phy.common import LiteEthPHYMDIO
 
 
@@ -170,8 +170,8 @@ class LiteEthGMIIMIIModeDetection(Module, AutoCSR):
 
 
 class LiteEthPHYGMIIMII(Module, AutoCSR):
+    dw = 8
     def __init__(self, clock_pads, pads, clk_freq, with_hw_init_reset=True):
-        self.dw = 8
         # Note: we can use GMII CRG since it also handles tx clock pad used for MII
         self.submodules.mode_detection = LiteEthGMIIMIIModeDetection(clk_freq)
         mode = self.mode_detection.mode

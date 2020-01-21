@@ -1,15 +1,12 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 # RGMII PHY for 7-Series Xilinx FPGA
-from liteeth.common import *
 
-from migen.genlib.io import DDROutput
-from migen.genlib.misc import WaitTimer
-from migen.genlib.fsm import FSM, NextState
-
+from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.common import *
 from liteeth.phy.common import *
 
 
@@ -108,7 +105,6 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         self.clock_domains.cd_eth_tx         = ClockDomain()
         self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
 
-
         # RX
         eth_rx_clk_ibuf = Signal()
         self.specials += [
@@ -119,31 +115,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # TX
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
+        from litex.soc.cores.clock import S7PLL
+        self.submodules.pll = pll = S7PLL()
+        pll.register_clkin(ClockSignal("eth_rx"), 125e6)
+        pll.create_clkout(self.cd_eth_tx, 125e6)
+        pll.create_clkout(self.cd_eth_tx_delayed, 125e6, phase=tx_phase)
 
-        pll_locked         = Signal()
-        pll_fb             = Signal()
-        pll_clk_tx         = Signal()
-        pll_clk_tx_delayed = Signal()
-        eth_tx_clk_obuf    = Signal()
+        eth_tx_clk_obuf = Signal()
         self.specials += [
-            Instance("PLLE2_BASE",
-                     p_STARTUP_WAIT="FALSE", o_LOCKED=pll_locked,
-
-                     # VCO @ 1000 MHz
-                     p_REF_JITTER1=0.01, p_CLKIN1_PERIOD=8.0,
-                     p_CLKFBOUT_MULT=8, p_DIVCLK_DIVIDE=1,
-                     i_CLKIN1=ClockSignal("eth_rx"), i_CLKFBIN=pll_fb, o_CLKFBOUT=pll_fb,
-
-                     # 125 MHz
-                     p_CLKOUT0_DIVIDE=8, p_CLKOUT0_PHASE=0.0,
-                     o_CLKOUT0=pll_clk_tx,
-
-                     # 125 MHz
-                     p_CLKOUT1_DIVIDE=8, p_CLKOUT1_PHASE=tx_phase,
-                     o_CLKOUT1=pll_clk_tx_delayed
-            ),
-            Instance("BUFG", i_I=pll_clk_tx, o_O=self.cd_eth_tx.clk),
-            Instance("BUFG", i_I=pll_clk_tx_delayed, o_O=self.cd_eth_tx_delayed.clk),
             Instance("ODDR",
                 p_DDR_CLK_EDGE="SAME_EDGE",
                 i_C=ClockSignal("eth_tx_delayed"), i_CE=1, i_S=0, i_R=0,
@@ -153,14 +132,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # Reset
-        reset = Signal()
+        self.reset = reset = Signal()
         if with_hw_init_reset:
             self.submodules.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
-
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
@@ -168,8 +147,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRGMII(Module, AutoCSR):
+    dw = 8
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
-        self.dw = 8
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
         self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))

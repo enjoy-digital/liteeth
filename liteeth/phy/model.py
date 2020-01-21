@@ -1,7 +1,7 @@
 # This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-import os
+from migen import *
 
 from liteeth.common import *
 
@@ -27,8 +27,8 @@ class LiteEthPHYModelCRG(Module, AutoCSR):
 
 
 class LiteEthPHYModel(Module, AutoCSR):
+    dw = 8
     def __init__(self, pads):
-        self.dw = 8
         self.submodules.crg = LiteEthPHYModelCRG()
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
         self.source = source = stream.Endpoint(eth_phy_description(8))

@@ -1,13 +1,12 @@
 # This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-from liteeth.common import *
-
+from migen import *
 from migen.genlib.cdc import MultiReg
-from migen.genlib.misc import WaitTimer
 from migen.genlib.io import DDROutput
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from liteeth.common import *
 from liteeth.phy.common import *
 
 
@@ -119,8 +118,8 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
 
 
 class LiteEthPHYRMII(Module, AutoCSR):
+    dw = 8
     def __init__(self, clock_pads, pads, with_hw_init_reset=True):
-        self.dw = 8
         self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, with_hw_init_reset)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
