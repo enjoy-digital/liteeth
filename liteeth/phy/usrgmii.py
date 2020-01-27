@@ -159,7 +159,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         from litex.soc.cores.clock import USPLL
         self.submodules.pll = pll = USPLL()
         pll.register_clkin(ClockSignal("eth_rx"), 125e6)
-        pll.create_clkout(self.cd_eth_tx, 125e6)
+        pll.create_clkout(self.cd_eth_tx, 125e6, with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, 125e6, phase=tx_phase)
 
         eth_tx_clk_obuf = Signal()
