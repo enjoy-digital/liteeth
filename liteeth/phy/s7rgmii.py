@@ -21,20 +21,36 @@ class LiteEthPHYRGMIITX(Module):
 
         self.specials += [
             Instance("ODDR",
-                p_DDR_CLK_EDGE="SAME_EDGE",
-                i_C=ClockSignal("eth_tx"), i_CE=1, i_S=0, i_R=0,
-                i_D1=sink.valid, i_D2=sink.valid, o_Q=tx_ctl_obuf
+                p_DDR_CLK_EDGE = "SAME_EDGE",
+                i_C  = ClockSignal("eth_tx"),
+                i_CE = 1,
+                i_S  = 0,
+                i_R  = 0,
+                i_D1 = sink.valid,
+                i_D2 = sink.valid,
+                o_Q  = tx_ctl_obuf,
             ),
-            Instance("OBUF", i_I=tx_ctl_obuf, o_O=pads.tx_ctl)
+            Instance("OBUF",
+                i_I = tx_ctl_obuf,
+                o_O = pads.tx_ctl,
+            ),
         ]
         for i in range(4):
             self.specials += [
                 Instance("ODDR",
-                    p_DDR_CLK_EDGE="SAME_EDGE",
-                    i_C=ClockSignal("eth_tx"), i_CE=1, i_S=0, i_R=0,
-                    i_D1=sink.data[i], i_D2=sink.data[4+i], o_Q=tx_data_obuf[i],
+                    p_DDR_CLK_EDGE = "SAME_EDGE",
+                    i_C  = ClockSignal("eth_tx"),
+                    i_CE = 1,
+                    i_S  = 0,
+                    i_R  = 0,
+                    i_D1 = sink.data[i],
+                    i_D2 = sink.data[4+i],
+                    o_Q  = tx_data_obuf[i],
                 ),
-                Instance("OBUF", i_I=tx_data_obuf[i], o_O=pads.tx_data[i])
+                Instance("OBUF",
+                    i_I = tx_data_obuf[i],
+                    o_O = pads.tx_data[i],
+                )
             ]
         self.comb += sink.ready.eq(1)
 
@@ -58,28 +74,53 @@ class LiteEthPHYRGMIIRX(Module):
         self.specials += [
             Instance("IBUF", i_I=pads.rx_ctl, o_O=rx_ctl_ibuf),
             Instance("IDELAYE2",
-                p_IDELAY_TYPE="FIXED", p_IDELAY_VALUE=rx_delay_taps,
-                i_C=0, i_LD=0, i_CE=0, i_LDPIPEEN=0, i_INC=0,
-                i_IDATAIN=rx_ctl_ibuf, o_DATAOUT=rx_ctl_idelay
+                p_IDELAY_TYPE  = "FIXED",
+                p_IDELAY_VALUE = rx_delay_taps,
+                i_C        = 0,
+                i_LD       = 0,
+                i_CE       = 0,
+                i_LDPIPEEN = 0,
+                i_INC      = 0,
+                i_IDATAIN  = rx_ctl_ibuf,
+                o_DATAOUT  = rx_ctl_idelay,
             ),
             Instance("IDDR",
-                p_DDR_CLK_EDGE="SAME_EDGE_PIPELINED",
-                i_C=ClockSignal("eth_rx"), i_CE=1, i_S=0, i_R=0,
-                i_D=rx_ctl_idelay, o_Q1=rx_ctl, #o_Q2=,
+                p_DDR_CLK_EDGE = "SAME_EDGE_PIPELINED",
+                i_C  = ClockSignal("eth_rx"),
+                i_CE = 1,
+                i_S  = 0,
+                i_R  = 0,
+                i_D  = rx_ctl_idelay,
+                o_Q1 = rx_ctl,
+                o_Q2 = Signal(),
             )
         ]
         for i in range(4):
             self.specials += [
-                Instance("IBUF", i_I=pads.rx_data[i], o_O=rx_data_ibuf[i]),
+                Instance("IBUF",
+                    i_I = pads.rx_data[i],
+                    o_O = rx_data_ibuf[i],
+                ),
                 Instance("IDELAYE2",
-                    p_IDELAY_TYPE="FIXED", p_IDELAY_VALUE=rx_delay_taps,
-                    i_C=0, i_LD=0, i_CE=0, i_LDPIPEEN=0, i_INC=0,
-                    i_IDATAIN=rx_data_ibuf[i], o_DATAOUT=rx_data_idelay[i]
+                    p_IDELAY_TYPE  = "FIXED",
+                    p_IDELAY_VALUE = rx_delay_taps,
+                    i_C        = 0,
+                    i_LD       = 0,
+                    i_CE       = 0,
+                    i_LDPIPEEN = 0,
+                    i_INC      = 0,
+                    i_IDATAIN  = rx_data_ibuf[i],
+                    o_DATAOUT  = rx_data_idelay[i],
                 ),
                 Instance("IDDR",
-                    p_DDR_CLK_EDGE="SAME_EDGE_PIPELINED",
-                    i_C=ClockSignal("eth_rx"), i_CE=1, i_S=0, i_R=0,
-                    i_D=rx_data_idelay[i], o_Q1=rx_data[i], o_Q2=rx_data[i+4],
+                    p_DDR_CLK_EDGE = "SAME_EDGE_PIPELINED",
+                    i_C  = ClockSignal("eth_rx"),
+                    i_CE = 1,
+                    i_S  = 0,
+                    i_R  = 0,
+                    i_D  = rx_data_idelay[i],
+                    o_Q1 = rx_data[i],
+                    o_Q2 = rx_data[i+4],
                 )
             ]
 
@@ -108,8 +149,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # RX
         eth_rx_clk_ibuf = Signal()
         self.specials += [
-            Instance("IBUF", i_I=clock_pads.rx,   o_O=eth_rx_clk_ibuf),
-            Instance("BUFG", i_I=eth_rx_clk_ibuf, o_O=self.cd_eth_rx.clk)
+            Instance("IBUF",
+                i_I = clock_pads.rx,
+                o_O = eth_rx_clk_ibuf,
+            ),
+            Instance("BUFG",
+                i_I = eth_rx_clk_ibuf,
+                o_O = self.cd_eth_rx.clk,
+            ),
         ]
 
         # TX
@@ -124,11 +171,19 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         eth_tx_clk_obuf = Signal()
         self.specials += [
             Instance("ODDR",
-                p_DDR_CLK_EDGE="SAME_EDGE",
-                i_C=ClockSignal("eth_tx_delayed"), i_CE=1, i_S=0, i_R=0,
-                i_D1=1, i_D2=0, o_Q=eth_tx_clk_obuf
+                p_DDR_CLK_EDGE = "SAME_EDGE",
+                i_C  = ClockSignal("eth_tx_delayed"),
+                i_CE = 1,
+                i_S  = 0,
+                i_R  = 0,
+                i_D1 = 1,
+                i_D2 = 0,
+                o_Q  = eth_tx_clk_obuf,
             ),
-            Instance("OBUF", i_I=eth_tx_clk_obuf, o_O=clock_pads.tx)
+            Instance("OBUF",
+                i_I = eth_tx_clk_obuf,
+                o_O = clock_pads.tx,
+            )
         ]
 
         # Reset

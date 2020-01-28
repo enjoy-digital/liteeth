@@ -21,14 +21,15 @@ class LiteEthPHYRGMIITX(Module):
 
         self.specials += [
             Instance("ODDRE1",
-                i_C=ClockSignal("eth_tx"),
-                i_SR=0,
-                i_D1=sink.valid,
-                i_D2=sink.valid,
-                o_Q=tx_ctl_obuf),
+                i_C  = ClockSignal("eth_tx"),
+                i_SR = 0,
+                i_D1 = sink.valid,
+                i_D2 = sink.valid,
+                o_Q  = tx_ctl_obuf),
             Instance("OBUF",
-                i_I=tx_ctl_obuf,
-                o_O=pads.tx_ctl)
+                i_I = tx_ctl_obuf,
+                o_O = pads.tx_ctl,
+            ),
         ]
         for i in range(4):
             self.specials += [
@@ -37,10 +38,12 @@ class LiteEthPHYRGMIITX(Module):
                     i_SR=0,
                     i_D1=sink.data[i],
                     i_D2=sink.data[4 + i],
-                     o_Q=tx_data_obuf[i]),
+                    o_Q=tx_data_obuf[i],
+                ),
                 Instance("OBUF",
                     i_I=tx_data_obuf[i],
-                    o_O=pads.tx_data[i])
+                    o_O=pads.tx_data[i],
+                ),
             ]
         self.comb += sink.ready.eq(1)
 
@@ -59,69 +62,79 @@ class LiteEthPHYRGMIIRX(Module):
         rx_data        = Signal(8)
 
         self.specials += [
-            Instance("IBUF", i_I=pads.rx_ctl, o_O=rx_ctl_ibuf),
+            Instance("IBUF",
+                i_I=pads.rx_ctl,
+                o_O=rx_ctl_ibuf
+            ),
             Instance("IDELAYE3",
-                p_DELAY_SRC="IDATAIN",
-                p_CASCADE="NONE",
-                p_DELAY_TYPE="FIXED",
-                p_DELAY_VALUE=int(rx_delay*1e12),
-                p_REFCLK_FREQUENCY=300.0,
-                p_DELAY_FORMAT="TIME",
-                p_UPDATE_MODE="ASYNC",
-                i_CASC_IN=0,
-                i_CASC_RETURN=0,
-                i_CE=0,
-                i_CLK=0,
-                i_INC=0,
-                i_LOAD=0,
-                i_CNTVALUEIN=0,
-                i_IDATAIN=rx_ctl_ibuf,
-                i_RST=0,
-                i_EN_VTC=1,
-                o_DATAOUT=rx_ctl_idelay),
+                p_DELAY_SRC        = "IDATAIN",
+                p_CASCADE          = "NONE",
+                p_DELAY_TYPE       = "FIXED",
+                p_DELAY_VALUE      = int(rx_delay*1e12),
+                p_REFCLK_FREQUENCY = 300.0,
+                p_DELAY_FORMAT     = "TIME",
+                p_UPDATE_MODE      = "ASYNC",
+                i_CASC_IN     = 0,
+                i_CASC_RETURN = 0,
+                i_CE          = 0,
+                i_CLK         = 0,
+                i_INC         = 0,
+                i_LOAD        = 0,
+                i_CNTVALUEIN  = 0,
+                i_IDATAIN     = rx_ctl_ibuf,
+                i_RST         = 0,
+                i_EN_VTC      = 1,
+                o_DATAOUT     = rx_ctl_idelay,
+            ),
             Instance("IDDRE1",
-                p_DDR_CLK_EDGE="SAME_EDGE_PIPELINED",
-                p_IS_C_INVERTED=0,
-                p_IS_CB_INVERTED=1,
-                i_C=ClockSignal("eth_rx"),
-                i_CB=ClockSignal("eth_rx"),
-                i_R=0,
-                i_D=rx_ctl_idelay,
-                o_Q1=rx_ctl,
-                o_Q2=Signal())
+                p_DDR_CLK_EDGE   = "SAME_EDGE_PIPELINED",
+                p_IS_C_INVERTED  = 0,
+                p_IS_CB_INVERTED = 1,
+                i_C  = ClockSignal("eth_rx"),
+                i_CB = ClockSignal("eth_rx"),
+                i_R  = 0,
+                i_D  = rx_ctl_idelay,
+                o_Q1 = rx_ctl,
+                o_Q2 = Signal(),
+            ),
         ]
         for i in range(4):
             self.specials += [
-                Instance("IBUF", i_I=pads.rx_data[i], o_O=rx_data_ibuf[i]),
+                Instance("IBUF",
+                    i_I = pads.rx_data[i],
+                    o_O = rx_data_ibuf[i],
+                ),
                 Instance("IDELAYE3",
-                    p_DELAY_SRC="IDATAIN",
-                    p_CASCADE="NONE",
-                    p_DELAY_TYPE="FIXED",
-                    p_DELAY_VALUE=int(rx_delay*1e12),
-                    p_REFCLK_FREQUENCY=300.0,
-                    p_UPDATE_MODE="ASYNC",
-                    p_DELAY_FORMAT="TIME",
-                    i_CASC_IN=0,
-                    i_CASC_RETURN=0,
-                    i_CE=0,
-                    i_CLK=0,
-                    i_INC=0,
-                    i_LOAD=0,
-                    i_CNTVALUEIN=0,
-                    i_IDATAIN=rx_data_ibuf[i],
-                    i_RST=0,
-                    i_EN_VTC=1,
-                    o_DATAOUT=rx_data_idelay[i]),
+                    p_DELAY_SRC        = "IDATAIN",
+                    p_CASCADE          = "NONE",
+                    p_DELAY_TYPE       = "FIXED",
+                    p_DELAY_VALUE      = int(rx_delay*1e12),
+                    p_REFCLK_FREQUENCY = 300.0,
+                    p_UPDATE_MODE      = "ASYNC",
+                    p_DELAY_FORMAT     = "TIME",
+                    i_CASC_IN     = 0,
+                    i_CASC_RETURN = 0,
+                    i_CE          = 0,
+                    i_CLK         = 0,
+                    i_INC         = 0,
+                    i_LOAD        = 0,
+                    i_CNTVALUEIN  = 0,
+                    i_IDATAIN     = rx_data_ibuf[i],
+                    i_RST         = 0,
+                    i_EN_VTC      = 1,
+                    o_DATAOUT     = rx_data_idelay[i],
+                ),
                 Instance("IDDRE1",
-                    p_DDR_CLK_EDGE="SAME_EDGE_PIPELINED",
-                    p_IS_C_INVERTED=0,
-                    p_IS_CB_INVERTED=1,
-                    i_C=ClockSignal("eth_rx"),
-                    i_CB=ClockSignal("eth_rx"),
-                    i_R=0,
-                    i_D=rx_data_idelay[i],
-                    o_Q1=rx_data[i],
-                    o_Q2=rx_data[i + 4])
+                    p_DDR_CLK_EDGE   = "SAME_EDGE_PIPELINED",
+                    p_IS_C_INVERTED  = 0,
+                    p_IS_CB_INVERTED = 1,
+                    i_C  = ClockSignal("eth_rx"),
+                    i_CB = ClockSignal("eth_rx"),
+                    i_R  = 0,
+                    i_D  = rx_data_idelay[i],
+                    o_Q1 = rx_data[i],
+                    o_Q2 = rx_data[i + 4],
+                ),
             ]
 
         rx_ctl_d = Signal()
@@ -149,8 +162,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # RX
         eth_rx_clk_ibuf = Signal()
         self.specials += [
-            Instance("IBUF", i_I=clock_pads.rx,   o_O=eth_rx_clk_ibuf),
-            Instance("BUFG", i_I=eth_rx_clk_ibuf, o_O=self.cd_eth_rx.clk)
+            Instance("IBUF",
+                i_I = clock_pads.rx,
+                o_O = eth_rx_clk_ibuf,
+            ),
+            Instance("BUFG",
+               i_I = eth_rx_clk_ibuf,
+               o_O = self.cd_eth_rx.clk,
+            )
         ]
 
         # TX
@@ -165,12 +184,16 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         eth_tx_clk_obuf = Signal()
         self.specials += [
             Instance("ODDRE1",
-                i_C=ClockSignal("eth_tx_delayed"),
-                i_SR=0,
-                i_D1=1,
-                i_D2=0,
-                o_Q=eth_tx_clk_obuf),
-            Instance("OBUF", i_I=eth_tx_clk_obuf, o_O=clock_pads.tx)
+                i_C  = ClockSignal("eth_tx_delayed"),
+                i_SR = 0,
+                i_D1 = 1,
+                i_D2 = 0,
+                o_Q  = eth_tx_clk_obuf
+            ),
+            Instance("OBUF",
+                i_I = eth_tx_clk_obuf,
+                o_O = clock_pads.tx,
+            )
         ]
 
         # Reset
