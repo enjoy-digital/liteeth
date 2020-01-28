@@ -1,4 +1,5 @@
 # This file is Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
+# This file is Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from collections import namedtuple
@@ -6,7 +7,6 @@ from math import ceil
 
 from migen import *
 from migen.genlib.cdc import MultiReg, PulseSynchronizer
-from migen.genlib.fsm import FSM
 
 __all__ = ["QPLLSettings", "QPLLChannel", "QPLL", "GTPTxInit", "GTPRxInit"]
 
@@ -16,10 +16,10 @@ QPLLSettings = namedtuple("QPLLSettings", "refclksel fbdiv fbdiv_45 refclk_div")
 
 class QPLLChannel:
     def __init__(self, index):
-        self.index = index
-        self.reset = Signal()
-        self.lock = Signal()
-        self.clk = Signal()
+        self.index  = index
+        self.reset  = Signal()
+        self.lock   = Signal()
+        self.clk    = Signal()
         self.refclk = Signal()
 
 
@@ -36,28 +36,28 @@ class QPLL(Module):
                 channel_settings[k.replace("PLLX", "PLL"+str(i))] = v
 
             if qpllsettings is None:
-                add_setting("i_PLLXPD", 1)
+                add_setting("i_PLLXPD",          1)
             else:
-                add_setting("i_PLLXPD", 0)
-                add_setting("i_PLLXLOCKEN", 1)
-                add_setting("i_PLLXREFCLKSEL", qpllsettings.refclksel)
-                add_setting("p_PLLX_FBDIV", qpllsettings.fbdiv)
-                add_setting("p_PLLX_FBDIV_45", qpllsettings.fbdiv_45)
+                add_setting("i_PLLXPD",          0)
+                add_setting("i_PLLXLOCKEN",      1)
+                add_setting("i_PLLXREFCLKSEL",   qpllsettings.refclksel)
+                add_setting("p_PLLX_FBDIV",      qpllsettings.fbdiv)
+                add_setting("p_PLLX_FBDIV_45",   qpllsettings.fbdiv_45)
                 add_setting("p_PLLX_REFCLK_DIV", qpllsettings.refclk_div)
-                add_setting("i_PLLXRESET", channel.reset)
-                add_setting("o_PLLXLOCK", channel.lock)
-                add_setting("o_PLLXOUTCLK", channel.clk)
-                add_setting("o_PLLXOUTREFCLK", channel.refclk)
+                add_setting("i_PLLXRESET",       channel.reset)
+                add_setting("o_PLLXLOCK",        channel.lock)
+                add_setting("o_PLLXOUTCLK",      channel.clk)
+                add_setting("o_PLLXOUTREFCLK",   channel.refclk)
 
         self.specials += \
             Instance("GTPE2_COMMON",
-                i_GTREFCLK0=gtrefclk0,
-                i_GTREFCLK1=gtrefclk1,
-                i_BGBYPASSB=1,
-                i_BGMONITORENB=1,
-                i_BGPDB=1,
-                i_BGRCALOVRD=0b11111,
-                i_RCALENB=1,
+                i_GTREFCLK0    = gtrefclk0,
+                i_GTREFCLK1    = gtrefclk1,
+                i_BGBYPASSB    = 1,
+                i_BGMONITORENB = 1,
+                i_BGPDB        = 1,
+                i_BGRCALOVRD   = 0b11111,
+                i_RCALENB      = 1,
                 **channel_settings
             )
 
@@ -65,13 +65,13 @@ class QPLL(Module):
 class GTPTxInit(Module):
     def __init__(self, sys_clk_freq):
         self.qpll_reset = Signal()
-        self.qpll_lock = Signal()
-        self.tx_reset = Signal()
-        self.done = Signal()
+        self.qpll_lock  = Signal()
+        self.tx_reset   = Signal()
+        self.done       = Signal()
 
         # Handle async signals
         qpll_reset = Signal()
-        tx_reset = Signal()
+        tx_reset   = Signal()
         self.sync += [
             self.qpll_reset.eq(qpll_reset),
             self.tx_reset.eq(tx_reset)
@@ -85,8 +85,8 @@ class GTPTxInit(Module):
         # at least 500ns.
         # See https://www.xilinx.com/support/answers/43482.html
         timer_max = ceil(500e-9*sys_clk_freq)
-        timer = Signal(max=timer_max+1)
-        tick = Signal()
+        timer     = Signal(max=timer_max+1)
+        tick      = Signal()
         self.sync += [
             tick.eq(0),
             If(timer == timer_max,
@@ -97,44 +97,47 @@ class GTPTxInit(Module):
             )
         ]
 
-        fsm = FSM()
-        self.submodules += fsm
-
+        self.submodules.fsm = fsm = FSM()
         fsm.act("WAIT",
-            If(tick, NextState("QPLL_RESET"))
+            If(tick,
+                NextState("QPLL_RESET")
+            )
         )
         fsm.act("QPLL_RESET",
             tx_reset.eq(1),
             qpll_reset.eq(1),
-            If(tick, NextState("WAIT_QPLL_LOCK"))
+            If(tick,
+                NextState("WAIT_QPLL_LOCK")
+            )
         )
         fsm.act("WAIT_QPLL_LOCK",
             tx_reset.eq(1),
-            If(qpll_lock & tick, NextState("DONE"))
+            If(qpll_lock & tick,
+                NextState("DONE")
+            )
         )
         fsm.act("DONE",
             self.done.eq(1)
         )
 
 
-# As usual, Xilinx did not miss the opportunity to mess that up.
-# See: https://www.xilinx.com/support/answers/53561.html
+# RX Reset Sequence Requirement for Production Silicon:  https://www.xilinx.com/support/answers/53561.html
 class GTPRxInit(Module):
     def __init__(self, sys_clk_freq):
-        self.rx_reset = Signal()
+        self.rx_reset          = Signal()
         self.rx_pma_reset_done = Signal()
 
         # DRPCLK must be driven by the system clock
         self.drpaddr = Signal(9)
-        self.drpen = Signal()
-        self.drpdi = Signal(16)
-        self.drprdy = Signal()
-        self.drpdo = Signal(16)
-        self.drpwe = Signal()
+        self.drpen   = Signal()
+        self.drpdi   = Signal(16)
+        self.drprdy  = Signal()
+        self.drpdo   = Signal(16)
+        self.drpwe   = Signal()
 
-        self.enable = Signal()
+        self.enable  = Signal()
         self.restart = Signal()
-        self.done = Signal()
+        self.done    = Signal()
 
         # Handle async signals
         rx_reset = Signal()
@@ -144,7 +147,7 @@ class GTPRxInit(Module):
         self.specials += MultiReg(self.rx_pma_reset_done, rx_pma_reset_done)
 
         drpvalue = Signal(16)
-        drpmask = Signal()
+        drpmask  = Signal()
         self.comb += [
             self.drpaddr.eq(0x011),
             If(drpmask,
@@ -157,11 +160,11 @@ class GTPRxInit(Module):
         rx_pma_reset_done_r = Signal()
         self.sync += rx_pma_reset_done_r.eq(rx_pma_reset_done)
 
-        fsm = FSM()
-        self.submodules += fsm
-
+        self.submodules.fsm = fsm = FSM()
         fsm.act("WAIT_ENABLE",
-            If(self.enable, NextState("GTRXRESET"))
+            If(self.enable,
+                NextState("GTRXRESET")
+            )
         )
         fsm.act("GTRXRESET",
             rx_reset.eq(1),
@@ -209,5 +212,7 @@ class GTPRxInit(Module):
         )
         fsm.act("DONE",
             self.done.eq(1),
-            If(self.restart, NextState("WAIT_ENABLE"))
+            If(self.restart,
+                NextState("WAIT_ENABLE")
+            )
         )
