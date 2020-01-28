@@ -21,38 +21,39 @@ class LiteEthPHYRGMIITX(Module):
 
         self.specials += [
             Instance("ODDRX1F",
-                i_SCLK=ClockSignal("eth_tx"),
-                i_RST=ResetSignal("eth_tx"),
-                i_D0=sink.valid,
-                i_D1=sink.valid,
-                o_Q=tx_ctl_oddrx1f
+                i_SCLK = ClockSignal("eth_tx"),
+                i_RST  = ResetSignal("eth_tx"),
+                i_D0   = sink.valid,
+                i_D1   = sink.valid,
+                o_Q    = tx_ctl_oddrx1f
             ),
             Instance("DELAYF",
-                p_DEL_MODE="SCLK_ALIGNED",
-                p_DEL_VALUE="DELAY0",
-                i_LOADN=1,
-                i_MOVE=0,
-                i_DIRECTION=0,
-                i_A=tx_ctl_oddrx1f,
-                o_Z=pads.tx_ctl)
+                p_DEL_MODE  = "SCLK_ALIGNED",
+                p_DEL_VALUE = "DELAY0",
+                i_LOADN     = 1,
+                i_MOVE      = 0,
+                i_DIRECTION = 0,
+                i_A         = tx_ctl_oddrx1f,
+                o_Z         = pads.tx_ctl)
         ]
         for i in range(4):
             self.specials += [
                 Instance("ODDRX1F",
-                    i_SCLK=ClockSignal("eth_tx"),
-                    i_RST=ResetSignal("eth_tx"),
-                    i_D0=sink.data[i],
-                    i_D1=sink.data[4+i],
-                    o_Q=tx_data_oddrx1f[i]
+                    i_SCLK = ClockSignal("eth_tx"),
+                    i_RST  = ResetSignal("eth_tx"),
+                    i_D0   = sink.data[i],
+                    i_D1   = sink.data[4+i],
+                    o_Q    = tx_data_oddrx1f[i]
                 ),
                 Instance("DELAYF",
-                    p_DEL_MODE="SCLK_ALIGNED",
-                    p_DEL_VALUE="DELAY0",
-                    i_LOADN=1,
-                    i_MOVE=0,
-                    i_DIRECTION=0,
-                    i_A=tx_data_oddrx1f[i],
-                    o_Z=pads.tx_data[i])
+                    p_DEL_MODE  = "SCLK_ALIGNED",
+                    p_DEL_VALUE = "DELAY0",
+                    i_LOADN     = 1,
+                    i_MOVE      = 0,
+                    i_DIRECTION = 0,
+                    i_A         = tx_data_oddrx1f[i],
+                    o_Z         = pads.tx_data[i]
+                )
             ]
         self.comb += sink.ready.eq(1)
 
@@ -75,37 +76,37 @@ class LiteEthPHYRGMIIRX(Module):
 
         self.specials += [
             Instance("DELAYF",
-                p_DEL_MODE="SCLK_ALIGNED",
-                p_DEL_VALUE="DELAY{}".format(rx_delay_taps),
-                i_LOADN=1,
-                i_MOVE=0,
-                i_DIRECTION=0,
-                i_A=pads.rx_ctl,
-                o_Z=rx_ctl_delayf),
+                p_DEL_MODE  = "SCLK_ALIGNED",
+                p_DEL_VALUE = "DELAY{}".format(rx_delay_taps),
+                i_LOADN     = 1,
+                i_MOVE      = 0,
+                i_DIRECTION = 0,
+                i_A         = pads.rx_ctl,
+                o_Z         = rx_ctl_delayf),
             Instance("IDDRX1F",
-                i_SCLK=ClockSignal("eth_rx"),
-                i_RST=ResetSignal("eth_rx"),
-                i_D=rx_ctl_delayf,
-                o_Q0=rx_ctl,
+                i_SCLK = ClockSignal("eth_rx"),
+                i_RST  = ResetSignal("eth_rx"),
+                i_D    = rx_ctl_delayf,
+                o_Q0   = rx_ctl,
             )
         ]
         self.sync += rx_ctl_reg.eq(rx_ctl)
         for i in range(4):
             self.specials += [
                 Instance("DELAYF",
-                    p_DEL_MODE="SCLK_ALIGNED",
-                    p_DEL_VALUE="DELAY{}".format(rx_delay_taps),
-                    i_LOADN=1,
-                    i_MOVE=0,
-                    i_DIRECTION=0,
-                    i_A=pads.rx_data[i],
-                    o_Z=rx_data_delayf[i]),
+                    p_DEL_MODE  = "SCLK_ALIGNED",
+                    p_DEL_VALUE = "DELAY{}".format(rx_delay_taps),
+                    i_LOADN     = 1,
+                    i_MOVE      = 0,
+                    i_DIRECTION = 0,
+                    i_A         = pads.rx_data[i],
+                    o_Z         = rx_data_delayf[i]),
                 Instance("IDDRX1F",
-                    i_SCLK=ClockSignal("eth_rx"),
-                    i_RST=ResetSignal("eth_rx"),
-                    i_D=rx_data_delayf[i],
-                    o_Q0=rx_data[i],
-                    o_Q1=rx_data[i+4]
+                    i_SCLK = ClockSignal("eth_rx"),
+                    i_RST  = ResetSignal("eth_rx"),
+                    i_D    = rx_data_delayf[i],
+                    o_Q0   = rx_data[i],
+                    o_Q1   = rx_data[i+4]
                 )
             ]
         self.sync += rx_data_reg.eq(rx_data)
@@ -143,20 +144,20 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         eth_tx_clk_o = Signal()
         self.specials += [
             Instance("ODDRX1F",
-                i_SCLK=ClockSignal("eth_tx"),
-                i_RST=ResetSignal("eth_tx"),
-                i_D0=1,
-                i_D1=0,
-                o_Q=eth_tx_clk_o
+                i_SCLK = ClockSignal("eth_tx"),
+                i_RST  = ResetSignal("eth_tx"),
+                i_D0   = 1,
+                i_D1   = 0,
+                o_Q    = eth_tx_clk_o
             ),
             Instance("DELAYF",
-                p_DEL_MODE="SCLK_ALIGNED",
-                p_DEL_VALUE="DELAY{}".format(tx_delay_taps),
-                i_LOADN=1,
-                i_MOVE=0,
-                i_DIRECTION=0,
-                i_A=eth_tx_clk_o,
-                o_Z=clock_pads.tx)
+                p_DEL_MODE  = "SCLK_ALIGNED",
+                p_DEL_VALUE = "DELAY{}".format(tx_delay_taps),
+                i_LOADN     = 1,
+                i_MOVE      = 0,
+                i_DIRECTION = 0,
+                i_A         = eth_tx_clk_o,
+                o_Z         = clock_pads.tx)
         ]
 
         # Reset
