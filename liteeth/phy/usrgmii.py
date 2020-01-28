@@ -77,7 +77,7 @@ class LiteEthPHYRGMIIRX(Module):
                 i_CNTVALUEIN=0,
                 i_IDATAIN=rx_ctl_ibuf,
                 i_RST=0,
-                i_EN_VTC=0,
+                i_EN_VTC=1,
                 o_DATAOUT=rx_ctl_idelay),
             Instance("IDDRE1",
                 p_DDR_CLK_EDGE="SAME_EDGE_PIPELINED",
@@ -110,7 +110,7 @@ class LiteEthPHYRGMIIRX(Module):
                     i_CNTVALUEIN=0,
                     i_IDATAIN=rx_data_ibuf[i],
                     i_RST=0,
-                    i_EN_VTC=0,
+                    i_EN_VTC=1,
                     o_DATAOUT=rx_data_idelay[i]),
                 Instance("IDDRE1",
                     p_DDR_CLK_EDGE="SAME_EDGE_PIPELINED",
@@ -159,7 +159,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         from litex.soc.cores.clock import USPLL
         self.submodules.pll = pll = USPLL()
         pll.register_clkin(ClockSignal("eth_rx"), 125e6)
-        pll.create_clkout(self.cd_eth_tx, 125e6)
+        pll.create_clkout(self.cd_eth_tx, 125e6, with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, 125e6, phase=tx_phase)
 
         eth_tx_clk_obuf = Signal()
