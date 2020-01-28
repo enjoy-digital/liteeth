@@ -62,10 +62,11 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
         else:
             # XXX Xilinx specific, replace BUFGMUX with a generic clock buffer?
             self.specials += Instance("BUFGMUX",
-                                      i_I0=self.cd_eth_rx.clk,
-                                      i_I1=clock_pads.tx,
-                                      i_S=mii_mode,
-                                      o_O=self.cd_eth_tx.clk)
+                i_I0 = self.cd_eth_rx.clk,
+                i_I1 = clock_pads.tx,
+                i_S  = mii_mode,
+                o_O  = self.cd_eth_tx.clk,
+            )
 
         reset = Signal()
         if with_hw_init_reset:
