@@ -5,7 +5,7 @@ from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
-
+from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE
 
 # ip crossbar
 
@@ -208,8 +208,8 @@ class LiteEthIPTX(Module):
             checksum.ce.eq(sink.valid),
             checksum.reset.eq(source.valid & source.last & source.ready)
         ]
-
-        self.submodules.ip_fragmenter = ip_fragmenter = LiteEthIPV4Fragmenter(dw)
+        ip_fragmenter = BufferizeEndpoints({"source": DIR_SOURCE})(LiteEthIPV4Fragmenter(dw))
+        self.submodules.ip_fragmenter = ip_fragmenter
         self.comb += sink.connect(ip_fragmenter.sink)
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [

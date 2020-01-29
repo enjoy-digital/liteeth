@@ -9,6 +9,7 @@ from litex.build.generic_platform import *
 from litex.build.sim import SimPlatform
 from litex.build.sim.config import SimConfig
 
+from litex.soc.interconnect import wishbone
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 from litex.soc.cores import uart
@@ -16,8 +17,8 @@ from litex.soc.cores import uart
 from liteeth.common import *
 from liteeth.phy.model import LiteEthPHYModel
 from liteeth.phy.xgmii import LiteEthPHYXGMII
-from liteeth.phy.usrgmii import LiteEthPHYRGMII
 from liteeth.core import LiteEthUDPIPCore
+from liteeth.frontend.etherbone import LiteEthEtherbone
 
 class SimPins(Pins):
     def __init__(self, n=1):
@@ -119,7 +120,6 @@ class SimSoC(SoCCore):
         # platform = Platform()
         sys_clk_freq = int(1e6)
         SoCCore.__init__(self, platform, clk_freq=sys_clk_freq,
-                          integrated_rom_size=0x8000,
                           ident="LiteX Simulation", ident_version=True,
                           with_uart=False,
                           **kwargs)
@@ -143,7 +143,7 @@ class SimSoC(SoCCore):
                     dw=xgmii_dw)
                 self.submodules.core = LiteEthUDPIPCore(
                     self.ethphy, mac_address, convert_ip(ip_address),
-                    sys_clk_freq, mac_dw=xgmii_dw)
+                    sys_clk_freq, dw=xgmii_dw)
             else:
                 self.submodules.ethphy = LiteEthPHYModel(self.platform.request("eth", 0))
                 self.submodules.core = LiteEthUDPIPCore(
@@ -249,83 +249,105 @@ def sim_udp_port(dw=32):
 
 
 class UDPSimCore(SimSoC):
-    def __init__(self, mac_address, ip_address, port, xgmii=True, xgmii_dw=32, **kwargs):
+    def __init__(self,
+                 mac_address,
+                 ip_address,
+                 port,
+                 with_etherbone=False,
+                 xgmii=True,
+                 xgmii_dw=32,
+                 **kwargs):
         if xgmii:
             XGMII_IO = xgmii_io(xgmii_dw) + sim_udp_port(xgmii_dw)
             platform = Platform(XGMII_IO)
-            SimSoC.__init__(self, with_udp=True, platform=platform,
-                                      ip_address=ip_address,
-                                      mac_address=mac_address,
-                                      xgmii=xgmii,
-                                      xgmii_dw=xgmii_dw, **kwargs)
+            SimSoC.__init__(self,
+                            with_udp=True,
+                            platform=platform,
+                            ip_address=ip_address,
+                            mac_address=mac_address,
+                            xgmii=xgmii,
+                            xgmii_dw=xgmii_dw,
+                            **kwargs)
         else:
             RGMII_IO = _io + sim_udp_port()
             platform = Platform(RGMII_IO)
-            SimSoC.__init__(self, ip_address=ip_address,
-                                  mac_address=mac_address,
-                                  with_udp=True, platform=platform, **kwargs)
+            SimSoC.__init__(self,
+                            ip_address=ip_address,
+                            mac_address=mac_address,
+                            with_udp=True,
+                            platform=platform,
+                            **kwargs)
 
         udp_port = self.core.udp.crossbar.get_port(port, xgmii_dw if xgmii else 32)
-        # XXX avoid manual connect
-        udp_sink = self.platform.request("udp_sink")
-        sink_length = 0xf888
-        self.comb += [udp_sink.data.eq(0xc0ffee00c0ffee11),
-                      udp_sink.dst_port.eq(7778),
-                      udp_sink.length.eq(sink_length),
-                      udp_sink.ip_address.eq(convert_ip("192.168.1.101"))]
-        self.comb += [
-            # control
-            udp_port.sink.valid.eq(udp_sink.valid),
-            udp_port.sink.last.eq(udp_sink.last),
-            udp_sink.ready.eq(udp_port.sink.ready),
 
-            # param
-            udp_port.sink.src_port.eq(udp_sink.src_port),
-            udp_port.sink.dst_port.eq(udp_sink.dst_port),
-            udp_port.sink.ip_address.eq(udp_sink.ip_address),
-            udp_port.sink.length.eq(udp_sink.length),
+        if with_etherbone:
+            self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 6001, mode="master")
+            self.add_wb_master(self.etherbone.wishbone.bus)
+            self.submodules.sram = wishbone.SRAM(1024,
+                                                 init=[0, 0, 0, 0, 100, 412,
+                                                       36, 2**17, 192, 500,
+                                                       100, 10, 6, 3])
+            self.register_mem("wb_ram", 0x80000, self.sram.bus, size=1024)
+        else:
+                # XXX avoid manual connect
+                udp_sink = self.platform.request("udp_sink")
+                sink_length = 0x88
+                self.comb += [udp_sink.data.eq(0xc0ffee00c0ffee11 if xgmii else 0xcafecafe),
+                              udp_sink.dst_port.eq(7778),
+                              udp_sink.length.eq(sink_length),
+                              udp_sink.ip_address.eq(convert_ip("192.168.1.101"))]
+                self.comb += [
+                    # control
+                    udp_port.sink.valid.eq(udp_sink.valid),
+                    udp_port.sink.last.eq(udp_sink.last),
+                    udp_sink.ready.eq(udp_port.sink.ready),
 
-            # payload
-            udp_port.sink.data.eq(udp_sink.data),
-            udp_port.sink.error.eq(udp_sink.error)
-        ]
-        udp_source = self.platform.request("udp_source")
-        self.comb += [
-            # control
-            udp_source.valid.eq(udp_port.source.valid),
-            udp_source.last.eq(udp_port.source.last),
-            udp_source.ready.eq(1),
-            udp_port.source.ready.eq(udp_source.ready),
+                    # param
+                    udp_port.sink.src_port.eq(udp_sink.src_port),
+                    udp_port.sink.dst_port.eq(udp_sink.dst_port),
+                    udp_port.sink.ip_address.eq(udp_sink.ip_address),
+                    udp_port.sink.length.eq(udp_sink.length),
 
-            # param
-            udp_source.src_port.eq(udp_port.source.src_port),
-            udp_source.dst_port.eq(udp_port.source.dst_port),
-            udp_source.ip_address.eq(udp_port.source.ip_address),
-            udp_source.length.eq(udp_port.source.length),
+                    # payload
+                    udp_port.sink.data.eq(udp_sink.data),
+                    udp_port.sink.error.eq(udp_sink.error)
+                ]
+                udp_source = self.platform.request("udp_source")
+                self.comb += [
+                    # control
+                    udp_source.valid.eq(udp_port.source.valid),
+                    udp_source.last.eq(udp_port.source.last),
+                    udp_source.ready.eq(1),
+                    udp_port.source.ready.eq(udp_source.ready),
 
-            # payload
-            udp_source.data.eq(udp_port.source.data),
-            udp_source.error.eq(udp_port.source.error)
-        ]
+                    # param
+                    udp_source.src_port.eq(udp_port.source.src_port),
+                    udp_source.dst_port.eq(udp_port.source.dst_port),
+                    udp_source.ip_address.eq(udp_port.source.ip_address),
+                    udp_source.length.eq(udp_port.source.length),
 
-        send_pkt = Signal(reset=0)
-        always_xmit = True
-        dw = xgmii_dw if xgmii else 32
-        shift = log2_int(dw // 8)  # bits required to represent bytes per word
-        if always_xmit:
-            send_pkt_counter, send_pkt_counter_d = Signal(17), Signal()
-            self.sync += [send_pkt_counter.eq(send_pkt_counter + 1),
-                          send_pkt_counter_d.eq(send_pkt_counter[16]),
-                          send_pkt.eq(send_pkt_counter_d ^ send_pkt_counter[16])]
+                    # payload
+                    udp_source.data.eq(udp_port.source.data),
+                    udp_source.error.eq(udp_port.source.error)
+                ]
 
+                send_pkt = Signal(reset=0)
+                always_xmit = True
+                dw = xgmii_dw if xgmii else 32
+                shift = log2_int(dw // 8)  # bits required to represent bytes per word
+                if always_xmit:
+                    send_pkt_counter, send_pkt_counter_d = Signal(17), Signal()
+                    self.sync += [send_pkt_counter.eq(send_pkt_counter + 1),
+                                  send_pkt_counter_d.eq(send_pkt_counter[16]),
+                                  send_pkt.eq(send_pkt_counter_d ^ send_pkt_counter[16])]
 
-        sink_counter = Signal(16)
-        self.comb += [udp_sink.valid.eq(sink_counter > 0),
-                      udp_sink.last.eq(sink_counter == 1)]
-        self.sync += [If(send_pkt, sink_counter.eq(sink_length >> shift)),
-                      If((sink_counter > 0) & (udp_sink.ready == 1),
-                         sink_counter.eq(sink_counter - 1))
-        ]
+                sink_counter = Signal(16)
+                self.comb += [udp_sink.valid.eq(sink_counter > 0),
+                              udp_sink.last.eq(sink_counter == 1)]
+                self.sync += [If(send_pkt, sink_counter.eq(sink_length >> shift)),
+                              If((sink_counter > 0) & (udp_sink.ready == 1),
+                                 sink_counter.eq(sink_counter - 1))
+                ]
 
 
 
@@ -337,6 +359,7 @@ def main():
     parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
     parser.add_argument("--sim-only", action='store_true', help="Simulation")
     parser.add_argument("--xgmii", action='store_true', help="Generate the XGMII interface")
+    parser.add_argument("--with_etherbone", action='store_true', help="Etherbone interface")
     parser.add_argument("--xgmii-dw", type=int, help="32/64 bit width XGMII interface", default=64)
     parser.add_argument("--threads", default=4,
                         help="set number of threads (default=4)")
@@ -358,10 +381,10 @@ def main():
             args={"interface": "tap1",
                   "ip": "192.168.1.101",
                   "vcd_name": "foo.vcd"})
-        print(args.xgmii_dw)
         soc = UDPSimCore(mac_address=args.mac_address,
                          ip_address="192.168.1.51",
                          port=6000,
+                         with_etherbone=args.with_etherbone,
                          xgmii=args.xgmii,
                          xgmii_dw=args.xgmii_dw,
                          **soc_kwargs)
