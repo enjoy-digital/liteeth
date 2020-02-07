@@ -50,15 +50,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                 "default" : inc.eq(4)
             })
 
-        counter       = Signal(lengthbits)
-        counter_reset = Signal()
-        counter_ce    = Signal()
-        self.sync += \
-            If(counter_reset,
-                counter.eq(0)
-            ).Elif(counter_ce,
-                counter.eq(counter + inc)
-            )
+        counter = Signal(lengthbits)
 
         # Slot computation
         slot    = Signal(slotbits)
@@ -79,7 +71,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             If(sink.valid,
                 If(fifo.sink.ready,
                     ongoing.eq(1),
-                    counter_ce.eq(1),
+                    NextValue(counter, counter + inc),
                     NextState("WRITE")
                 ).Else(
                     NextValue(self.errors.status, self.errors.status + 1),
@@ -92,7 +84,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                 If(counter == eth_mtu,
                     NextState("DISCARD_REMAINING")
                 ).Else(
-                    counter_ce.eq(1),
+                    NextValue(counter, counter + inc),
                     ongoing.eq(1)
                 ),
                 If(sink.last,
@@ -105,7 +97,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             )
         )
         fsm.act("DISCARD",
-            counter_reset.eq(1),
+            NextValue(counter, 0),
             NextState("IDLE")
         )
         fsm.act("DISCARD_REMAINING",
@@ -118,7 +110,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             fifo.sink.length.eq(counter)
         ]
         fsm.act("TERMINATE",
-            counter_reset.eq(1),
+            NextValue(counter, 0),
             slot_ce.eq(1),
             fifo.sink.valid.eq(1),
             NextState("IDLE")
@@ -184,16 +176,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         ]
 
         # Length computation
-        counter       = Signal(lengthbits)
-        counter_reset = Signal()
-        counter_ce    = Signal()
-        self.sync += \
-            If(counter_reset,
-                counter.eq(0)
-            ).Elif(counter_ce,
-                counter.eq(counter + 4)
-            )
-
+        counter = Signal(lengthbits)
 
         # FSM
         last  = Signal()
@@ -203,7 +186,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         self.submodules += fsm
 
         fsm.act("IDLE",
-            counter_reset.eq(1),
+            NextValue(counter, 0),
             If(fifo.source.valid,
                 NextState("CHECK")
             )
@@ -238,7 +221,9 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             source.valid.eq(1),
             source.last.eq(last),
             If(source.ready,
-                counter_ce.eq(~last),
+                If(~last,
+                    NextValue(counter, counter + 4)
+                ),
                 NextState("CHECK")
             )
         )
