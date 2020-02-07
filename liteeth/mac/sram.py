@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2015-2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # This file is Copyright (c) 2017 whitequark <whitequark@whitequark.org>
 # License: BSD
@@ -9,48 +9,50 @@ from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
 
 
+# LiteEthMACSRAMWriter -----------------------------------------------------------------------------
+
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big"):
-        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
-        slotbits = max(log2_int(nslots), 1)
+        slotbits   = max(log2_int(nslots), 1)
         lengthbits = 32
 
-        self._slot = CSRStatus(slotbits)
-        self._length = CSRStatus(lengthbits)
+        self._slot         = CSRStatus(slotbits)
+        self._length       = CSRStatus(lengthbits)
 
-        self.errors = CSRStatus(32)
+        self.errors        = CSRStatus(32)
 
         self.submodules.ev = EventManager()
-        self.ev.available = EventSourceLevel()
+        self.ev.available  = EventSourceLevel()
         self.ev.finalize()
 
         # # #
 
-        # packet dropped if no slot available
+        # Packet dropped if no slot available
         sink.ready.reset = 1
 
-        # length computation
+        # Length computation
         inc = Signal(3)
         if endianness == "big":
             self.comb += Case(sink.last_be, {
-                0b1000 : inc.eq(1),
-                0b0100 : inc.eq(2),
-                0b0010 : inc.eq(3),
+                0b1000    : inc.eq(1),
+                0b0100    : inc.eq(2),
+                0b0010    : inc.eq(3),
                 "default" : inc.eq(4)
             })
         else:
             self.comb += Case(sink.last_be, {
-                0b0001 : inc.eq(1),
-                0b0010 : inc.eq(2),
-                0b0100 : inc.eq(3),
+                0b0001    : inc.eq(1),
+                0b0010    : inc.eq(2),
+                0b0100    : inc.eq(3),
                 "default" : inc.eq(4)
             })
 
-        counter = Signal(lengthbits)
+        counter       = Signal(lengthbits)
         counter_reset = Signal()
-        counter_ce = Signal()
+        counter_ce    = Signal()
         self.sync += \
             If(counter_reset,
                 counter.eq(0)
@@ -58,18 +60,18 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                 counter.eq(counter + inc)
             )
 
-        # slot computation
-        slot = Signal(slotbits)
+        # Slot computation
+        slot    = Signal(slotbits)
         slot_ce = Signal()
         self.sync += If(slot_ce, slot.eq(slot + 1))
 
         ongoing = Signal()
 
-        # status fifo
+        # Status FIFO
         fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += fifo
 
-        # fsm
+        # FSM
         fsm = FSM(reset_state="IDLE")
         self.submodules += fsm
 
@@ -128,8 +130,8 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             self._length.status.eq(fifo.source.length),
         ]
 
-        # memory
-        mems = [None]*nslots
+        # Memory
+        mems  = [None]*nslots
         ports = [None]*nslots
         for n in range(nslots):
             mems[n] = Memory(dw, depth)
@@ -148,28 +150,29 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             ]
         self.comb += Case(slot, cases)
 
+# LiteEthMACSRAMReader -----------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big"):
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
-        slotbits = max(log2_int(nslots), 1)
-        lengthbits = bits_for(depth*4)  # length in bytes
+        slotbits        = max(log2_int(nslots), 1)
+        lengthbits      = bits_for(depth*4)  # length in bytes
         self.lengthbits = lengthbits
 
-        self._start = CSR()
-        self._ready = CSRStatus()
-        self._level = CSRStatus(log2_int(nslots) + 1)
-        self._slot = CSRStorage(slotbits)
-        self._length = CSRStorage(lengthbits)
+        self._start        = CSR()
+        self._ready        = CSRStatus()
+        self._level        = CSRStatus(log2_int(nslots) + 1)
+        self._slot         = CSRStorage(slotbits)
+        self._length       = CSRStorage(lengthbits)
 
         self.submodules.ev = EventManager()
-        self.ev.done = EventSourcePulse()
+        self.ev.done       = EventSourcePulse()
         self.ev.finalize()
 
         # # #
 
-        # command fifo
+        # Command FIFO
         fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += fifo
         self.comb += [
@@ -180,10 +183,10 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             self._level.status.eq(fifo.level)
         ]
 
-        # length computation
-        counter = Signal(lengthbits)
+        # Length computation
+        counter       = Signal(lengthbits)
         counter_reset = Signal()
-        counter_ce = Signal()
+        counter_ce    = Signal()
         self.sync += \
             If(counter_reset,
                 counter.eq(0)
@@ -192,7 +195,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             )
 
 
-        # fsm
+        # FSM
         last  = Signal()
         last_d = Signal()
 
@@ -245,17 +248,17 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             NextState("IDLE")
         )
 
-        # last computation
+        # Last computation
         self.comb += last.eq((counter + 4) >= fifo.source.length)
         self.sync += last_d.eq(last)
 
-        # memory
+        # Memory
         rd_slot = fifo.source.slot
 
-        mems = [None]*nslots
+        mems  = [None]*nslots
         ports = [None]*nslots
         for n in range(nslots):
-            mems[n] = Memory(dw, depth)
+            mems[n]  = Memory(dw, depth)
             ports[n] = mems[n].get_port()
             self.specials += ports[n]
         self.mems = mems
