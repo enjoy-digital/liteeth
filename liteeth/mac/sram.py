@@ -64,9 +64,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         self.submodules += fifo
 
         # FSM
-        fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
-
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(sink.valid,
                 If(fifo.sink.ready,
@@ -179,29 +177,16 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         counter = Signal(lengthbits)
 
         # FSM
-        last  = Signal()
-        last_d = Signal()
-
-        fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
-
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             NextValue(counter, 0),
             If(fifo.source.valid,
-                NextState("CHECK")
+                NextState("SEND")
             )
         )
-        fsm.act("CHECK",
-            If(~last_d,
-                NextState("SEND"),
-            ).Else(
-                NextState("END"),
-            )
-        )
-
         length_lsb = fifo.source.length[0:2]
         if endianness == "big":
-            self.comb += If(last,
+            self.comb += If(source.last,
                 Case(length_lsb, {
                     0 : source.last_be.eq(0b0001),
                     1 : source.last_be.eq(0b1000),
@@ -209,22 +194,21 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
                     3 : source.last_be.eq(0b0010)
                 }))
         else:
-            self.comb += If(last,
+            self.comb += If(source.last,
                 Case(length_lsb, {
                     0 : source.last_be.eq(0b1000),
                     1 : source.last_be.eq(0b0001),
                     2 : source.last_be.eq(0b0010),
                     3 : source.last_be.eq(0b0100)
                 }))
-
         fsm.act("SEND",
             source.valid.eq(1),
-            source.last.eq(last),
+            source.last.eq(counter >= (fifo.source.length - 4)),
             If(source.ready,
-                If(~last,
-                    NextValue(counter, counter + 4)
+                NextValue(counter, counter + 4),
+                If(source.last,
+                    NextState("END")
                 ),
-                NextState("CHECK")
             )
         )
         fsm.act("END",
@@ -233,18 +217,13 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             NextState("IDLE")
         )
 
-        # Last computation
-        self.comb += last.eq((counter + 4) >= fifo.source.length)
-        self.sync += last_d.eq(last)
-
         # Memory
         rd_slot = fifo.source.slot
-
-        mems  = [None]*nslots
-        ports = [None]*nslots
+        mems    = [None]*nslots
+        ports   = [None]*nslots
         for n in range(nslots):
             mems[n]  = Memory(dw, depth)
-            ports[n] = mems[n].get_port()
+            ports[n] = mems[n].get_port(async_read=True) # FIXME: avoid async_read by latching data.
             self.specials += ports[n]
         self.mems = mems
 
