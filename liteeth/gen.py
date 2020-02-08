@@ -25,6 +25,7 @@ from migen import *
 
 from litex.build.generic_platform import *
 from litex.build.xilinx.platform import XilinxPlatform
+from litex.build.lattice.platform import LatticePlatform
 
 from litex.soc.interconnect import wishbone
 from litex.soc.integration.soc_core import *
@@ -35,7 +36,9 @@ from liteeth.common import *
 from liteeth.phy.mii import LiteEthPHYMII
 from liteeth.phy.rmii import LiteEthPHYRMII
 from liteeth.phy.gmii import LiteEthPHYGMII
-from liteeth.phy.s7rgmii import LiteEthPHYRGMII
+
+from liteeth.phy.s7rgmii import LiteEthPHYRGMII as s7phyrgmii
+from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII as ecp5phyrgmii
 
 from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
@@ -162,16 +165,20 @@ _io = [
 
 # Platform -----------------------------------------------------------------------------------------
 
-class CorePlatform(XilinxPlatform):
+class LatticeCorePlatform(LatticePlatform):
     name = "core"
-    def __init__(self):
-        XilinxPlatform.__init__(self, "xc7", _io)
+    def __init__(self, chip):
+        LatticePlatform.__init__(self, chip, _io)
+
+class XilinxCorePlatform(XilinxPlatform):
+    name = "core"
+    def __init__(self, chip):
+        XilinxPlatform.__init__(self, chip, _io)
 
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
-    def __init__(self, phy, clk_freq):
-        platform = CorePlatform()
+    def __init__(self, phy, clk_freq, platform):
         SoCMini.__init__(self, platform, clk_freq=clk_freq)
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
@@ -186,8 +193,12 @@ class PHYCore(SoCMini):
             ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
                                     platform.request("gmii_eth"))
         elif phy == "rgmii":
-            ethphy = LiteEthPHYRGMII(platform.request("rgmii_eth_clocks"),
-                                     platform.request("rgmii_eth"))
+            if type(platform) == LatticeCorePlatform:
+                ethphy = ecp5phyrgmii(platform.request("rgmii_eth_clocks"),
+                                         platform.request("rgmii_eth"))
+            elif type(platform) == XilinxCorePlatform:
+                ethphy = s7phyrgmii(platform.request("rgmii_eth_clocks"),
+                                         platform.request("rgmii_eth"))
         else:
             raise ValueError("Unsupported " + phy + " PHY");
         self.submodules.ethphy = ethphy
@@ -206,8 +217,8 @@ class MACCore(PHYCore):
     }
     mem_map.update(SoCCore.mem_map)
 
-    def __init__(self, phy, clk_freq):
-        PHYCore.__init__(self, phy, clk_freq)
+    def __init__(self, phy, clk_freq, platform):
+        PHYCore.__init__(self, phy, clk_freq, platform)
 
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
         self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
@@ -225,8 +236,8 @@ class MACCore(PHYCore):
 # UDP Core -----------------------------------------------------------------------------------------
 
 class UDPCore(PHYCore):
-    def __init__(self, phy, clk_freq, mac_address, ip_address, port):
-        PHYCore.__init__(self, phy, clk_freq)
+    def __init__(self, phy, clk_freq, mac_address, ip_address, port, platform):
+        PHYCore.__init__(self, phy, clk_freq, platform)
 
         self.submodules.core = LiteEthUDPIPCore(self.ethphy, mac_address, convert_ip(ip_address), clk_freq)
         udp_port = self.core.udp.crossbar.get_port(port, 8)
@@ -276,17 +287,28 @@ def main():
     parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
     parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
     parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
+    parser.add_argument("--platform", default="xilinx", help="Development board(lattice/xilinx)")
+    parser.add_argument("--chip", default="xc7", help="FPGA chip model e.g. xc7 or LFE5UM5G-45F-8BG381C")
     args = parser.parse_args()
 
+    if args.platform == "lattice":
+        platform = LatticeCorePlatform(args.chip)
+    elif args.platform == "xilinx":
+        platform = XilinxCorePlatform(args.chip)
+    else:
+        raise ValueError("Unknown platform: {}".format(args.platform))
+
     if args.core == "wishbone":
-        soc = MACCore(phy=args.phy, clk_freq=int(100e6))
+        soc = MACCore(phy=args.phy, clk_freq=int(100e6), platform = platform)
     elif args.core == "udp":
         soc =  UDPCore(phy=args.phy, clk_freq=int(100e6),
                        mac_address = args.mac_address,
                        ip_address  = args.ip_address,
-                       port        = 6000)
+                       port        = 6000,
+                       platform    = platform)
     else:
-        raise ValueError
+        raise ValueError("Unknown core: {}".format(args.core))
+
     builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
     builder.build(build_name="liteeth_core")
 
