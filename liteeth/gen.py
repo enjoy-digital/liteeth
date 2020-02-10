@@ -46,6 +46,8 @@ _io = [
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
 
+    ("interrupt", 0, Pins(1)),
+
     # MII PHY Pads
     ("mii_eth_clocks", 0,
         Subsignal("tx", Pins(1)),
@@ -222,6 +224,8 @@ class MACCore(PHYCore):
         bridge = _WishboneBridge(self.platform.request("wishbone"))
         self.submodules += bridge
         self.add_wb_master(bridge.wishbone)
+
+        self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
 
 # UDP Core -----------------------------------------------------------------------------------------
 
