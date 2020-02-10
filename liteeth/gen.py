@@ -208,10 +208,10 @@ class MACCore(PHYCore):
     }
     mem_map.update(SoCCore.mem_map)
 
-    def __init__(self, phy, clk_freq):
+    def __init__(self, phy, clk_freq, endianness):
         PHYCore.__init__(self, phy, clk_freq)
 
-        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
+        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=endianness)
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
         self.add_csr("ethmac")
@@ -279,12 +279,13 @@ def main():
     soc_core_args(parser)
     parser.add_argument("--phy", default="mii", help="Ethernet PHY(mii/rmii/gmii/rgmii)")
     parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
+    parser.add_argument("--endianness", default="big", choices=("big", "little"), help="Wishbone endianness")
     parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
     parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
     args = parser.parse_args()
 
     if args.core == "wishbone":
-        soc = MACCore(phy=args.phy, clk_freq=int(100e6))
+        soc = MACCore(phy=args.phy, clk_freq=int(100e6), endianness=args.endianness)
     elif args.core == "udp":
         soc =  UDPCore(phy=args.phy, clk_freq=int(100e6),
                        mac_address = args.mac_address,
