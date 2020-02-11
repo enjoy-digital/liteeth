@@ -198,15 +198,15 @@ class PHYCore(SoCMini):
 # MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
-    interrupt_map = {
+    interrupt_map = SoCCore.interrupt_map
+    interrupt_map.update({
         "ethmac": 2,
-    }
-    interrupt_map.update(SoCCore.interrupt_map)
+    })
 
-    mem_map = {
+    mem_map = SoCCore.mem_map
+    mem_map.update({
         "ethmac": 0x50000000
-    }
-    mem_map.update(SoCCore.mem_map)
+    })
 
     def __init__(self, phy, clk_freq, endianness):
         PHYCore.__init__(self, phy, clk_freq)
