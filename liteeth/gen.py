@@ -21,6 +21,7 @@ TODO: identify limitations
 
 import argparse
 import os
+import yaml
 
 from migen import *
 
@@ -34,13 +35,7 @@ from litex.soc.integration.builder import *
 
 from liteeth.common import *
 
-from liteeth.phy.mii import LiteEthPHYMII
-from liteeth.phy.rmii import LiteEthPHYRMII
-from liteeth.phy.gmii import LiteEthPHYGMII
-
-from liteeth.phy.s7rgmii import LiteEthPHYRGMII as s7phyrgmii
-from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII as ecp5phyrgmii
-
+from liteeth import phy as liteeth_phys
 from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 
@@ -186,24 +181,24 @@ class PHYCore(SoCMini):
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
         # ethernet
-        if phy == "mii":
-            ethphy = LiteEthPHYMII(platform.request("mii_eth_clocks"),
-                                   platform.request("mii_eth"))
-        elif phy == "rmii":
-            ethphy = LiteEthPHYRMII(platform.request("rmii_eth_clocks"),
-                                    platform.request("rmii_eth"))
-        elif phy == "gmii":
-            ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
-                                    platform.request("gmii_eth"))
-        elif phy == "rgmii":
-            if type(platform) == LatticeCorePlatform:
-                ethphy = ecp5phyrgmii(platform.request("rgmii_eth_clocks"),
-                                         platform.request("rgmii_eth"))
-            elif type(platform) == XilinxCorePlatform:
-                ethphy = s7phyrgmii(platform.request("rgmii_eth_clocks"),
-                                         platform.request("rgmii_eth"))
+        if phy in [liteeth_phys.LiteEthPHYMII]:
+            ethphy = phy(
+                clock_pads = platform.request("mii_eth_clocks"),
+                pads       = platform.request("mii_eth"))
+        elif phy in [liteeth_phys.LiteEthPHYRMII]:
+            ethphy = phy(
+                clock_pads = platform.request("rmii_eth_clocks"),
+                pads       = platform.request("rmii_eth"))
+        elif phy in [liteeth_phys.LiteEthPHYGMII]:
+            ethphy = phy(
+                clock_pads = platform.request("gmii_eth_clocks"),
+                pads       = platform.request("gmii_eth"))
+        elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
+            ethphy = phy(
+                clock_pads = platform.request("rgmii_eth_clocks"),
+                pads       = platform.request("rgmii_eth"))
         else:
-            raise ValueError("Unsupported " + phy + " PHY");
+            raise ValueError("Unsupported PHY");
         self.submodules.ethphy = ethphy
         self.add_csr("ethphy")
 
@@ -287,38 +282,40 @@ class UDPCore(PHYCore):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
-    builder_args(parser)
-    soc_core_args(parser)
-    parser.set_defaults(output_dir="build")
-    parser.add_argument("--phy", default="mii", help="Ethernet PHY(mii/rmii/gmii/rgmii)")
-    parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
-    parser.add_argument("--endianness", default="big", choices=("big", "little"), help="Wishbone endianness")
-    parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
-    parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
-    parser.add_argument("--platform", default="xilinx", help="Development board(lattice/xilinx)")
-    parser.add_argument("--chip", default="xc7", help="FPGA chip model e.g. xc7 or LFE5UM5G-45F-8BG381C")
+    parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
+    core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
 
-    if args.platform == "lattice":
-        platform = LatticeCorePlatform(args.chip)
-    elif args.platform == "xilinx":
-        platform = XilinxCorePlatform(args.chip)
+    # Convert YAML elements to Python/LiteX --------------------------------------------------------
+    for k, v in core_config.items():
+        replaces = {"False": False, "True": True, "None": None}
+        for r in replaces.keys():
+            if v == r:
+                core_config[k] = replaces[r]
+        if k == "phy":
+            core_config[k] = getattr(liteeth_phys, core_config[k])
+
+    # Generate core --------------------------------------------------------------------------------
+    if core_config["vendor"] == "lattice":
+        platform = LatticePlatform("", io=[], toolchain="diamond")
+    elif core_config["vendor"] == "xilinx":
+        platform = XilinxPlatform("", io=[], toolchain="vivado")
     else:
-        raise ValueError("Unknown platform: {}".format(args.platform))
+        raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
+    platform.add_extension(_io)
 
-    if args.core == "wishbone":
-        soc = MACCore(phy=args.phy, clk_freq=int(100e6), platform=platform, endianness=args.endianness)
-    elif args.core == "udp":
-        soc =  UDPCore(phy=args.phy, clk_freq=int(100e6),
-                       mac_address = args.mac_address,
-                       ip_address  = args.ip_address,
+    if core_config["core"] == "wishbone":
+        soc = MACCore(phy=core_config["phy"], clk_freq=int(100e6), platform=platform, endianness=core_config["endianness"])
+    elif core_config["core"] == "udp":
+        soc =  UDPCore(phy=core_config["phy"], clk_freq=int(100e6),
+                       mac_address = core_config["mac_address"],
+                       ip_address  = core_config["ip_address"],
                        port        = 6000,
                        platform    = platform)
     else:
-        raise ValueError("Unknown core: {}".format(args.core))
-    builder = Builder(soc, output_dir=args.output_dir, compile_gateware=False, csr_csv=os.path.join(args.output_dir, "csr.csv"))
+        raise ValueError("Unknown core: {}".format(core_config["core"]))
+    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
     builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":
     main()
-

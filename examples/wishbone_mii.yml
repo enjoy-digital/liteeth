@@ -1,0 +1,9 @@
+# This file is Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# License: BSD
+
+{
+    "phy":        "LiteEthPHYMII",
+    "vendor":     "xilinx",
+    "core":       "wishbone",
+    "endianness": "big",
+}
