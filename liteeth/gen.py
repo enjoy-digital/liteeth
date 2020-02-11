@@ -20,6 +20,7 @@ TODO: identify limitations
 """
 
 import argparse
+import os
 
 from migen import *
 
@@ -46,6 +47,8 @@ _io = [
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
 
+    ("interrupt", 0, Pins(1)),
+
     # MII PHY Pads
     ("mii_eth_clocks", 0,
         Subsignal("tx", Pins(1)),
@@ -58,7 +61,7 @@ _io = [
         Subsignal("rx_dv",   Pins(1)),
         Subsignal("rx_er",   Pins(1)),
         Subsignal("rx_data", Pins(4)),
-        Subsignal("tx_en",   Pins(4)),
+        Subsignal("tx_en",   Pins(1)),
         Subsignal("tx_data", Pins(4)),
         Subsignal("col",     Pins(1)),
         Subsignal("crs",     Pins(1))
@@ -196,20 +199,20 @@ class PHYCore(SoCMini):
 # MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
-    interrupt_map = {
+    interrupt_map = SoCCore.interrupt_map
+    interrupt_map.update({
         "ethmac": 2,
-    }
-    interrupt_map.update(SoCCore.interrupt_map)
+    })
 
-    mem_map = {
+    mem_map = SoCCore.mem_map
+    mem_map.update({
         "ethmac": 0x50000000
-    }
-    mem_map.update(SoCCore.mem_map)
+    })
 
-    def __init__(self, phy, clk_freq):
+    def __init__(self, phy, clk_freq, endianness):
         PHYCore.__init__(self, phy, clk_freq)
 
-        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
+        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=endianness)
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
         self.add_csr("ethmac")
@@ -222,6 +225,8 @@ class MACCore(PHYCore):
         bridge = _WishboneBridge(self.platform.request("wishbone"))
         self.submodules += bridge
         self.add_wb_master(bridge.wishbone)
+
+        self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
 
 # UDP Core -----------------------------------------------------------------------------------------
 
@@ -273,14 +278,16 @@ def main():
     parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
     builder_args(parser)
     soc_core_args(parser)
+    parser.set_defaults(output_dir="build")
     parser.add_argument("--phy", default="mii", help="Ethernet PHY(mii/rmii/gmii/rgmii)")
     parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
+    parser.add_argument("--endianness", default="big", choices=("big", "little"), help="Wishbone endianness")
     parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
     parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
     args = parser.parse_args()
 
     if args.core == "wishbone":
-        soc = MACCore(phy=args.phy, clk_freq=int(100e6))
+        soc = MACCore(phy=args.phy, clk_freq=int(100e6), endianness=args.endianness)
     elif args.core == "udp":
         soc =  UDPCore(phy=args.phy, clk_freq=int(100e6),
                        mac_address = args.mac_address,
@@ -288,7 +295,7 @@ def main():
                        port        = 6000)
     else:
         raise ValueError
-    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
+    builder = Builder(soc, output_dir=args.output_dir, compile_gateware=False, csr_csv=os.path.join(args.output_dir, "csr.csv"))
     builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":
