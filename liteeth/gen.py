@@ -60,7 +60,7 @@ _io = [
         Subsignal("rx_dv",   Pins(1)),
         Subsignal("rx_er",   Pins(1)),
         Subsignal("rx_data", Pins(4)),
-        Subsignal("tx_en",   Pins(4)),
+        Subsignal("tx_en",   Pins(1)),
         Subsignal("tx_data", Pins(4)),
         Subsignal("col",     Pins(1)),
         Subsignal("crs",     Pins(1))
