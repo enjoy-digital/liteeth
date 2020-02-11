@@ -20,6 +20,7 @@ TODO: identify limitations
 """
 
 import argparse
+import os
 
 from migen import *
 
@@ -277,6 +278,7 @@ def main():
     parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
     builder_args(parser)
     soc_core_args(parser)
+    parser.set_defaults(output_dir="build")
     parser.add_argument("--phy", default="mii", help="Ethernet PHY(mii/rmii/gmii/rgmii)")
     parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
     parser.add_argument("--endianness", default="big", choices=("big", "little"), help="Wishbone endianness")
@@ -293,7 +295,7 @@ def main():
                        port        = 6000)
     else:
         raise ValueError
-    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
+    builder = Builder(soc, output_dir=args.output_dir, compile_gateware=False, csr_csv=os.path.join(args.output_dir, "csr.csv"))
     builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":
