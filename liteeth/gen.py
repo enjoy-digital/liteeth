@@ -210,13 +210,14 @@ class MACCore(PHYCore):
         PHYCore.__init__(self, phy, clk_freq)
 
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
-        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+        self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
         self.add_csr("ethmac")
 
         class _WishboneBridge(Module):
             def __init__(self, interface):
                 self.wishbone = interface
+                self.wishbone.data_width = 32
 
         bridge = _WishboneBridge(self.platform.request("wishbone"))
         self.submodules += bridge
