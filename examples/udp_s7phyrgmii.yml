@@ -1,12 +1,12 @@
 # This file is Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-{
-    # PHY ----------------------------------------------------------------------
-    "phy":        "LiteEthS7PHYRGMII",
-    "vendor":     "xilinx",
-    # Core ---------------------------------------------------------------------
-    "core":       "udp",
-    "mac_address": 0x10e2d5000000,
-    "ip_address": "192.168.1.50",
-}
+# PHY ----------------------------------------------------------------------
+phy:         LiteEthS7PHYRGMII
+vendor:      xilinx
+# Core ---------------------------------------------------------------------
+clk_freq:    100e6
+core:        udp
+mac_address: 0x10e2d5000000
+ip_address:  192.168.1.50
+port:        6000

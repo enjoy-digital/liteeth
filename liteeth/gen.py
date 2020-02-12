@@ -161,18 +161,6 @@ _io = [
     ),
 ]
 
-# Platform -----------------------------------------------------------------------------------------
-
-class LatticeCorePlatform(LatticePlatform):
-    name = "core"
-    def __init__(self, chip):
-        LatticePlatform.__init__(self, chip, _io)
-
-class XilinxCorePlatform(XilinxPlatform):
-    name = "core"
-    def __init__(self, chip):
-        XilinxPlatform.__init__(self, chip, _io)
-
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
@@ -205,20 +193,13 @@ class PHYCore(SoCMini):
 # MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
-    interrupt_map = SoCCore.interrupt_map
-    interrupt_map.update({
-        "ethmac": 2,
-    })
+    def __init__(self, platform, core_config):
+        self.mem_map.update(core_config.get("mem_map", {}))
+        self.csr_map.update(core_config.get("csr_map", {}))
 
-    mem_map = SoCCore.mem_map
-    mem_map.update({
-        "ethmac": 0x50000000
-    })
+        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
 
-    def __init__(self, phy, clk_freq, platform, endianness):
-        PHYCore.__init__(self, phy, clk_freq, platform)
-
-        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=endianness)
+        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=core_config["endianness"])
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
         self.add_csr("ethmac")
@@ -237,11 +218,11 @@ class MACCore(PHYCore):
 # UDP Core -----------------------------------------------------------------------------------------
 
 class UDPCore(PHYCore):
-    def __init__(self, phy, clk_freq, mac_address, ip_address, port, platform):
-        PHYCore.__init__(self, phy, clk_freq, platform)
+    def __init__(self, platform, core_config):
+        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
 
-        self.submodules.core = LiteEthUDPIPCore(self.ethphy, mac_address, convert_ip(ip_address), clk_freq)
-        udp_port = self.core.udp.crossbar.get_port(port, 8)
+        self.submodules.core = LiteEthUDPIPCore(self.ethphy, core_config["mac_address"], convert_ip(core_config["ip_address"]), core_config["clk_freq"])
+        udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")
         self.comb += [
@@ -282,6 +263,8 @@ class UDPCore(PHYCore):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
+    builder_args(parser)
+    parser.set_defaults(output_dir="build")
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
     core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
@@ -294,6 +277,8 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
+        if k == "clk_freq":
+            core_config[k] = int(float(core_config[k]))
 
     # Generate core --------------------------------------------------------------------------------
     if core_config["vendor"] == "lattice":
@@ -305,16 +290,18 @@ def main():
     platform.add_extension(_io)
 
     if core_config["core"] == "wishbone":
-        soc = MACCore(phy=core_config["phy"], clk_freq=int(100e6), platform=platform, endianness=core_config["endianness"])
+        soc = MACCore(platform, core_config)
     elif core_config["core"] == "udp":
-        soc =  UDPCore(phy=core_config["phy"], clk_freq=int(100e6),
-                       mac_address = core_config["mac_address"],
-                       ip_address  = core_config["ip_address"],
-                       port        = 6000,
-                       platform    = platform)
+        soc = UDPCore(platform, core_config)
     else:
         raise ValueError("Unknown core: {}".format(core_config["core"]))
-    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
+
+    builder_arguments = builder_argdict(args)
+    builder_arguments["compile_gateware"] = False
+    if builder_arguments["csr_csv"] is None:
+        builder_arguments["csr_csv"] = os.path.join(builder_arguments["output_dir"], "csr.csv")
+
+    builder = Builder(soc, **builder_arguments)
     builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":

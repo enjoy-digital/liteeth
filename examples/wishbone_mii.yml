@@ -1,11 +1,13 @@
 # This file is Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-{
-    # PHY ----------------------------------------------------------------------
-    "phy":        "LiteEthPHYMII",
-    "vendor":     "xilinx",
-    # Core ---------------------------------------------------------------------
-    "core":       "wishbone",
-    "endianness": "big",
-}
+# PHY ----------------------------------------------------------------------
+phy:        LiteEthPHYMII
+vendor:     xilinx
+# Core ---------------------------------------------------------------------
+clk_freq:   100e6
+core:       wishbone
+endianness: big
+
+mem_map:
+    ethmac: 0x50000000
