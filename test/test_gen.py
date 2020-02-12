@@ -1,15 +1,22 @@
-# This file is Copyright (c) 2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 import unittest
 import os
 
-root_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)), "..")
+def build_config(name):
+    errors = 0
+    os.system("rm -rf examples/build")
+    os.system("cd examples && python3 ../liteeth/gen.py {}.yml".format(name))
+    errors += not os.path.isfile("examples/build/gateware/liteeth_core.v")
+    os.system("rm -rf examples/build")
+    return errors
 
-class TestGen(unittest.TestCase):
-    def test(self):
-        for phy in ["mii", "gmii", "rgmii"]:
-            for core in ["wishbone", "udp"]:
-                os.system("rm -rf {}/build".format(root_dir))
-                os.system("python3 {}/liteeth/gen.py --phy={} --core={}".format(root_dir, phy, core))
-                self.assertEqual(os.path.isfile("{}/build/gateware/liteeth_core.v".format(root_dir)), True)
+class TestExamples(unittest.TestCase):
+    def test_udp_s7phyrgmii(self):
+        errors = build_config("udp_s7phyrgmii")
+        self.assertEqual(errors, 0)
+
+    def test_wishbone_mii(self):
+        errors = build_config("wishbone_mii")
+        self.assertEqual(errors, 0)
