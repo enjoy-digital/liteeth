@@ -270,6 +270,8 @@ class UDPCore(PHYCore):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
+    builder_args(parser)
+    parser.set_defaults(output_dir="build")
     parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
     core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
@@ -302,7 +304,13 @@ def main():
                        platform    = platform)
     else:
         raise ValueError("Unknown core: {}".format(core_config["core"]))
-    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
+
+    builder_arguments = builder_argdict(args)
+    builder_arguments["compile_gateware"] = False
+    if builder_arguments["csr_csv"] is None:
+        builder_arguments["csr_csv"] = os.path.join(builder_arguments["output_dir"], "csr.csv")
+
+    builder = Builder(soc, **builder_arguments)
     builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":
