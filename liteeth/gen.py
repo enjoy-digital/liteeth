@@ -161,18 +161,6 @@ _io = [
     ),
 ]
 
-# Platform -----------------------------------------------------------------------------------------
-
-class LatticeCorePlatform(LatticePlatform):
-    name = "core"
-    def __init__(self, chip):
-        LatticePlatform.__init__(self, chip, _io)
-
-class XilinxCorePlatform(XilinxPlatform):
-    name = "core"
-    def __init__(self, chip):
-        XilinxPlatform.__init__(self, chip, _io)
-
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
