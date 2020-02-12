@@ -193,17 +193,10 @@ class PHYCore(SoCMini):
 # MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
-    interrupt_map = SoCCore.interrupt_map
-    interrupt_map.update({
-        "ethmac": 2,
-    })
-
-    mem_map = SoCCore.mem_map
-    mem_map.update({
-        "ethmac": 0x50000000
-    })
-
     def __init__(self, platform, core_config):
+        self.mem_map.update(core_config.get("mem_map", {}))
+        self.csr_map.update(core_config.get("csr_map", {}))
+
         PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
 
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=core_config["endianness"])
