@@ -5,7 +5,7 @@ import socket
 import time
 from litex.soc.tools.remote.etherbone import *
 
-SRAM_BASE = 0x02000000
+SRAM_BASE = 0x01000000
 
 socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 

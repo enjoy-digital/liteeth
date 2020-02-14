@@ -34,10 +34,6 @@ class BaseSoC(SoCCore):
         self.add_wb_master(serial_bridge.wishbone)
         self.submodules.crg = CRG(platform.request(platform.default_clk_name))
 
-        # Wishbone SRAM (to test Wishbone over UART and Etherbone)
-        self.submodules.sram = wishbone.SRAM(1024)
-        self.add_wb_slave(lambda a: a[23:25] == 1, self.sram.bus)
-
         # Ethernet PHY and UDP/IP stack
         self.submodules.ethphy  = ethphy = LiteEthPHY(
             clock_pads = platform.request("eth_clocks"),

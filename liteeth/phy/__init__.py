@@ -21,3 +21,10 @@ def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
         return LiteEthPHYMII(clock_pads, pads, **kwargs)
     else:
         raise ValueError("Unable to autodetect PHY from platform file, use direct instantiation")
+
+from liteeth.phy.mii  import LiteEthPHYMII
+from liteeth.phy.rmii import LiteEthPHYRMII
+from liteeth.phy.gmii import LiteEthPHYGMII
+
+from liteeth.phy.s7rgmii   import LiteEthPHYRGMII as LiteEthS7PHYRGMII
+from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII as LiteEthECP5PHYRGMII

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
+# This file is Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
 # License: BSD
 
 """
@@ -20,11 +22,14 @@ TODO: identify limitations
 """
 
 import argparse
+import os
+import yaml
 
 from migen import *
 
 from litex.build.generic_platform import *
 from litex.build.xilinx.platform import XilinxPlatform
+from litex.build.lattice.platform import LatticePlatform
 
 from litex.soc.interconnect import wishbone
 from litex.soc.integration.soc_core import *
@@ -32,11 +37,7 @@ from litex.soc.integration.builder import *
 
 from liteeth.common import *
 
-from liteeth.phy.mii import LiteEthPHYMII
-from liteeth.phy.rmii import LiteEthPHYRMII
-from liteeth.phy.gmii import LiteEthPHYGMII
-from liteeth.phy.s7rgmii import LiteEthPHYRGMII
-
+from liteeth import phy as liteeth_phys
 from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 
@@ -45,6 +46,8 @@ from liteeth.core import LiteEthUDPIPCore
 _io = [
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
+
+    ("interrupt", 0, Pins(1)),
 
     # MII PHY Pads
     ("mii_eth_clocks", 0,
@@ -58,7 +61,7 @@ _io = [
         Subsignal("rx_dv",   Pins(1)),
         Subsignal("rx_er",   Pins(1)),
         Subsignal("rx_data", Pins(4)),
-        Subsignal("tx_en",   Pins(4)),
+        Subsignal("tx_en",   Pins(1)),
         Subsignal("tx_data", Pins(4)),
         Subsignal("col",     Pins(1)),
         Subsignal("crs",     Pins(1))
@@ -160,76 +163,68 @@ _io = [
     ),
 ]
 
-# Platform -----------------------------------------------------------------------------------------
-
-class CorePlatform(XilinxPlatform):
-    name = "core"
-    def __init__(self):
-        XilinxPlatform.__init__(self, "xc7", _io)
-
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
-    def __init__(self, phy, clk_freq):
-        platform = CorePlatform()
+    def __init__(self, phy, clk_freq, platform):
         SoCMini.__init__(self, platform, clk_freq=clk_freq)
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
         # ethernet
-        if phy == "mii":
-            ethphy = LiteEthPHYMII(platform.request("mii_eth_clocks"),
-                                   platform.request("mii_eth"))
-        elif phy == "rmii":
-            ethphy = LiteEthPHYRMII(platform.request("rmii_eth_clocks"),
-                                    platform.request("rmii_eth"))
-        elif phy == "gmii":
-            ethphy = LiteEthPHYGMII(platform.request("gmii_eth_clocks"),
-                                    platform.request("gmii_eth"))
-        elif phy == "rgmii":
-            ethphy = LiteEthPHYRGMII(platform.request("rgmii_eth_clocks"),
-                                     platform.request("rgmii_eth"))
+        if phy in [liteeth_phys.LiteEthPHYMII]:
+            ethphy = phy(
+                clock_pads = platform.request("mii_eth_clocks"),
+                pads       = platform.request("mii_eth"))
+        elif phy in [liteeth_phys.LiteEthPHYRMII]:
+            ethphy = phy(
+                clock_pads = platform.request("rmii_eth_clocks"),
+                pads       = platform.request("rmii_eth"))
+        elif phy in [liteeth_phys.LiteEthPHYGMII]:
+            ethphy = phy(
+                clock_pads = platform.request("gmii_eth_clocks"),
+                pads       = platform.request("gmii_eth"))
+        elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
+            ethphy = phy(
+                clock_pads = platform.request("rgmii_eth_clocks"),
+                pads       = platform.request("rgmii_eth"))
         else:
-            raise ValueError("Unsupported " + phy + " PHY");
+            raise ValueError("Unsupported PHY");
         self.submodules.ethphy = ethphy
         self.add_csr("ethphy")
 
 # MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
-    interrupt_map = {
-        "ethmac": 2,
-    }
-    interrupt_map.update(SoCCore.interrupt_map)
+    def __init__(self, platform, core_config):
+        self.mem_map.update(core_config.get("mem_map", {}))
+        self.csr_map.update(core_config.get("csr_map", {}))
 
-    mem_map = {
-        "ethmac": 0x50000000
-    }
-    mem_map.update(SoCCore.mem_map)
+        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
 
-    def __init__(self, phy, clk_freq):
-        PHYCore.__init__(self, phy, clk_freq)
-
-        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone")
-        self.add_wb_slave(mem_decoder(self.mem_map["ethmac"]), self.ethmac.bus)
+        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=core_config["endianness"])
+        self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
         self.add_csr("ethmac")
 
         class _WishboneBridge(Module):
             def __init__(self, interface):
                 self.wishbone = interface
+                self.wishbone.data_width = 32
 
         bridge = _WishboneBridge(self.platform.request("wishbone"))
         self.submodules += bridge
         self.add_wb_master(bridge.wishbone)
 
+        self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
+
 # UDP Core -----------------------------------------------------------------------------------------
 
 class UDPCore(PHYCore):
-    def __init__(self, phy, clk_freq, mac_address, ip_address, port):
-        PHYCore.__init__(self, phy, clk_freq)
+    def __init__(self, platform, core_config):
+        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
 
-        self.submodules.core = LiteEthUDPIPCore(self.ethphy, mac_address, convert_ip(ip_address), clk_freq)
-        udp_port = self.core.udp.crossbar.get_port(port, 8)
+        self.submodules.core = LiteEthUDPIPCore(self.ethphy, core_config["mac_address"], convert_ip(core_config["ip_address"]), core_config["clk_freq"])
+        udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")
         self.comb += [
@@ -271,25 +266,45 @@ class UDPCore(PHYCore):
 def main():
     parser = argparse.ArgumentParser(description="LiteEth standalone core generator")
     builder_args(parser)
-    soc_core_args(parser)
-    parser.add_argument("--phy", default="mii", help="Ethernet PHY(mii/rmii/gmii/rgmii)")
-    parser.add_argument("--core", default="wishbone", help="Ethernet Core(wishbone/udp)")
-    parser.add_argument("--mac_address", default=0x10e2d5000000, help="MAC address")
-    parser.add_argument("--ip_address", default="192.168.1.50", help="IP address")
+    parser.set_defaults(output_dir="build")
+    parser.add_argument("config", help="YAML config file")
     args = parser.parse_args()
+    core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
 
-    if args.core == "wishbone":
-        soc = MACCore(phy=args.phy, clk_freq=int(100e6))
-    elif args.core == "udp":
-        soc =  UDPCore(phy=args.phy, clk_freq=int(100e6),
-                       mac_address = args.mac_address,
-                       ip_address  = args.ip_address,
-                       port        = 6000)
+    # Convert YAML elements to Python/LiteX --------------------------------------------------------
+    for k, v in core_config.items():
+        replaces = {"False": False, "True": True, "None": None}
+        for r in replaces.keys():
+            if v == r:
+                core_config[k] = replaces[r]
+        if k == "phy":
+            core_config[k] = getattr(liteeth_phys, core_config[k])
+        if k == "clk_freq":
+            core_config[k] = int(float(core_config[k]))
+
+    # Generate core --------------------------------------------------------------------------------
+    if core_config["vendor"] == "lattice":
+        platform = LatticePlatform("", io=[], toolchain="diamond")
+    elif core_config["vendor"] == "xilinx":
+        platform = XilinxPlatform("", io=[], toolchain="vivado")
     else:
-        raise ValueError
-    builder = Builder(soc, output_dir="build", compile_gateware=False, csr_csv="build/csr.csv")
+        raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
+    platform.add_extension(_io)
+
+    if core_config["core"] == "wishbone":
+        soc = MACCore(platform, core_config)
+    elif core_config["core"] == "udp":
+        soc = UDPCore(platform, core_config)
+    else:
+        raise ValueError("Unknown core: {}".format(core_config["core"]))
+
+    builder_arguments = builder_argdict(args)
+    builder_arguments["compile_gateware"] = False
+    if builder_arguments["csr_csv"] is None:
+        builder_arguments["csr_csv"] = os.path.join(builder_arguments["output_dir"], "csr.csv")
+
+    builder = Builder(soc, **builder_arguments)
     builder.build(build_name="liteeth_core")
 
 if __name__ == "__main__":
     main()
-
