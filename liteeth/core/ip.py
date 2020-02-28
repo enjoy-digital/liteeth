@@ -208,8 +208,8 @@ class LiteEthIPTX(Module):
             checksum.ce.eq(sink.valid),
             checksum.reset.eq(source.valid & source.last & source.ready)
         ]
-        ip_fragmenter = BufferizeEndpoints({"source": DIR_SOURCE})(LiteEthIPV4Fragmenter(dw))
-        self.submodules.ip_fragmenter = ip_fragmenter
+        # ip_fragmenter = BufferizeEndpoints({"source": DIR_SOURCE})(LiteEthIPV4Fragmenter(dw))
+        self.submodules.ip_fragmenter = ip_fragmenter = LiteEthIPV4Fragmenter(dw)
         self.comb += sink.connect(ip_fragmenter.sink)
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [
