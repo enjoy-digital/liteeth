@@ -42,7 +42,9 @@ class Gearbox(Module):
 
 # Configured for 200MHz transceiver reference clock
 class K7_1000BASEX(Module):
-    dw = 8
+    dw          = 8
+    tx_clk_freq = 125e6
+    rx_clk_freq = 125e6
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
