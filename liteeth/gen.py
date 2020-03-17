@@ -166,10 +166,26 @@ _io = [
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
-    def __init__(self, phy, clk_freq, platform):
-        SoCMini.__init__(self, platform, clk_freq=clk_freq)
+    def __init__(self, platform, core_config):
+        for deprecated in ("csr_map", "mem_map"):
+            if deprecated in core_config:
+                raise RuntimeWarning("Config option {!r} is now a sub-option of 'soc'".format(deprecated))
+
+        soc_args = {}
+        if "soc" in core_config:
+            soc_config = core_config["soc"]
+
+            for arg in soc_config:
+                if arg in ("csr_map", "interrupt_map", "mem_map"):
+                    getattr(self, arg).update(soc_config[arg])
+                else:
+                    soc_args[arg] = soc_config[arg]
+
+        SoCMini.__init__(self, platform, clk_freq=core_config["clk_freq"], **soc_args)
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
+        phy = core_config["phy"]
+
         # ethernet
         if phy in [liteeth_phys.LiteEthPHYMII]:
             ethphy = phy(
@@ -196,10 +212,7 @@ class PHYCore(SoCMini):
 
 class MACCore(PHYCore):
     def __init__(self, platform, core_config):
-        self.mem_map.update(core_config.get("mem_map", {}))
-        self.csr_map.update(core_config.get("csr_map", {}))
-
-        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
+        PHYCore.__init__(self, platform, core_config)
 
         self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=core_config["endianness"])
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
@@ -221,7 +234,7 @@ class MACCore(PHYCore):
 
 class UDPCore(PHYCore):
     def __init__(self, platform, core_config):
-        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
+        PHYCore.__init__(self, platform, core_config)
 
         self.submodules.core = LiteEthUDPIPCore(self.ethphy, core_config["mac_address"], convert_ip(core_config["ip_address"]), core_config["clk_freq"])
         udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
