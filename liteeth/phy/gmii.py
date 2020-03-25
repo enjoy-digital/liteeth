@@ -58,7 +58,10 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
         #      MII: Use PHY clock_pads.tx as eth_tx_clk, do not drive clock_pads.gtx
         self.specials += DDROutput(1, mii_mode, clock_pads.gtx, ClockSignal("eth_tx"))
         if isinstance(mii_mode, int) and (mii_mode == 0):
-            self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
+            self.specials += Instance("BUFG",
+                i_I = self.cd_eth_rx.clk,
+                o_O = self.cd_eth_tx.clk,
+            )
         else:
             # XXX Xilinx specific, replace BUFGMUX with a generic clock buffer?
             self.specials += Instance("BUFGMUX",
