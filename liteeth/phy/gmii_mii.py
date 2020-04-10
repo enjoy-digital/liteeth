@@ -2,8 +2,9 @@
 # License: BSD
 
 from migen import *
-from migen.genlib.io import DDROutput
 from migen.genlib.cdc import PulseSynchronizer
+
+from litex.build.io import DDROutput
 
 from litex.soc.interconnect.stream import Multiplexer, Demultiplexer
 
