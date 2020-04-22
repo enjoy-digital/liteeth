@@ -6,6 +6,8 @@
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.build.io import DDROutput, DDRInput
+
 from liteeth.common import *
 from liteeth.phy.common import *
 
@@ -20,13 +22,11 @@ class LiteEthPHYRGMIITX(Module):
         tx_data_oddrx1f = Signal(4)
 
         self.specials += [
-            Instance("ODDRX1F",
-                i_SCLK = ClockSignal("eth_tx"),
-                i_RST  = ResetSignal("eth_tx"),
-                i_D0   = sink.valid,
-                i_D1   = sink.valid,
-                o_Q    = tx_ctl_oddrx1f
-            ),
+            DDROutput(
+                clk = ClockSignal("eth_tx"),
+                i1  = sink.valid,
+                i2  = sink.valid,
+                o   = tx_ctl_oddrx1f),
             Instance("DELAYF",
                 p_DEL_MODE  = "SCLK_ALIGNED",
                 p_DEL_VALUE = "DELAY0",
@@ -38,13 +38,11 @@ class LiteEthPHYRGMIITX(Module):
         ]
         for i in range(4):
             self.specials += [
-                Instance("ODDRX1F",
-                    i_SCLK = ClockSignal("eth_tx"),
-                    i_RST  = ResetSignal("eth_tx"),
-                    i_D0   = sink.data[i],
-                    i_D1   = sink.data[4+i],
-                    o_Q    = tx_data_oddrx1f[i]
-                ),
+                DDROutput(
+                    clk = ClockSignal("eth_tx"),
+                    i1  = sink.data[i],
+                    i2  = sink.data[4+i],
+                    o   = tx_data_oddrx1f[i]),
                 Instance("DELAYF",
                     p_DEL_MODE  = "SCLK_ALIGNED",
                     p_DEL_VALUE = "DELAY0",
@@ -83,11 +81,11 @@ class LiteEthPHYRGMIIRX(Module):
                 i_DIRECTION = 0,
                 i_A         = pads.rx_ctl,
                 o_Z         = rx_ctl_delayf),
-            Instance("IDDRX1F",
-                i_SCLK = ClockSignal("eth_rx"),
-                i_RST  = ResetSignal("eth_rx"),
-                i_D    = rx_ctl_delayf,
-                o_Q0   = rx_ctl,
+            DDRInput(
+                clk = ClockSignal("eth_rx"),
+                i   = rx_ctl_delayf,
+                o1  = rx_ctl,
+                o2  = Signal()
             )
         ]
         self.sync += rx_ctl_reg.eq(rx_ctl)
@@ -101,12 +99,11 @@ class LiteEthPHYRGMIIRX(Module):
                     i_DIRECTION = 0,
                     i_A         = pads.rx_data[i],
                     o_Z         = rx_data_delayf[i]),
-                Instance("IDDRX1F",
-                    i_SCLK = ClockSignal("eth_rx"),
-                    i_RST  = ResetSignal("eth_rx"),
-                    i_D    = rx_data_delayf[i],
-                    o_Q0   = rx_data[i],
-                    o_Q1   = rx_data[i+4]
+                DDRInput(
+                    clk = ClockSignal("eth_rx"),
+                    i   = rx_data_delayf[i],
+                    o1  = rx_data[i],
+                    o2  = rx_data[i+4]
                 )
             ]
         self.sync += rx_data_reg.eq(rx_data)
@@ -143,13 +140,11 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
         eth_tx_clk_o = Signal()
         self.specials += [
-            Instance("ODDRX1F",
-                i_SCLK = ClockSignal("eth_tx"),
-                i_RST  = ResetSignal("eth_tx"),
-                i_D0   = 1,
-                i_D1   = 0,
-                o_Q    = eth_tx_clk_o
-            ),
+            DDROutput(
+                clk = ClockSignal("eth_tx"),
+                i1  = 1,
+                i2  = 0,
+                o   = eth_tx_clk_o),
             Instance("DELAYF",
                 p_DEL_MODE  = "SCLK_ALIGNED",
                 p_DEL_VALUE = "DELAY{}".format(tx_delay_taps),
