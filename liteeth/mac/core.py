@@ -20,9 +20,15 @@ class LiteEthMACCore(Module, AutoCSR):
         rx_pipeline = [phy]
         tx_pipeline = [phy]
 
+        rx_cd_name = "eth_rx"
+        tx_cd_name = "eth_tx"
+        if hasattr(phy, 'name'):
+            rx_cd_name = phy.name + "_" + rx_cd_name
+            tx_cd_name = phy.name + "_" + tx_cd_name
+
         # Interpacket gap
         tx_gap_inserter = gap.LiteEthMACGap(phy.dw)
-        self.submodules += ClockDomainsRenamer("eth_tx")(tx_gap_inserter)
+        self.submodules += ClockDomainsRenamer(tx_cd_name)(tx_gap_inserter)
         tx_pipeline += [tx_gap_inserter]
 
         # Preamble / CRC
@@ -38,21 +44,21 @@ class LiteEthMACCore(Module, AutoCSR):
             # Preamble insert/check
             preamble_inserter = preamble.LiteEthMACPreambleInserter(phy.dw)
             preamble_checker = preamble.LiteEthMACPreambleChecker(phy.dw)
-            self.submodules += ClockDomainsRenamer("eth_tx")(preamble_inserter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(preamble_checker)
+            self.submodules += ClockDomainsRenamer(tx_cd_name)(preamble_inserter)
+            self.submodules += ClockDomainsRenamer(rx_cd_name)(preamble_checker)
 
             # CRC insert/check
             crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(phy.dw))
             crc32_checker = crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw))
-            self.submodules += ClockDomainsRenamer("eth_tx")(crc32_inserter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(crc32_checker)
+            self.submodules += ClockDomainsRenamer(tx_cd_name)(crc32_inserter)
+            self.submodules += ClockDomainsRenamer(rx_cd_name)(crc32_checker)
 
             tx_pipeline += [preamble_inserter, crc32_inserter]
             rx_pipeline += [preamble_checker, crc32_checker]
 
             # Error counters
-            self.submodules.ps_preamble_error = PulseSynchronizer("eth_rx", "sys")
-            self.submodules.ps_crc_error = PulseSynchronizer("eth_rx", "sys")
+            self.submodules.ps_preamble_error = PulseSynchronizer(rx_cd_name, "sys")
+            self.submodules.ps_crc_error = PulseSynchronizer(rx_cd_name, "sys")
 
             self.comb += [
                 self.ps_preamble_error.i.eq(preamble_checker.error),
@@ -69,8 +75,8 @@ class LiteEthMACCore(Module, AutoCSR):
         if with_padding:
             padding_inserter = padding.LiteEthMACPaddingInserter(phy.dw, 60)
             padding_checker = padding.LiteEthMACPaddingChecker(phy.dw, 60)
-            self.submodules += ClockDomainsRenamer("eth_tx")(padding_inserter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(padding_checker)
+            self.submodules += ClockDomainsRenamer(tx_cd_name)(padding_inserter)
+            self.submodules += ClockDomainsRenamer(rx_cd_name)(padding_checker)
 
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
@@ -79,8 +85,8 @@ class LiteEthMACCore(Module, AutoCSR):
         if dw != 8:
             tx_last_be = last_be.LiteEthMACTXLastBE(phy.dw)
             rx_last_be = last_be.LiteEthMACRXLastBE(phy.dw)
-            self.submodules += ClockDomainsRenamer("eth_tx")(tx_last_be)
-            self.submodules += ClockDomainsRenamer("eth_rx")(rx_last_be)
+            self.submodules += ClockDomainsRenamer(tx_cd_name)(tx_last_be)
+            self.submodules += ClockDomainsRenamer(rx_cd_name)(rx_last_be)
 
             tx_pipeline += [tx_last_be]
             rx_pipeline += [rx_last_be]
@@ -94,8 +100,8 @@ class LiteEthMACCore(Module, AutoCSR):
             rx_converter = stream.StrideConverter(eth_phy_description(phy.dw),
                                                   eth_phy_description(dw),
                                                   reverse=reverse)
-            self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
+            self.submodules += ClockDomainsRenamer(tx_cd_name)(tx_converter)
+            self.submodules += ClockDomainsRenamer(rx_cd_name)(rx_converter)
 
             tx_pipeline += [tx_converter]
             rx_pipeline += [rx_converter]
@@ -103,8 +109,8 @@ class LiteEthMACCore(Module, AutoCSR):
         # Cross Domain Crossing
         tx_cdc = stream.AsyncFIFO(eth_phy_description(dw), 64)
         rx_cdc = stream.AsyncFIFO(eth_phy_description(dw), 64)
-        self.submodules += ClockDomainsRenamer({"write": "sys", "read": "eth_tx"})(tx_cdc)
-        self.submodules += ClockDomainsRenamer({"write": "eth_rx", "read": "sys"})(rx_cdc)
+        self.submodules += ClockDomainsRenamer({"write": "sys", "read": tx_cd_name})(tx_cdc)
+        self.submodules += ClockDomainsRenamer({"write": rx_cd_name, "read": "sys"})(rx_cdc)
 
         tx_pipeline += [tx_cdc]
         rx_pipeline += [rx_cdc]
