@@ -111,7 +111,8 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
         else:
             self.comb += reset.eq(self._reset.storage)
 
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
