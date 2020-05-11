@@ -153,8 +153,8 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         self._start        = CSR()
         self._ready        = CSRStatus()
         self._level        = CSRStatus(log2_int(nslots) + 1)
-        self._slot         = CSRStorage(slotbits)
-        self._length       = CSRStorage(lengthbits)
+        self._slot         = CSRStorage(slotbits,   reset_less=True)
+        self._length       = CSRStorage(lengthbits, reset_less=True)
 
         self.submodules.ev = EventManager()
         self.ev.done       = EventSourcePulse()

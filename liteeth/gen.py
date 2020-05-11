@@ -166,27 +166,51 @@ _io = [
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
-    def __init__(self, phy, clk_freq, platform):
-        SoCMini.__init__(self, platform, clk_freq=clk_freq)
+    def __init__(self, platform, core_config):
+        for deprecated in ("csr_map", "mem_map"):
+            if deprecated in core_config:
+                raise RuntimeWarning("Config option {!r} is now a sub-option of 'soc'".format(deprecated))
+
+        # SoC parameters ---------------------------------------------------------------------------
+        soc_args = {}
+        if "soc" in core_config:
+            soc_config = core_config["soc"]
+
+            for arg in soc_config:
+                if arg in ("csr_map", "interrupt_map", "mem_map"):
+                    getattr(self, arg).update(soc_config[arg])
+                else:
+                    soc_args[arg] = soc_config[arg]
+
+        # SoCMini ----------------------------------------------------------------------------------
+        SoCMini.__init__(self, platform, clk_freq=core_config["clk_freq"], **soc_args)
+
+        # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = CRG(platform.request("sys_clock"),
                                   platform.request("sys_reset"))
-        # ethernet
+        # PHY --------------------------------------------------------------------------------------
+        phy = core_config["phy"]
         if phy in [liteeth_phys.LiteEthPHYMII]:
+            assert self.clk_freq >= 12.5e6
             ethphy = phy(
                 clock_pads = platform.request("mii_eth_clocks"),
                 pads       = platform.request("mii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
+            assert self.clk_freq >= 12.5e6
             ethphy = phy(
                 clock_pads = platform.request("rmii_eth_clocks"),
                 pads       = platform.request("rmii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
+            assert self.clk_freq >= 125e6
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"))
         elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
+            assert self.clk_freq >= 125e6
             ethphy = phy(
-                clock_pads = platform.request("rgmii_eth_clocks"),
-                pads       = platform.request("rgmii_eth"))
+                clock_pads         = platform.request("rgmii_eth_clocks"),
+                pads               = platform.request("rgmii_eth"),
+                with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
         else:
             raise ValueError("Unsupported PHY");
         self.submodules.ethphy = ethphy
@@ -196,16 +220,20 @@ class PHYCore(SoCMini):
 
 class MACCore(PHYCore):
     def __init__(self, platform, core_config):
-        self.mem_map.update(core_config.get("mem_map", {}))
-        self.csr_map.update(core_config.get("csr_map", {}))
+        # PHY --------------------------------------------------------------------------------------
+        PHYCore.__init__(self, platform, core_config)
 
-        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
-
-        self.submodules.ethmac = LiteEthMAC(phy=self.ethphy, dw=32, interface="wishbone", endianness=core_config["endianness"])
+        # MAC --------------------------------------------------------------------------------------
+        self.submodules.ethmac = LiteEthMAC(
+            phy        = self.ethphy,
+            dw         = 32,
+            interface  = "wishbone",
+            endianness = core_config["endianness"])
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
         self.add_csr("ethmac")
 
+        # Wishbone Interface -----------------------------------------------------------------------
         class _WishboneBridge(Module):
             def __init__(self, interface):
                 self.wishbone = interface
@@ -215,15 +243,23 @@ class MACCore(PHYCore):
         self.submodules += bridge
         self.add_wb_master(bridge.wishbone)
 
+        # Interrupt Interface ----------------------------------------------------------------------
         self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
 
 # UDP Core -----------------------------------------------------------------------------------------
 
 class UDPCore(PHYCore):
     def __init__(self, platform, core_config):
-        PHYCore.__init__(self, core_config["phy"], core_config["clk_freq"], platform)
+        # PHY --------------------------------------------------------------------------------------
+        PHYCore.__init__(self, platform, core_config)
 
-        self.submodules.core = LiteEthUDPIPCore(self.ethphy, core_config["mac_address"], convert_ip(core_config["ip_address"]), core_config["clk_freq"])
+        # Core -------------------------------------------------------------------------------------
+        self.submodules.core = LiteEthUDPIPCore(self.ethphy,
+            mac_address = core_config["mac_address"],
+            ip_address  = core_config["ip_address"],
+            clk_freq    = core_config["clk_freq"])
+
+        # UDP --------------------------------------------------------------------------------------
         udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
         # XXX avoid manual connect
         udp_sink = self.platform.request("udp_sink")

@@ -41,7 +41,9 @@ class Gearbox(Module):
 
 
 class A7_1000BASEX(Module):
-    dw = 8
+    dw          = 8
+    tx_clk_freq = 125e6
+    rx_clk_freq = 125e6
     def __init__(self, qpll_channel, data_pads, sys_clk_freq):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs

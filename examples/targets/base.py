@@ -1,8 +1,7 @@
 # This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
-from migen.genlib.io import CRG
-
+from litex.build.io import CRG
 from litex.build.xilinx.vivado import XilinxVivadoToolchain
 from litex.soc.interconnect import wishbone
 

@@ -9,5 +9,6 @@ clk_freq:   100e6
 core:       wishbone
 endianness: big
 
-mem_map:
-    ethmac: 0x50000000
+soc:
+    mem_map:
+        ethmac: 0x50000000
