@@ -112,9 +112,9 @@ class LiteEthIPTX(Module):
             sink.ready.eq(packetizer.sink.ready & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
             packetizer.sink.protocol.eq(sink.protocol),
-            packetizer.sink.total_length.eq(sink.length + (0x5*4)),
+            packetizer.sink.total_length.eq(ipv4_header.length + sink.length),
             packetizer.sink.version.eq(0x4),     # ipv4
-            packetizer.sink.ihl.eq(0x5),         # 20 bytes
+            packetizer.sink.ihl.eq(ipv4_header.length//4),
             packetizer.sink.identification.eq(0),
             packetizer.sink.ttl.eq(0x80),
             packetizer.sink.sender_ip.eq(ip_address),
@@ -124,13 +124,20 @@ class LiteEthIPTX(Module):
         ]
 
         target_mac = Signal(48, reset_less=True)
+        mcast_oui = C(0x01005e, 24)
+        mcast_ip_mask = 224 >> 4
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
                 packetizer.source.ready.eq(0),
-                NextState("SEND_MAC_ADDRESS_REQUEST")
+                If(sink.ip_address[28:] == mcast_ip_mask,
+                    NextValue(target_mac, Cat(sink.ip_address[:23], 0, mcast_oui)),
+                    NextState("SEND")
+                ).Else(
+                    NextState("SEND_MAC_ADDRESS_REQUEST")
+                )
             )
         )
         self.comb += arp_table.request.ip_address.eq(sink.ip_address)
