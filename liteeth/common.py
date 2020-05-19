@@ -61,6 +61,8 @@ arp_header = Header(arp_header_fields,
                     arp_header_length,
                     swap_field_bytes=True)
 
+mcast_oui     = C(0x01005e, 24)
+mcast_ip_mask = 224 >> 4
 
 ipv4_header_length = 20
 ipv4_header_fields = {

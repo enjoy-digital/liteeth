@@ -123,9 +123,7 @@ class LiteEthIPTX(Module):
             packetizer.sink.checksum.eq(checksum.value)
         ]
 
-        target_mac = Signal(48, reset_less=True)
-        mcast_oui = C(0x01005e, 24)
-        mcast_ip_mask = 224 >> 4
+        target_mac    = Signal(48, reset_less=True)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -149,6 +147,7 @@ class LiteEthIPTX(Module):
         )
         fsm.act("WAIT_MAC_ADDRESS_RESPONSE",
             If(arp_table.response.valid,
+                NextValue(target_mac, arp_table.response.mac_address),
                 arp_table.response.ready.eq(1),
                 If(arp_table.response.failed,
                     self.target_unreachable.eq(1),
@@ -158,10 +157,6 @@ class LiteEthIPTX(Module):
                 )
             )
         )
-        self.sync += \
-            If(arp_table.response.valid,
-                target_mac.eq(arp_table.response.mac_address)
-            )
         fsm.act("SEND",
             packetizer.source.connect(source),
             source.ethernet_type.eq(ethernet_type_ip),
