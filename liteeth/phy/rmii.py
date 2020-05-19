@@ -91,7 +91,7 @@ class LiteEthPHYRMIIRX(Module):
 
 class LiteEthPHYRMIICRG(Module, AutoCSR):
     def __init__(self, clock_pads, pads, with_hw_init_reset,
-                 cd_name="eth"):
+                 cd_name="eth", no_clk_out=False):
         self._reset = CSRStorage()
 
         # # #
@@ -103,7 +103,8 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
             self.cd_eth_tx.clk.eq(ClockSignal(cd_name))
         ]
 
-        self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
+        if not no_clk_out:
+            self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
 
         reset = Signal()
         if with_hw_init_reset:
@@ -125,10 +126,12 @@ class LiteEthPHYRMII(Module, AutoCSR):
     tx_clk_freq = 50e6
     rx_clk_freq = 50e6
     def __init__(self, clock_pads, pads, with_hw_init_reset=True,
-                name="ethphy", cd_name="eth"):
-        self.name = name
+                name=None, cd_name="eth", no_clk_out=False):
+        if name is not None:
+            self.name = name
         self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads,
-                                                with_hw_init_reset, cd_name)
+                                                with_hw_init_reset, cd_name,
+                                                no_clk_out)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
         self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
