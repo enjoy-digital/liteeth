@@ -1,4 +1,5 @@
 # This file is Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2020 Shawn Hoffman <godisgovernment@gmail.com>
 # License: BSD
 
 # RGMII PHY for ECP5 Lattice FPGA
@@ -10,7 +11,6 @@ from litex.build.io import DDROutput, DDRInput
 
 from liteeth.common import *
 from liteeth.phy.common import *
-from liteeth.phy.rgmii import *
 
 
 class LiteEthPHYRGMIITX(Module):
@@ -57,10 +57,26 @@ class LiteEthPHYRGMIITX(Module):
         self.comb += sink.ready.eq(1)
 
 
-class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads, rx_delay=2e-9):
+class LiteEthPHYRGMIIRX(Module, AutoCSR):
+    def __init__(self, pads, rx_delay=2e-9, with_inband_status=True):
         self.source = source = stream.Endpoint(eth_phy_description(8))
-        self.status = Record(phy_status_layout)
+
+        if with_inband_status:
+            self.inband_status = CSRStatus(fields=[
+                CSRField("link_status", size=1, values=[
+                    ("``0b0``", "Link down."),
+                    ("``0b1``", "Link up."),
+                ]),
+                CSRField("clock_speed", size=1, values=[
+                    ("``0b00``", "2.5MHz   (10Mbps)."),
+                    ("``0b01``", "25MHz   (100MBps)."),
+                    ("``0b10``", "125MHz (1000MBps)."),
+                ]),
+                CSRField("duplex_status", size=1, values=[
+                    ("``0b0``", "Half-duplex."),
+                    ("``0b1``", "Full-duplex."),
+                ]),
+            ])
 
         # # #
 
@@ -68,13 +84,11 @@ class LiteEthPHYRGMIIRX(Module):
         assert rx_delay_taps < 128
 
         rx_ctl_delayf  = Signal()
-        rx_ctl_r       = Signal()
-        rx_ctl_f       = Signal()
-        rx_ctl_r_reg   = self.status.ctl_r
-        rx_ctl_f_reg   = self.status.ctl_f
+        rx_ctl         = Signal(2)
+        rx_ctl_reg     = Signal(2)
         rx_data_delayf = Signal(4)
         rx_data        = Signal(8)
-        rx_data_reg    = self.status.data
+        rx_data_reg    = Signal(8)
 
         self.specials += [
             Instance("DELAYF",
@@ -88,15 +102,11 @@ class LiteEthPHYRGMIIRX(Module):
             DDRInput(
                 clk = ClockSignal("eth_rx"),
                 i   = rx_ctl_delayf,
-                o1  = rx_ctl_r,
-                o2  = rx_ctl_f
+                o1  = rx_ctl[0],
+                o2  = rx_ctl[1]
             )
         ]
-        self.sync += [
-            rx_ctl_r_reg.eq(rx_ctl_r),
-            rx_ctl_f_reg.eq(rx_ctl_f)
-        ]
-
+        self.sync += rx_ctl_reg.eq(rx_ctl)
         for i in range(4):
             self.specials += [
                 Instance("DELAYF",
@@ -116,16 +126,25 @@ class LiteEthPHYRGMIIRX(Module):
             ]
         self.sync += rx_data_reg.eq(rx_data)
 
-        rx_ctl_r_reg_d = Signal()
-        self.sync += rx_ctl_r_reg_d.eq(rx_ctl_r_reg)
+        rx_ctl_reg_d = Signal(2)
+        self.sync += rx_ctl_reg_d.eq(rx_ctl_reg)
 
         last = Signal()
-        self.comb += last.eq(~rx_ctl_r_reg & rx_ctl_r_reg_d)
+        self.comb += last.eq(~rx_ctl_reg[0] & rx_ctl_reg_d[0])
         self.sync += [
-            source.valid.eq(rx_ctl_r_reg),
+            source.valid.eq(rx_ctl_reg[0]),
             source.data.eq(rx_data_reg)
         ]
         self.comb += source.last.eq(last)
+
+        if with_inband_status:
+            self.sync += [
+                If(rx_ctl == 0b00,
+                    self.inband_status.fields.link_status.eq(rx_data[0]),
+                    self.inband_status.fields.clock_speed.eq(rx_data[1:3]),
+                    self.inband_status.fields.duplex_status.eq(rx_data[3]),
+                )
+            ]
 
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):
@@ -182,15 +201,14 @@ class LiteEthPHYRGMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9, inband_status=True):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True,
+        tx_delay           = 2e-9,
+        rx_delay           = 2e-9,
+        with_inband_status = True):
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, with_inband_status))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
             self.submodules.mdio = LiteEthPHYMDIO(pads)
-
-        if inband_status:
-            self.submodules.status = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIStatus())
-            self.comb += self.status.phy.eq(self.rx.status)
