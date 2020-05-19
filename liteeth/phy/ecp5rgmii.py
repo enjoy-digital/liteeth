@@ -10,6 +10,7 @@ from litex.build.io import DDROutput, DDRInput
 
 from liteeth.common import *
 from liteeth.phy.common import *
+from liteeth.phy.rgmii import *
 
 
 class LiteEthPHYRGMIITX(Module):
@@ -59,6 +60,7 @@ class LiteEthPHYRGMIITX(Module):
 class LiteEthPHYRGMIIRX(Module):
     def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.status = Record(phy_status_layout)
 
         # # #
 
@@ -66,11 +68,13 @@ class LiteEthPHYRGMIIRX(Module):
         assert rx_delay_taps < 128
 
         rx_ctl_delayf  = Signal()
-        rx_ctl         = Signal()
-        rx_ctl_reg     = Signal()
+        rx_ctl_r       = Signal()
+        rx_ctl_f       = Signal()
+        rx_ctl_r_reg   = self.status.ctl_r
+        rx_ctl_f_reg   = self.status.ctl_f
         rx_data_delayf = Signal(4)
         rx_data        = Signal(8)
-        rx_data_reg    = Signal(8)
+        rx_data_reg    = self.status.data
 
         self.specials += [
             Instance("DELAYF",
@@ -84,11 +88,15 @@ class LiteEthPHYRGMIIRX(Module):
             DDRInput(
                 clk = ClockSignal("eth_rx"),
                 i   = rx_ctl_delayf,
-                o1  = rx_ctl,
-                o2  = Signal()
+                o1  = rx_ctl_r,
+                o2  = rx_ctl_f
             )
         ]
-        self.sync += rx_ctl_reg.eq(rx_ctl)
+        self.sync += [
+            rx_ctl_r_reg.eq(rx_ctl_r),
+            rx_ctl_f_reg.eq(rx_ctl_f)
+        ]
+
         for i in range(4):
             self.specials += [
                 Instance("DELAYF",
@@ -108,14 +116,14 @@ class LiteEthPHYRGMIIRX(Module):
             ]
         self.sync += rx_data_reg.eq(rx_data)
 
-        rx_ctl_reg_d = Signal()
-        self.sync += rx_ctl_reg_d.eq(rx_ctl_reg)
+        rx_ctl_r_reg_d = Signal()
+        self.sync += rx_ctl_r_reg_d.eq(rx_ctl_r_reg)
 
         last = Signal()
-        self.comb += last.eq(~rx_ctl_reg & rx_ctl_reg_d)
+        self.comb += last.eq(~rx_ctl_r_reg & rx_ctl_r_reg_d)
         self.sync += [
-            source.valid.eq(rx_ctl_reg),
-            source.data.eq(Cat(rx_data_reg[:4], rx_data_reg[4:]))
+            source.valid.eq(rx_ctl_r_reg),
+            source.data.eq(rx_data_reg)
         ]
         self.comb += source.last.eq(last)
 
@@ -174,7 +182,7 @@ class LiteEthPHYRGMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9, inband_status=True):
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
         self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
@@ -182,3 +190,7 @@ class LiteEthPHYRGMII(Module, AutoCSR):
 
         if hasattr(pads, "mdc"):
             self.submodules.mdio = LiteEthPHYMDIO(pads)
+
+        if inband_status:
+            self.submodules.status = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIStatus())
+            self.comb += self.status.phy.eq(self.rx.status)
