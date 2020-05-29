@@ -52,25 +52,27 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
 
-        # RX : Let the synthesis tool insert the appropriate clock buffer
-        self.comb += self.cd_eth_rx.clk.eq(clock_pads.rx)
+        # RX: GMII, MII Use PHY clock_pads.rx as eth_rx_clk.
+        self.specials += Instance("BUFG",
+            i_I = clock_pads.rx,
+            o_O = ClockSignal("eth_rx"),
+        )
 
-        # TX : GMII: Drive clock_pads.gtx, clock_pads.tx unused
-        #      MII: Use PHY clock_pads.tx as eth_tx_clk, do not drive clock_pads.gtx
+        # TX: GMII: Drive clock_pads.gtx, clock_pads.tx unused.
+        #     MII : Use PHY clock_pads.tx as eth_tx_clk, do not drive clock_pads.gtx.
         self.specials += DDROutput(1, mii_mode, clock_pads.gtx, ClockSignal("eth_tx"))
-        if isinstance(mii_mode, int) and (mii_mode == 0):
-            self.specials += Instance("BUFG",
-                i_I = self.cd_eth_rx.clk,
-                o_O = self.cd_eth_tx.clk,
+        eth_tx_clk = Signal()
+        self.comb += [
+            If(mii_mode,
+               eth_tx_clk.eq(clock_pads.tx)
+            ).Else(
+               eth_tx_clk.eq(clock_pads.rx)
             )
-        else:
-            # XXX Xilinx specific, replace BUFGMUX with a generic clock buffer?
-            self.specials += Instance("BUFGMUX",
-                i_I0 = self.cd_eth_rx.clk,
-                i_I1 = clock_pads.tx,
-                i_S  = mii_mode,
-                o_O  = self.cd_eth_tx.clk,
-            )
+        ]
+        self.specials += Instance("BUFG",
+            i_I = eth_tx_clk,
+            o_O = ClockSignal("eth_tx"),
+        )
 
         reset = Signal()
         if with_hw_init_reset:
