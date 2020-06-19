@@ -12,8 +12,8 @@ class LiteEthMAC(Module, AutoCSR):
         with_preamble_crc = True,
         nrxslots          = 2,
         ntxslots          = 2,
-        cpu_dw            = 32,
         hw_mac            = None):
+        assert interface in ["crossbar", "wishbone", "hybrid"]
         self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
         self.csrs = []
         if interface == "crossbar":
@@ -26,29 +26,22 @@ class LiteEthMAC(Module, AutoCSR):
                 self.core.source.connect(self.depacketizer.sink),
                 self.depacketizer.source.connect(self.crossbar.master.sink)
             ]
-        elif interface == "wishbone":
-            self.rx_slots  = CSRConstant(nrxslots)
-            self.tx_slots  = CSRConstant(ntxslots)
-            self.slot_size = CSRConstant(2**bits_for(eth_mtu))
-            self.submodules.interface = LiteEthMACWishboneInterface(dw, nrxslots, ntxslots, endianness)
-            self.comb += Port.connect(self.interface, self.core)
-            self.ev, self.bus = self.interface.sram.ev, self.interface.bus
-            self.csrs = self.interface.get_csrs() + self.core.get_csrs()
-        elif interface == "hybrid":
+        else:
             # Wishbone MAC
             self.rx_slots  = CSRConstant(nrxslots)
             self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
-            self.submodules.interface = LiteEthMACWishboneInterface(cpu_dw, nrxslots, ntxslots, endianness)
-            # HW accelerated MAC
-            self.submodules.crossbar = LiteEthMACCrossbar(dw)
-            # MAC crossbar
-            self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, cpu_dw, endianness, hw_mac)
-            # Connections
+            self.submodules.interface = LiteEthMACWishboneInterface(32, nrxslots, ntxslots, endianness)
             self.ev, self.bus = self.interface.sram.ev, self.interface.bus
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
-        else:
-            raise NotImplementedError
+            if interface == "hybrid":
+                assert dw == 8
+                # Hardware MAC
+                self.submodules.crossbar     = LiteEthMACCrossbar(dw)
+                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, 32, endianness, hw_mac)
+            else:
+                assert dw == 32
+                self.comb += Port.connect(self.interface, self.core)
 
     def get_csrs(self):
         return self.csrs
