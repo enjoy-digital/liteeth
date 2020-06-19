@@ -10,9 +10,9 @@ from litex.soc.interconnect.packet import Depacketizer, Packetizer
 # ARP Layouts --------------------------------------------------------------------------------------
 
 _arp_table_layout = [
-        ("reply", 1),
-        ("request", 1),
-        ("ip_address", 32),
+        ("reply",        1),
+        ("request",      1),
+        ("ip_address",  32),
         ("mac_address", 48)
     ]
 
@@ -28,27 +28,19 @@ class LiteEthARPPacketizer(Packetizer):
 
 class LiteEthARPTX(Module):
     def __init__(self, mac_address, ip_address, dw=8):
-        self.sink = sink = stream.Endpoint(_arp_table_layout)
+        self.sink   = sink   = stream.Endpoint(_arp_table_layout)
         self.source = source = stream.Endpoint(eth_mac_description(dw))
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthARPPacketizer(dw)
-
         counter = Signal(max=max(arp_header.length, eth_min_len), reset_less=True)
-        counter_reset = Signal()
-        counter_ce = Signal()
-        self.sync += \
-            If(counter_reset,
-                counter.eq(0)
-            ).Elif(counter_ce,
-                counter.eq(counter + 1)
-            )
+
+        self.submodules.packetizer = packetizer = LiteEthARPPacketizer(dw)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ready.eq(1),
-            counter_reset.eq(1),
+            NextValue(counter, 0),
             If(sink.valid,
                 sink.ready.eq(0),
                 NextState("SEND")
@@ -79,7 +71,7 @@ class LiteEthARPTX(Module):
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
             If(source.valid & source.ready,
-                counter_ce.eq(1),
+                NextValue(counter, counter + 1),
                 If(source.last,
                     sink.ready.eq(1),
                     NextState("IDLE")
@@ -99,10 +91,10 @@ class LiteEthARPDepacketizer(Depacketizer):
 
 class LiteEthARPRX(Module):
     def __init__(self, mac_address, ip_address, dw=8):
-        self.sink = sink = stream.Endpoint(eth_mac_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(_arp_table_layout)
 
-        # # #
+        # # #s
 
         self.submodules.depacketizer = depacketizer = LiteEthARPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
@@ -154,16 +146,16 @@ class LiteEthARPRX(Module):
 
 class LiteEthARPTable(Module):
     def __init__(self, clk_freq, max_requests=8):
-        self.sink = sink = stream.Endpoint(_arp_table_layout)  # from arp_rx
-        self.source = source = stream.Endpoint(_arp_table_layout)       # to arp_tx
+        self.sink   = sink   = stream.Endpoint(_arp_table_layout)  # from arp_rx
+        self.source = source = stream.Endpoint(_arp_table_layout)  # to arp_tx
 
         # Request/Response interface
-        self.request = request = stream.Endpoint(arp_table_request_layout)
+        self.request  = request  = stream.Endpoint(arp_table_request_layout)
         self.response = response = stream.Endpoint(arp_table_response_layout)
 
         # # #
 
-        request_pending = Signal()
+        request_pending     = Signal()
         request_pending_clr = Signal()
         request_pending_set = Signal()
         self.sync += \
@@ -173,8 +165,8 @@ class LiteEthARPTable(Module):
                 request_pending.eq(1)
             )
 
-        request_ip_address = Signal(32, reset_less=True)
-        request_ip_address_reset = Signal()
+        request_ip_address        = Signal(32, reset_less=True)
+        request_ip_address_reset  = Signal()
         request_ip_address_update = Signal()
         self.sync += \
             If(request_ip_address_reset,
@@ -185,9 +177,9 @@ class LiteEthARPTable(Module):
 
         request_timer = WaitTimer(clk_freq//10)
         self.submodules += request_timer
-        request_counter = Signal(max=max_requests)
+        request_counter       = Signal(max=max_requests)
         request_counter_reset = Signal()
-        request_counter_ce = Signal()
+        request_counter_ce    = Signal()
         self.sync += \
             If(request_counter_reset,
                 request_counter.eq(0)
@@ -200,10 +192,10 @@ class LiteEthARPTable(Module):
         # table in the future to improve performance when packets are
         # targeting multiple destinations.
         update = Signal()
-        cached_valid = Signal()
-        cached_ip_address = Signal(32, reset_less=True)
+        cached_valid       = Signal()
+        cached_ip_address  = Signal(32, reset_less=True)
         cached_mac_address = Signal(48, reset_less=True)
-        cached_timer = WaitTimer(clk_freq*10)
+        cached_timer       = WaitTimer(clk_freq*10)
         self.submodules += cached_timer
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -293,8 +285,8 @@ class LiteEthARPTable(Module):
 
 class LiteEthARP(Module):
     def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8):
-        self.submodules.tx = tx = LiteEthARPTX(mac_address, ip_address, dw)
-        self.submodules.rx = rx = LiteEthARPRX(mac_address, ip_address, dw)
+        self.submodules.tx    = tx    = LiteEthARPTX(mac_address, ip_address, dw)
+        self.submodules.rx    = rx    = LiteEthARPRX(mac_address, ip_address, dw)
         self.submodules.table = table = LiteEthARPTable(clk_freq)
         self.comb += [
             rx.source.connect(table.sink),

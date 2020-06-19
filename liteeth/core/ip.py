@@ -10,15 +10,15 @@ from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 class LiteEthIPV4MasterPort:
     def __init__(self, dw):
-        self.dw = dw
+        self.dw     = dw
         self.source = stream.Endpoint(eth_ipv4_user_description(dw))
-        self.sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.sink   = stream.Endpoint(eth_ipv4_user_description(dw))
 
 
 class LiteEthIPV4SlavePort:
     def __init__(self, dw):
-        self.dw = dw
-        self.sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.dw     = dw
+        self.sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = stream.Endpoint(eth_ipv4_user_description(dw))
 
 
@@ -45,8 +45,8 @@ class LiteEthIPV4Crossbar(LiteEthCrossbar):
 class LiteEthIPV4Checksum(Module):
     def __init__(self, words_per_clock_cycle=1, skip_checksum=False):
         self.header = Signal(ipv4_header.length*8)
-        self.value = Signal(16)
-        self.done = Signal()
+        self.value  = Signal(16)
+        self.done   = Signal()
 
         # # #
 
@@ -71,14 +71,11 @@ class LiteEthIPV4Checksum(Module):
 
         if not skip_checksum:
             n_cycles += 1
-        counter = Signal(max=n_cycles+1)
+        counter    = Signal(max=n_cycles+1)
         counter_ce = Signal()
         self.sync += If(counter_ce, counter.eq(counter + 1))
-
-        self.comb += [
-            counter_ce.eq(~self.done),
-            self.done.eq(counter == n_cycles)
-        ]
+        self.comb += counter_ce.eq(~self.done)
+        self.comb += self.done.eq(counter == n_cycles)
 
 # IP TX --------------------------------------------------------------------------------------------
 
@@ -92,17 +89,15 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 class LiteEthIPTX(Module):
     def __init__(self, mac_address, ip_address, arp_table, dw=8):
-        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_mac_description(dw))
         self.target_unreachable = Signal()
 
         # # #
 
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
-        self.comb += [
-            checksum.ce.eq(sink.valid),
-            checksum.reset.eq(source.valid & source.last & source.ready)
-        ]
+        self.comb += checksum.ce.eq(sink.valid)
+        self.comb += checksum.reset.eq(source.valid & source.last & source.ready)
 
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [
@@ -122,7 +117,7 @@ class LiteEthIPTX(Module):
             packetizer.sink.checksum.eq(checksum.value)
         ]
 
-        target_mac    = Signal(48, reset_less=True)
+        target_mac = Signal(48, reset_less=True)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -186,7 +181,7 @@ class LiteEthIPV4Depacketizer(Depacketizer):
 
 class LiteEthIPRX(Module):
     def __init__(self, mac_address, ip_address, dw=8):
-        self.sink = sink = stream.Endpoint(eth_mac_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
 
         # # #

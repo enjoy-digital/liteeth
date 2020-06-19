@@ -17,7 +17,7 @@ class LiteEthICMPPacketizer(Packetizer):
 
 class LiteEthICMPTX(Module):
     def __init__(self, ip_address, dw=8):
-        self.sink = sink = stream.Endpoint(eth_icmp_user_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_icmp_user_description(dw))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
 
         # # #
@@ -64,7 +64,7 @@ class LiteEthICMPDepacketizer(Depacketizer):
 
 class LiteEthICMPRX(Module):
     def __init__(self, ip_address, dw=8):
-        self.sink = sink = stream.Endpoint(eth_ipv4_user_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_icmp_user_description(dw))
 
         # # #
@@ -123,7 +123,7 @@ class LiteEthICMPRX(Module):
 
 class LiteEthICMPEcho(Module):
     def __init__(self, dw=8):
-        self.sink = sink = stream.Endpoint(eth_icmp_user_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_icmp_user_description(dw))
         self.source = source = stream.Endpoint(eth_icmp_user_description(dw))
 
         # # #
@@ -141,8 +141,8 @@ class LiteEthICMPEcho(Module):
 
 class LiteEthICMP(Module):
     def __init__(self, ip, ip_address, dw=8):
-        self.submodules.tx = tx = LiteEthICMPTX(ip_address, dw)
-        self.submodules.rx = rx = LiteEthICMPRX(ip_address, dw)
+        self.submodules.tx   = tx   = LiteEthICMPTX(ip_address, dw)
+        self.submodules.rx   = rx   = LiteEthICMPRX(ip_address, dw)
         self.submodules.echo = echo = LiteEthICMPEcho(dw)
         self.comb += [
             rx.source.connect(echo.sink),
