@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 """
@@ -17,7 +17,7 @@ from liteeth.common import *
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.packet import *
 
-# etherbone packet
+# Etherbone Packet ---------------------------------------------------------------------------------
 
 class LiteEthEtherbonePacketPacketizer(Packetizer):
     def __init__(self):
@@ -29,7 +29,7 @@ class LiteEthEtherbonePacketPacketizer(Packetizer):
 
 class LiteEthEtherbonePacketTX(Module):
     def __init__(self, udp_port):
-        self.sink = sink = stream.Endpoint(eth_etherbone_packet_user_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_udp_user_description(32))
 
         # # #
@@ -80,7 +80,7 @@ class LiteEthEtherbonePacketDepacketizer(Depacketizer):
 
 class LiteEthEtherbonePacketRX(Module):
     def __init__(self):
-        self.sink = sink = stream.Endpoint(eth_udp_user_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_udp_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
         # # #
@@ -151,11 +151,11 @@ class LiteEthEtherbonePacket(Module):
         self.sink, self.source = self.tx.sink, self.rx.source
 
 
-# etherbone probe
+# Etherbone Probe ----------------------------------------------------------------------------------
 
 class LiteEthEtherboneProbe(Module):
     def __init__(self):
-        self.sink = sink = stream.Endpoint(eth_etherbone_packet_user_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
         # # #
@@ -177,7 +177,7 @@ class LiteEthEtherboneProbe(Module):
             )
         )
 
-# etherbone record
+# Etherbone Record ---------------------------------------------------------------------------------
 
 class LiteEthEtherboneRecordPacketizer(Packetizer):
     def __init__(self):
@@ -197,7 +197,7 @@ class LiteEthEtherboneRecordDepacketizer(Depacketizer):
 
 class LiteEthEtherboneRecordReceiver(Module):
     def __init__(self, buffer_depth=4):
-        self.sink = sink = stream.Endpoint(eth_etherbone_record_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_record_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
 
         # # #
@@ -280,14 +280,13 @@ class LiteEthEtherboneRecordReceiver(Module):
 
 class LiteEthEtherboneRecordSender(Module):
     def __init__(self, buffer_depth=4):
-        self.sink = sink = stream.Endpoint(eth_etherbone_mmap_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_record_description(32))
 
         # # #
 
         # TODO: optimize ressources (no need to store parameters as datas)
-        fifo = stream.SyncFIFO(eth_etherbone_mmap_description(32), buffer_depth,
-                               buffered=True)
+        fifo = stream.SyncFIFO(eth_etherbone_mmap_description(32), buffer_depth, buffered=True)
         self.submodules += fifo
         self.comb += sink.connect(fifo.sink)
 
@@ -338,12 +337,12 @@ class LiteEthEtherboneRecordSender(Module):
 
 class LiteEthEtherboneRecord(Module):
     def __init__(self, endianness="big"):
-        self.sink = sink = stream.Endpoint(eth_etherbone_packet_user_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
         # # #
 
-        # receive record, decode it and generate mmap stream
+        # Receive record, decode it and generate mmap stream
         self.submodules.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
         self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver()
         self.comb += [
@@ -353,7 +352,7 @@ class LiteEthEtherboneRecord(Module):
         if endianness is "big":
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
-        # save last ip address
+        # Save last ip address
         first = Signal(reset=1)
         last_ip_address = Signal(32, reset_less=True)
         self.sync += [
@@ -365,8 +364,8 @@ class LiteEthEtherboneRecord(Module):
             )
         ]
 
-        # receive mmap stream, encode it and send records
-        self.submodules.sender = sender = LiteEthEtherboneRecordSender()
+        # Receive MMAP stream, encode it and send records
+        self.submodules.sender     = sender     = LiteEthEtherboneRecordSender()
         self.submodules.packetizer = packetizer = LiteEthEtherboneRecordPacketizer()
         self.comb += [
             sender.source.connect(packetizer.sink),
@@ -379,15 +378,13 @@ class LiteEthEtherboneRecord(Module):
         if endianness is "big":
             self.comb += packetizer.sink.data.eq(reverse_bytes(sender.source.data))
 
-
-
-# etherbone wishbone
+# Etherbone Wishbone Master ------------------------------------------------------------------------
 
 class LiteEthEtherboneWishboneMaster(Module):
     def __init__(self):
-        self.sink = sink = stream.Endpoint(eth_etherbone_mmap_description(32))
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
-        self.bus = bus = wishbone.Interface()
+        self.bus    = bus    = wishbone.Interface()
 
         # # #
 
@@ -452,11 +449,12 @@ class LiteEthEtherboneWishboneMaster(Module):
             )
         )
 
+# Etherbone Wishbone Slave -------------------------------------------------------------------------
 
 class LiteEthEtherboneWishboneSlave(Module):
     def __init__(self):
-        self.bus = bus = wishbone.Interface()
-        self.sink = sink = stream.Endpoint(eth_etherbone_mmap_description(32))
+        self.bus    = bus    = wishbone.Interface()
+        self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
 
         # # #
@@ -507,32 +505,28 @@ class LiteEthEtherboneWishboneSlave(Module):
         )
 
 
-# etherbone
+# Etherbone ----------------------------------------------------------------------------------------
 
 class LiteEthEtherbone(Module):
     def __init__(self, udp, udp_port, mode="master", cd="sys"):
-        # decode/encode etherbone packets
+        # Encode/encode etherbone packets
         self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
 
-        # packets can be probe (etherbone discovering) or records with
-        # writes and reads
-        self.submodules.probe = probe = LiteEthEtherboneProbe()
+        # Packets can be probe (etherbone discovering) or records with writes and reads
+        self.submodules.probe  = probe = LiteEthEtherboneProbe()
         self.submodules.record = record = LiteEthEtherboneRecord()
 
-        # arbitrate/dispatch probe/records packets
+        # Arbitrate/dispatch probe/records packets
         dispatcher = Dispatcher(packet.source, [probe.sink, record.sink])
         self.comb += dispatcher.sel.eq(~packet.source.pf)
         arbiter = Arbiter([probe.source, record.source], packet.sink)
         self.submodules += dispatcher, arbiter
 
-        # create mmap wishbone
-        if mode == "master":
-            self.submodules.wishbone = LiteEthEtherboneWishboneMaster()
-        elif mode == "slave":
-            self.submodules.wishbone = LiteEthEtherboneWishboneSlave()
-        else:
-            raise ValueError
-
+        # Create MMAP wishbone
+        self.submodules.wishbone = {
+            "master": LiteEthEtherboneWishboneMaster(),
+            "slave":  LiteEthEtherboneWishboneSlave(),
+        }[mode]
         self.comb += [
             record.receiver.source.connect(self.wishbone.sink),
             self.wishbone.source.connect(record.sender.sink)

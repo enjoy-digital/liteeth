@@ -1,12 +1,13 @@
-# This file is Copyright (c) 2015-2016 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
 
+# TTY TX -------------------------------------------------------------------------------------------
 
 class LiteEthTTYTX(Module):
     def __init__(self, ip_address, udp_port, fifo_depth=None):
-        self.sink = sink = stream.Endpoint(eth_tty_description(8))
+        self.sink   = sink = stream.Endpoint(eth_tty_description(8))
         self.source = source = stream.Endpoint(eth_udp_user_description(8))
 
         # # #
@@ -20,28 +21,17 @@ class LiteEthTTYTX(Module):
                 sink.ready.eq(source.ready)
             ]
         else:
+            level   = Signal(max=fifo_depth)
+            counter = Signal(max=fifo_depth)
+
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += sink.connect(fifo.sink)
-
-            level = Signal(max=fifo_depth)
-            level_update = Signal()
-            self.sync += If(level_update, level.eq(fifo.level))
-
-            counter = Signal(max=fifo_depth)
-            counter_reset = Signal()
-            counter_ce = Signal()
-            self.sync += \
-                If(counter_reset,
-                    counter.eq(0)
-                ).Elif(counter_ce,
-                    counter.eq(counter + 1)
-                )
 
             self.submodules.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
                 If(fifo.source.valid,
-                    level_update.eq(1),
-                    counter_reset.eq(1),
+                    NextValue(level, fifo.level),
+                    NextValue(counter, 0),
                     NextState("SEND")
                 )
             )
@@ -63,13 +53,14 @@ class LiteEthTTYTX(Module):
                 source.data.eq(fifo.source.data),
                 fifo.source.ready.eq(source.ready),
                 If(source.valid & source.ready,
-                    counter_ce.eq(1),
+                    NextValue(counter, counter + 1),
                     If(source.last,
                         NextState("IDLE")
                     )
                 )
             )
 
+# TTY RX -------------------------------------------------------------------------------------------
 
 class LiteEthTTYRX(Module):
     def __init__(self, ip_address, udp_port, fifo_depth=None):
@@ -98,6 +89,7 @@ class LiteEthTTYRX(Module):
                 fifo.source.connect(source)
             ]
 
+# TTY ----------------------------------------------------------------------------------------------
 
 class LiteEthTTY(Module):
     def __init__(self, udp, ip_address, udp_port,
