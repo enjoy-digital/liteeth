@@ -38,7 +38,7 @@ class LiteEthMAC(Module, AutoCSR):
                 assert dw == 8
                 # Hardware MAC
                 self.submodules.crossbar     = LiteEthMACCrossbar(dw)
-                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, 32, endianness, hw_mac)
+                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, endianness, hw_mac)
             else:
                 assert dw == 32
                 self.comb += Port.connect(self.interface, self.core)
@@ -49,7 +49,7 @@ class LiteEthMAC(Module, AutoCSR):
 # MAC Core Crossbar --------------------------------------------------------------------------------
 
 class LiteEthMACCoreCrossbar(Module):
-    def __init__(self, core, crossbar, interface, dw, cpu_dw, endianness, hw_mac=None):
+    def __init__(self, core, crossbar, interface, dw, endianness, hw_mac=None):
         wishbone_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
         wishbone_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
         crossbar_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
@@ -65,28 +65,23 @@ class LiteEthMACCoreCrossbar(Module):
         tx_pipe = []
         rx_pipe = []
 
-        if cpu_dw != 8:
-            tx_last_be = last_be.LiteEthMACTXLastBE(dw)
-            rx_last_be = last_be.LiteEthMACRXLastBE(dw)
+        tx_last_be = last_be.LiteEthMACTXLastBE(dw)
+        rx_last_be = last_be.LiteEthMACRXLastBE(dw)
+        tx_pipe += [tx_last_be]
+        rx_pipe += [rx_last_be]
+        self.submodules += tx_last_be, rx_last_be
 
-            tx_pipe += [tx_last_be]
-            rx_pipe += [rx_last_be]
-
-            self.submodules += tx_last_be, rx_last_be
-
-        if dw != cpu_dw:
-            tx_converter = stream.StrideConverter(
-                description_from = eth_phy_description(cpu_dw),
-                description_to   = eth_phy_description(dw),
-                reverse          = reverse)
-            rx_converter = stream.StrideConverter(
-                description_from = eth_phy_description(dw),
-                description_to   = eth_phy_description(cpu_dw),
-                reverse          = reverse)
-            rx_pipe += [rx_converter]
-            tx_pipe += [tx_converter]
-
-            self.submodules += tx_converter, rx_converter
+        tx_converter = stream.StrideConverter(
+            description_from = eth_phy_description(32),
+            description_to   = eth_phy_description(dw),
+            reverse          = reverse)
+        rx_converter = stream.StrideConverter(
+            description_from = eth_phy_description(dw),
+            description_to   = eth_phy_description(32),
+            reverse          = reverse)
+        rx_pipe += [rx_converter]
+        tx_pipe += [tx_converter]
+        self.submodules += tx_converter, rx_converter
 
         # CPU packet processing
         self.submodules.tx_pipe = stream.Pipeline(*reversed(tx_pipe))
