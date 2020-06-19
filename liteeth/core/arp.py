@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
@@ -7,6 +7,7 @@ from migen.genlib.misc import WaitTimer
 
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
+# ARP Layouts --------------------------------------------------------------------------------------
 
 _arp_table_layout = [
         ("reply", 1),
@@ -15,7 +16,7 @@ _arp_table_layout = [
         ("mac_address", 48)
     ]
 
-# arp tx
+# ARP TX -------------------------------------------------------------------------------------------
 
 class LiteEthARPPacketizer(Packetizer):
     def __init__(self, dw=8):
@@ -86,7 +87,7 @@ class LiteEthARPTX(Module):
             )
         )
 
-# arp rx
+# ARP RX -------------------------------------------------------------------------------------------
 
 class LiteEthARPDepacketizer(Depacketizer):
     def __init__(self, dw=8):
@@ -149,7 +150,7 @@ class LiteEthARPRX(Module):
             )
         )
 
-# arp table
+# ARP Table ----------------------------------------------------------------------------------------
 
 class LiteEthARPTable(Module):
     def __init__(self, clk_freq, max_requests=8):
@@ -288,7 +289,7 @@ class LiteEthARPTable(Module):
             )
         )
 
-# arp
+# ARP ----------------------------------------------------------------------------------------------
 
 class LiteEthARP(Module):
     def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8):

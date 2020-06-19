@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
@@ -6,8 +6,7 @@ from liteeth.crossbar import LiteEthCrossbar
 
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
-
-# ip crossbar
+# IP Crossbar --------------------------------------------------------------------------------------
 
 class LiteEthIPV4MasterPort:
     def __init__(self, dw):
@@ -39,7 +38,7 @@ class LiteEthIPV4Crossbar(LiteEthCrossbar):
         self.users[protocol] = port
         return port
 
-# ip checksum
+# IP Checksum --------------------------------------------------------------------------------------
 
 @ResetInserter()
 @CEInserter()
@@ -81,7 +80,7 @@ class LiteEthIPV4Checksum(Module):
             self.done.eq(counter == n_cycles)
         ]
 
-# ip tx
+# IP TX --------------------------------------------------------------------------------------------
 
 class LiteEthIPV4Packetizer(Packetizer):
     def __init__(self, dw=8):
@@ -175,7 +174,7 @@ class LiteEthIPTX(Module):
             )
         )
 
-# ip rx
+# IP RX --------------------------------------------------------------------------------------------
 
 class LiteEthIPV4Depacketizer(Depacketizer):
     def __init__(self, dw=8):
@@ -252,7 +251,7 @@ class LiteEthIPRX(Module):
             )
         )
 
-# ip
+# IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(Module):
     def __init__(self, mac, mac_address, ip_address, arp_table, dw=8):

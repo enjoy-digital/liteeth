@@ -1,12 +1,11 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
 
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
-
-# icmp tx
+# ICMP TX ------------------------------------------------------------------------------------------
 
 class LiteEthICMPPacketizer(Packetizer):
     def __init__(self, dw=8):
@@ -53,7 +52,7 @@ class LiteEthICMPTX(Module):
             )
         )
 
-# icmp rx
+# ICMP RX ------------------------------------------------------------------------------------------
 
 class LiteEthICMPDepacketizer(Depacketizer):
     def __init__(self, dw=8):
@@ -120,7 +119,7 @@ class LiteEthICMPRX(Module):
             )
         )
 
-# icmp echo
+# ICMP Echo ----------------------------------------------------------------------------------------
 
 class LiteEthICMPEcho(Module):
     def __init__(self, dw=8):
@@ -138,7 +137,7 @@ class LiteEthICMPEcho(Module):
             self.source.checksum.eq(self.buffer.source.checksum + 0x800 + (self.buffer.source.checksum >= 0xf800))
         ]
 
-# icmp
+# ICMP ---------------------------------------------------------------------------------------------
 
 class LiteEthICMP(Module):
     def __init__(self, ip, ip_address, dw=8):

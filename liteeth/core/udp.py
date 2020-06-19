@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2017 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
@@ -7,8 +7,7 @@ from liteeth.crossbar import LiteEthCrossbar
 from litex.soc.interconnect import stream
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
-
-# udp crossbar
+# UDP Crossbar -------------------------------------------------------------------------------------
 
 class LiteEthUDPMasterPort:
     def __init__(self, dw):
@@ -77,7 +76,7 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         return user_port
 
-# udp tx
+# UDP TX -------------------------------------------------------------------------------------------
 
 class LiteEthUDPPacketizer(Packetizer):
     def __init__(self, dw=8):
@@ -124,7 +123,7 @@ class LiteEthUDPTX(Module):
             )
         )
 
-# udp rx
+# UDP RX -------------------------------------------------------------------------------------------
 
 class LiteEthUDPDepacketizer(Depacketizer):
     def __init__(self, dw=8):
@@ -190,7 +189,7 @@ class LiteEthUDPRX(Module):
             )
         )
 
-# udp
+# UDP ----------------------------------------------------------------------------------------------
 
 class LiteEthUDP(Module):
     def __init__(self, ip, ip_address, dw=8):
