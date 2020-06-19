@@ -172,14 +172,14 @@ class LiteEthMACCRCInserter(Module):
             sink.connect(source),
             source.last.eq(0),
             If(sink.valid & sink.last & source.ready,
-                NextState("INSERT"),
+                NextState("CRC"),
             )
         )
         ratio = crc.width//dw
         if ratio > 1:
             cnt = Signal(max=ratio, reset=ratio-1)
             cnt_done = Signal()
-            fsm.act("INSERT",
+            fsm.act("CRC",
                 source.valid.eq(1),
                 chooser(crc.value, cnt, source.data, reverse=True),
                 If(cnt_done,
@@ -191,11 +191,11 @@ class LiteEthMACCRCInserter(Module):
             self.sync += \
                 If(fsm.ongoing("IDLE"),
                     cnt.eq(cnt.reset)
-                ).Elif(fsm.ongoing("INSERT") & ~cnt_done,
+                ).Elif(fsm.ongoing("CRC") & ~cnt_done,
                     cnt.eq(cnt - source.ready)
                 )
         else:
-            fsm.act("INSERT",
+            fsm.act("CRC",
                 source.valid.eq(1),
                 source.last.eq(1),
                 source.data.eq(crc.value),

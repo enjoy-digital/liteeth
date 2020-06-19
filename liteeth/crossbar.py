@@ -7,10 +7,11 @@ from liteeth.common import *
 
 from litex.soc.interconnect.packet import Arbiter, Dispatcher
 
+# Crossbar -----------------------------------------------------------------------------------------
 
 class LiteEthCrossbar(Module):
     def __init__(self, master_port, dispatch_param, dw=8):
-        self.users = OrderedDict()
+        self.users  = OrderedDict()
         self.master = master_port(dw)
         self.dispatch_param = dispatch_param
 
@@ -25,12 +26,9 @@ class LiteEthCrossbar(Module):
 
         # RX dispatch
         sources = [port.source for port in self.users.values()]
-        self.submodules.dispatcher = Dispatcher(self.master.sink,
-                                                sources,
-                                                one_hot=True)
+        self.submodules.dispatcher = Dispatcher(self.master.sink, sources, one_hot=True)
         cases = {}
         cases["default"] = self.dispatcher.sel.eq(0)
         for i, (k, v) in enumerate(self.users.items()):
             cases[k] = self.dispatcher.sel.eq(2**i)
-        self.comb += \
-            Case(getattr(self.master.sink, self.dispatch_param), cases)
+        self.comb += Case(getattr(self.master.sink, self.dispatch_param), cases)

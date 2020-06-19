@@ -7,7 +7,7 @@ import math
 
 from liteeth.common import *
 
-# MAC Padding Inserted -----------------------------------------------------------------------------
+# MAC Padding Inserter -----------------------------------------------------------------------------
 
 class LiteEthMACPaddingInserter(Module):
     def __init__(self, dw, padding):
@@ -50,6 +50,8 @@ class LiteEthMACPaddingInserter(Module):
             )
         )
 
+
+# MAC Padding Checker ------------------------------------------------------------------------------
 
 class LiteEthMACPaddingChecker(Module):
     def __init__(self, dw, packet_min_length):

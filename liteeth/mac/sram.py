@@ -232,6 +232,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             cases[n] = [source.data.eq(port.dat_r)]
         self.comb += Case(rd_slot, cases)
 
+# MAC SRAM -----------------------------------------------------------------------------------------
 
 class LiteEthMACSRAM(Module, AutoCSR):
     def __init__(self, dw, depth, nrxslots, ntxslots, endianness):

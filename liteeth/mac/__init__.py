@@ -3,21 +3,22 @@ from liteeth.mac.common import *
 from liteeth.mac.core import LiteEthMACCore
 from liteeth.mac.wishbone import LiteEthMACWishboneInterface
 
+# MAC ----------------------------------------------------------------------------------------------
 
 class LiteEthMAC(Module, AutoCSR):
     def __init__(self, phy, dw,
-                 interface="crossbar",
-                 endianness="big",
-                 with_preamble_crc=True,
-                 nrxslots=2,
-                 ntxslots=2,
-                 cpu_dw=32,
-                 hw_mac=None):
+        interface         = "crossbar",
+        endianness        = "big",
+        with_preamble_crc = True,
+        nrxslots          = 2,
+        ntxslots          = 2,
+        cpu_dw            = 32,
+        hw_mac            = None):
         self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
         self.csrs = []
         if interface == "crossbar":
-            self.submodules.crossbar = LiteEthMACCrossbar(dw)
-            self.submodules.packetizer = LiteEthMACPacketizer(dw)
+            self.submodules.crossbar     = LiteEthMACCrossbar(dw)
+            self.submodules.packetizer   = LiteEthMACPacketizer(dw)
             self.submodules.depacketizer = LiteEthMACDepacketizer(dw)
             self.comb += [
                 self.crossbar.master.source.connect(self.packetizer.sink),
@@ -26,8 +27,8 @@ class LiteEthMAC(Module, AutoCSR):
                 self.depacketizer.source.connect(self.crossbar.master.sink)
             ]
         elif interface == "wishbone":
-            self.rx_slots = CSRConstant(nrxslots)
-            self.tx_slots = CSRConstant(ntxslots)
+            self.rx_slots  = CSRConstant(nrxslots)
+            self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
             self.submodules.interface = LiteEthMACWishboneInterface(dw, nrxslots, ntxslots, endianness)
             self.comb += Port.connect(self.interface, self.core)
@@ -35,8 +36,8 @@ class LiteEthMAC(Module, AutoCSR):
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
         elif interface == "hybrid":
             # Wishbone MAC
-            self.rx_slots = CSRConstant(nrxslots)
-            self.tx_slots = CSRConstant(ntxslots)
+            self.rx_slots  = CSRConstant(nrxslots)
+            self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
             self.submodules.interface = LiteEthMACWishboneInterface(cpu_dw, nrxslots, ntxslots, endianness)
             # HW accelerated MAC
@@ -52,13 +53,14 @@ class LiteEthMAC(Module, AutoCSR):
     def get_csrs(self):
         return self.csrs
 
+# MAC Core Crossbar --------------------------------------------------------------------------------
+
 class LiteEthMACCoreCrossbar(Module):
     def __init__(self, core, crossbar, interface, dw, cpu_dw, endianness, hw_mac=None):
-        fifo_depth = 2048
-        wishbone_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), fifo_depth, buffered=True)
-        wishbone_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), fifo_depth, buffered=True)
-        crossbar_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), fifo_depth, buffered=True)
-        crossbar_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), fifo_depth, buffered=True)
+        wishbone_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
+        wishbone_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
+        crossbar_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
+        crossbar_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
 
         self.submodules += wishbone_rx_fifo, wishbone_tx_fifo, crossbar_rx_fifo, crossbar_tx_fifo
 
@@ -80,30 +82,32 @@ class LiteEthMACCoreCrossbar(Module):
             self.submodules += tx_last_be, rx_last_be
 
         if dw != cpu_dw:
-            tx_converter = stream.StrideConverter(eth_phy_description(cpu_dw),
-                                                  eth_phy_description(dw),
-                                                  reverse=reverse)
-            rx_converter = stream.StrideConverter(eth_phy_description(dw),
-                                                  eth_phy_description(cpu_dw),
-                                                  reverse=reverse)
+            tx_converter = stream.StrideConverter(
+                description_from = eth_phy_description(cpu_dw),
+                description_to   = eth_phy_description(dw),
+                reverse          = reverse)
+            rx_converter = stream.StrideConverter(
+                description_from = eth_phy_description(dw),
+                description_to   = eth_phy_description(cpu_dw),
+                reverse          = reverse)
             rx_pipe += [rx_converter]
             tx_pipe += [tx_converter]
 
             self.submodules += tx_converter, rx_converter
 
-        # SoftCPU packet processing
+        # CPU packet processing
         self.submodules.tx_pipe = stream.Pipeline(*reversed(tx_pipe))
         self.submodules.rx_pipe = stream.Pipeline(*rx_pipe)
         # IP core packet processing
-        self.submodules.packetizer = LiteEthMACPacketizer(dw)
+        self.submodules.packetizer   = LiteEthMACPacketizer(dw)
         self.submodules.depacketizer = LiteEthMACDepacketizer(dw)
 
         self.comb += [
-            # SoftCPU output path
+            # CPU output path
             # interface -> tx_pipe -> tx_fifo
             interface.source.connect(self.tx_pipe.sink),
             self.tx_pipe.source.connect(wishbone_tx_fifo.sink),
-            # SoftCPU input path
+            # CPU input path
             # rx_fifo -> rx_pipe -> interface
             wishbone_rx_fifo.source.connect(self.rx_pipe.sink),
             self.rx_pipe.source.connect(interface.sink),
@@ -123,10 +127,8 @@ class LiteEthMACCoreCrossbar(Module):
             hw_packetizer  = LiteEthMACPacketizer(dw)
             cpu_packetizer = LiteEthMACPacketizer(dw)
 
-            fifo_depth = 4
-
-            hw_fifo = stream.SyncFIFO(eth_mac_description(dw), fifo_depth, buffered=True)
-            cpu_fifo = stream.SyncFIFO(eth_mac_description(dw), fifo_depth, buffered=True)
+            hw_fifo  = stream.SyncFIFO(eth_mac_description(dw), depth=4, buffered=True)
+            cpu_fifo = stream.SyncFIFO(eth_mac_description(dw), depth=4, buffered=True)
 
             self.submodules += depacketizer, cpu_packetizer, hw_packetizer, hw_fifo, cpu_fifo
 

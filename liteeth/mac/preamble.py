@@ -86,8 +86,8 @@ class LiteEthMACPreambleChecker(Module):
 
         # # #
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
+        self.submodules.fsm = fsm = FSM(reset_state="PREAMBLE")
+        fsm.act("PREAMBLE",
             sink.ready.eq(1),
             If(sink.valid & ~sink.last & (sink.data == (eth_preamble >> 56)),
                 NextState("COPY")
@@ -101,6 +101,6 @@ class LiteEthMACPreambleChecker(Module):
         fsm.act("COPY",
             sink.connect(source, omit={"data", "last_be"}),
             If(source.valid & source.last & source.ready,
-                NextState("IDLE"),
+                NextState("PREAMBLE"),
             )
         )

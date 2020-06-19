@@ -6,6 +6,7 @@ from liteeth.crossbar import LiteEthCrossbar
 
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
+# MAC Packetizer/Depacketizer ----------------------------------------------------------------------
 
 class LiteEthMACDepacketizer(Depacketizer):
     def __init__(self, dw):
@@ -22,6 +23,7 @@ class LiteEthMACPacketizer(Packetizer):
             eth_phy_description(dw),
             mac_header)
 
+# MAC Ports ----------------------------------------------------------------------------------------
 
 class LiteEthMACMasterPort:
     def __init__(self, dw):
