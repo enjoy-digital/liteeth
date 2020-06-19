@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2015-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
 # This file is Copyright (c) 2017-2018 whitequark <whitequark@whitequark.org>
 # License: BSD
@@ -7,6 +7,7 @@ from liteeth.common import *
 
 from migen.genlib.misc import chooser
 
+# MAC Preamble Inserter ----------------------------------------------------------------------------
 
 class LiteEthMACPreambleInserter(Module):
     """Preamble inserter
@@ -21,44 +22,33 @@ class LiteEthMACPreambleInserter(Module):
         Preamble, SFD, and packet octets.
     """
     def __init__(self, dw):
-        self.sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
         preamble = Signal(64, reset=eth_preamble)
-        cnt_max = (64//dw)-1
-        cnt = Signal(max=cnt_max+1, reset_less=True)
-        clr_cnt = Signal()
-        inc_cnt = Signal()
-
-        self.sync += \
-            If(clr_cnt,
-                cnt.eq(0)
-            ).Elif(inc_cnt,
-                cnt.eq(cnt+1)
-            )
-
-        fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
+        count    = Signal(max=(64//dw)-1, reset_less=True)
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.sink.ready.eq(1),
-            clr_cnt.eq(1),
+            NextValue(count, 0),
             If(self.sink.valid,
                 self.sink.ready.eq(0),
-                NextState("INSERT"),
+                NextState("PREAMBLE"),
             )
         )
-        fsm.act("INSERT",
+        fsm.act("PREAMBLE",
             self.source.valid.eq(1),
-            chooser(preamble, cnt, self.source.data),
-            If(cnt == cnt_max,
-                If(self.source.ready, NextState("COPY"))
-            ).Else(
-                inc_cnt.eq(self.source.ready)
+            chooser(preamble, count, self.source.data),
+            If(self.source.ready,
+                If(count == (64//dw)-1,
+                    NextState("COPY")
+                ).Else(
+                    NextValue(count, count + 1)
+                )
             )
         )
-
         self.comb += [
             self.source.data.eq(self.sink.data),
             self.source.last_be.eq(self.sink.last_be)
@@ -71,9 +61,10 @@ class LiteEthMACPreambleInserter(Module):
             )
         )
 
+# MAC Preamble Checker ----------------------------------------------------------------------------
 
 class LiteEthMACPreambleChecker(Module):
-    """Preamble detector
+    """Preamble checker
 
     Detects preamble at the beginning of each packet.
 
@@ -88,19 +79,17 @@ class LiteEthMACPreambleChecker(Module):
     """
     def __init__(self, dw):
         assert dw == 8
-        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink   = sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         self.error = Signal()
 
         # # #
 
-        fsm = FSM(reset_state="IDLE")
-        self.submodules += fsm
-
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ready.eq(1),
-            If(sink.valid & ~sink.last & (sink.data == eth_preamble >> 56),
+            If(sink.valid & ~sink.last & (sink.data == (eth_preamble >> 56)),
                 NextState("COPY")
             ),
             If(sink.valid & sink.last, self.error.eq(1))

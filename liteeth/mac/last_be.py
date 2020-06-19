@@ -1,20 +1,21 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
 # This file is Copyright (c) 2018 whitequark <whitequark@whitequark.org>
 # License: BSD
 
 from liteeth.common import *
 
+# MAC TX Last BE -----------------------------------------------------------------------------------
 
 class LiteEthMACTXLastBE(Module):
     def __init__(self, dw):
-        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink   = sink = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
         ongoing = Signal(reset=1)
-        self.sync += \
+        self.sync += [
             If(sink.valid & sink.ready,
                 If(sink.last,
                     ongoing.eq(1)
@@ -22,6 +23,7 @@ class LiteEthMACTXLastBE(Module):
                     ongoing.eq(0)
                 )
             )
+        ]
         self.comb += [
             source.valid.eq(sink.valid & ongoing),
             source.last.eq(sink.last_be),
@@ -29,6 +31,7 @@ class LiteEthMACTXLastBE(Module):
             sink.ready.eq(source.ready)
         ]
 
+# MAC RX Last BE -----------------------------------------------------------------------------------
 
 class LiteEthMACRXLastBE(Module):
     def __init__(self, dw):

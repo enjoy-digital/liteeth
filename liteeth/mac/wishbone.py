@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2015-2016 Sebastien Bourdeauducq <sb@m-labs.hk>
 # License: BSD
 
@@ -7,12 +7,13 @@ from liteeth.mac import sram
 
 from litex.soc.interconnect import wishbone
 
+# MAC Wishbone Interface ---------------------------------------------------------------------------
 
 class LiteEthMACWishboneInterface(Module, AutoCSR):
     def __init__(self, dw, nrxslots=2, ntxslots=2, endianness="big"):
-        self.sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
-        self.bus = wishbone.Interface()
+        self.bus    = wishbone.Interface()
 
         # # #
 
@@ -31,9 +32,9 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
             for n in range(ntxslots)]
         wb_sram_ifs = wb_rx_sram_ifs + wb_tx_sram_ifs
 
-        wb_slaves = []
+        wb_slaves     = []
         decoderoffset = log2_int(sram_depth, need_pow2=False)
-        decoderbits = log2_int(len(wb_sram_ifs))
+        decoderbits   = log2_int(len(wb_sram_ifs))
         for n, wb_sram_if in enumerate(wb_sram_ifs):
             def slave_filter(a, v=n):
                 return a[decoderoffset:decoderoffset+decoderbits] == v

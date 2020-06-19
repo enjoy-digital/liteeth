@@ -8,8 +8,7 @@ from liteeth.common import *
 from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
 
-
-# LiteEthMACSRAMWriter -----------------------------------------------------------------------------
+# MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big"):
@@ -19,10 +18,10 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         slotbits   = max(log2_int(nslots), 1)
         lengthbits = 32
 
-        self._slot         = CSRStatus(slotbits)
-        self._length       = CSRStatus(lengthbits)
+        self._slot   = CSRStatus(slotbits)
+        self._length = CSRStatus(lengthbits)
 
-        self.errors        = CSRStatus(32)
+        self.errors  = CSRStatus(32)
 
         self.submodules.ev = EventManager()
         self.ev.available  = EventSourceLevel()
@@ -140,7 +139,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             ]
         self.comb += Case(slot, cases)
 
-# LiteEthMACSRAMReader -----------------------------------------------------------------------------
+# MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big"):
@@ -150,11 +149,11 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         lengthbits      = bits_for(depth*4)  # length in bytes
         self.lengthbits = lengthbits
 
-        self._start        = CSR()
-        self._ready        = CSRStatus()
-        self._level        = CSRStatus(log2_int(nslots) + 1)
-        self._slot         = CSRStorage(slotbits,   reset_less=True)
-        self._length       = CSRStorage(lengthbits, reset_less=True)
+        self._start  = CSR()
+        self._ready  = CSRStatus()
+        self._level  = CSRStatus(log2_int(nslots) + 1)
+        self._slot   = CSRStorage(slotbits,   reset_less=True)
+        self._length = CSRStorage(lengthbits, reset_less=True)
 
         self.submodules.ev = EventManager()
         self.ev.done       = EventSourcePulse()
@@ -238,5 +237,5 @@ class LiteEthMACSRAM(Module, AutoCSR):
     def __init__(self, dw, depth, nrxslots, ntxslots, endianness):
         self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness)
         self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness)
-        self.submodules.ev = SharedIRQ(self.writer.ev, self.reader.ev)
+        self.submodules.ev     = SharedIRQ(self.writer.ev, self.reader.ev)
         self.sink, self.source = self.writer.sink, self.reader.source

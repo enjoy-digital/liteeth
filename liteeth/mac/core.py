@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2015-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
 # This file is Copyright (c) 2017-2018 whitequark <whitequark@whitequark.org>
 # License: BSD
@@ -9,11 +9,10 @@ from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
 
+# MAC Core -----------------------------------------------------------------------------------------
 
 class LiteEthMACCore(Module, AutoCSR):
-    def __init__(self, phy, dw, endianness="big",
-            with_preamble_crc=True,
-            with_padding=True):
+    def __init__(self, phy, dw, endianness="big", with_preamble_crc=True, with_padding=True):
         if dw < phy.dw:
             raise ValueError("Core data width({}) must be larger than PHY data width({})".format(dw, phy.dw))
 
@@ -37,13 +36,13 @@ class LiteEthMACCore(Module, AutoCSR):
 
             # Preamble insert/check
             preamble_inserter = preamble.LiteEthMACPreambleInserter(phy.dw)
-            preamble_checker = preamble.LiteEthMACPreambleChecker(phy.dw)
+            preamble_checker  = preamble.LiteEthMACPreambleChecker(phy.dw)
             self.submodules += ClockDomainsRenamer("eth_tx")(preamble_inserter)
             self.submodules += ClockDomainsRenamer("eth_rx")(preamble_checker)
 
             # CRC insert/check
             crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(phy.dw))
-            crc32_checker = crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw))
+            crc32_checker  = crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw))
             self.submodules += ClockDomainsRenamer("eth_tx")(crc32_inserter)
             self.submodules += ClockDomainsRenamer("eth_rx")(crc32_checker)
 
@@ -52,8 +51,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
             # Error counters
             self.submodules.ps_preamble_error = PulseSynchronizer("eth_rx", "sys")
-            self.submodules.ps_crc_error = PulseSynchronizer("eth_rx", "sys")
-
+            self.submodules.ps_crc_error      = PulseSynchronizer("eth_rx", "sys")
             self.comb += [
                 self.ps_preamble_error.i.eq(preamble_checker.error),
                 self.ps_crc_error.i.eq(crc32_checker.error),
@@ -68,10 +66,9 @@ class LiteEthMACCore(Module, AutoCSR):
         # Padding
         if with_padding:
             padding_inserter = padding.LiteEthMACPaddingInserter(phy.dw, 60)
-            padding_checker = padding.LiteEthMACPaddingChecker(phy.dw, 60)
+            padding_checker  = padding.LiteEthMACPaddingChecker(phy.dw, 60)
             self.submodules += ClockDomainsRenamer("eth_tx")(padding_inserter)
             self.submodules += ClockDomainsRenamer("eth_rx")(padding_checker)
-
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
 
@@ -81,22 +78,22 @@ class LiteEthMACCore(Module, AutoCSR):
             rx_last_be = last_be.LiteEthMACRXLastBE(phy.dw)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_last_be)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_last_be)
-
             tx_pipeline += [tx_last_be]
             rx_pipeline += [rx_last_be]
 
         # Converters
         if dw != phy.dw:
             reverse = endianness == "big"
-            tx_converter = stream.StrideConverter(eth_phy_description(dw),
-                                                  eth_phy_description(phy.dw),
-                                                 reverse=reverse)
-            rx_converter = stream.StrideConverter(eth_phy_description(phy.dw),
-                                                  eth_phy_description(dw),
-                                                  reverse=reverse)
+            tx_converter = stream.StrideConverter(
+                description_from = eth_phy_description(dw),
+                description_to   = eth_phy_description(phy.dw),
+                reverse          = reverse)
+            rx_converter = stream.StrideConverter(
+                description_from = eth_phy_description(phy.dw),
+                description_to   = eth_phy_description(dw),
+                reverse          = reverse)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
-
             tx_pipeline += [tx_converter]
             rx_pipeline += [rx_converter]
 
@@ -105,7 +102,6 @@ class LiteEthMACCore(Module, AutoCSR):
         rx_cdc = stream.AsyncFIFO(eth_phy_description(dw), 64)
         self.submodules += ClockDomainsRenamer({"write": "sys", "read": "eth_tx"})(tx_cdc)
         self.submodules += ClockDomainsRenamer({"write": "eth_rx", "read": "sys"})(rx_cdc)
-
         tx_pipeline += [tx_cdc]
         rx_pipeline += [rx_cdc]
 

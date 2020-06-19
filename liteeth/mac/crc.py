@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # This file is Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
 # This file is Copyright (c) 2017 whitequark <whitequark@whitequark.org>
 # This file is Copyright (c) 2018 Felix Held <felix-github@felixheld.de>
@@ -12,6 +12,7 @@ from liteeth.common import *
 
 from migen.genlib.misc import chooser, WaitTimer
 
+# MAC CRC Engine -----------------------------------------------------------------------------------
 
 class LiteEthMACCRCEngine(Module):
     """Cyclic Redundancy Check Engine
@@ -82,6 +83,7 @@ class LiteEthMACCRCEngine(Module):
                     xors += [self.data[n]]
             self.comb += self.next[i].eq(reduce(xor, xors))
 
+# MAC CRC32 ----------------------------------------------------------------------------------------
 
 @ResetInserter()
 @CEInserter()
@@ -104,12 +106,12 @@ class LiteEthMACCRC32(Module):
     error : out
         CRC error (used for checker).
     """
-    width = 32
+    width   = 32
     polynom = 0x04C11DB7
-    init = 2**width-1
-    check = 0xC704DD7B
+    init    = 2**width-1
+    check   = 0xC704DD7B
     def __init__(self, data_width):
-        self.data = Signal(data_width)
+        self.data  = Signal(data_width)
         self.value = Signal(self.width)
         self.error = Signal()
 
@@ -126,6 +128,7 @@ class LiteEthMACCRC32(Module):
             self.error.eq(self.engine.next != self.check)
         ]
 
+# MAC CRC Inserter ---------------------------------------------------------------------------------
 
 class LiteEthMACCRCInserter(Module):
     """CRC Inserter
@@ -145,12 +148,12 @@ class LiteEthMACCRCInserter(Module):
         Packets octets with CRC.
     """
     def __init__(self, crc_class, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
 
-        dw = len(sink.data)
+        dw  = len(sink.data)
         crc = crc_class(dw)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
@@ -204,6 +207,7 @@ class LiteEthMACCRC32Inserter(LiteEthMACCRCInserter):
     def __init__(self, description):
         LiteEthMACCRCInserter.__init__(self, LiteEthMACCRC32, description)
 
+# MAC CRC Checker ----------------------------------------------------------------------------------
 
 class LiteEthMACCRCChecker(Module):
     """CRC Checker
@@ -226,14 +230,14 @@ class LiteEthMACCRCChecker(Module):
         Pulses every time a CRC error is detected.
     """
     def __init__(self, crc_class, description):
-        self.sink = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         self.error = Signal()
 
         # # #
 
-        dw = len(sink.data)
+        dw  = len(sink.data)
         crc = crc_class(dw)
         self.submodules += crc
         ratio = crc.width//dw
@@ -244,8 +248,8 @@ class LiteEthMACCRCChecker(Module):
         fsm = FSM(reset_state="RESET")
         self.submodules += fsm
 
-        fifo_in = Signal()
-        fifo_out = Signal()
+        fifo_in   = Signal()
+        fifo_out  = Signal()
         fifo_full = Signal()
 
         self.comb += [

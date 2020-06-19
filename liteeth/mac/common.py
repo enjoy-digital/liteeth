@@ -1,4 +1,4 @@
-# This file is Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
+# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # License: BSD
 
 from liteeth.common import *
@@ -26,12 +26,12 @@ class LiteEthMACPacketizer(Packetizer):
 class LiteEthMACMasterPort:
     def __init__(self, dw):
         self.source = stream.Endpoint(eth_mac_description(dw))
-        self.sink = stream.Endpoint(eth_mac_description(dw))
+        self.sink   = stream.Endpoint(eth_mac_description(dw))
 
 
 class LiteEthMACSlavePort:
     def __init__(self, dw):
-        self.sink = stream.Endpoint(eth_mac_description(dw))
+        self.sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = stream.Endpoint(eth_mac_description(dw))
 
 
