@@ -14,13 +14,6 @@ from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.packet import Header, HeaderField
 
 
-class Port:
-    def connect(self, port):
-        r = [self.source.connect(port.sink),
-             port.source.connect(self.sink)]
-        return r
-
-
 eth_mtu = 1530
 eth_min_len = 46
 eth_interpacket_gap = 12

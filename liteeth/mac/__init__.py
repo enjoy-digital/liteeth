@@ -41,7 +41,8 @@ class LiteEthMAC(Module, AutoCSR):
                 self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, endianness, hw_mac)
             else:
                 assert dw == 32
-                self.comb += Port.connect(self.interface, self.core)
+                self.comb += self.interface.source.connect(self.core.sink)
+                self.comb += self.core.source.connect(self.interface.sink)
 
     def get_csrs(self):
         return self.csrs

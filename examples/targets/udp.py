@@ -26,7 +26,8 @@ class UDPSoC(BaseSoC):
             self.submodules += buf
         else:
             setattr(self.submodules, name, buf)
-        self.comb += Port.connect(port, buf)
+        self.comb += port.source.connect(buf.sink)
+        self.comb += buf.source.connect(port.sink)
 
 # UDPSoCDevel --------------------------------------------------------------------------------------
 
