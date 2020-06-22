@@ -51,13 +51,6 @@ class LiteEthMAC(Module, AutoCSR):
 
 class LiteEthMACCoreCrossbar(Module):
     def __init__(self, core, crossbar, interface, dw, endianness, hw_mac=None):
-        wishbone_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
-        wishbone_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
-        crossbar_rx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
-        crossbar_tx_fifo = stream.SyncFIFO(eth_phy_description(dw), depth=2048, buffered=True)
-
-        self.submodules += wishbone_rx_fifo, wishbone_tx_fifo, crossbar_rx_fifo, crossbar_tx_fifo
-
         rx_ready = Signal()
         rx_valid = Signal()
 
@@ -93,21 +86,17 @@ class LiteEthMACCoreCrossbar(Module):
 
         self.comb += [
             # CPU output path
-            # interface -> tx_pipe -> tx_fifo
+            # interface -> tx_pipe
             interface.source.connect(self.tx_pipe.sink),
-            self.tx_pipe.source.connect(wishbone_tx_fifo.sink),
             # CPU input path
-            # rx_fifo -> rx_pipe -> interface
-            wishbone_rx_fifo.source.connect(self.rx_pipe.sink),
+            # rx_pipe -> interface
             self.rx_pipe.source.connect(interface.sink),
             # HW input path
-            # rx_fifo -> depacketizer -> crossbar
-            crossbar_rx_fifo.source.connect(self.depacketizer.sink),
+            # depacketizer -> crossbar
             self.depacketizer.source.connect(crossbar.master.sink),
             # HW output path
             # crossbar -> packetizer -> tx_fifo
             crossbar.master.source.connect(self.packetizer.sink),
-            self.packetizer.source.connect(crossbar_tx_fifo.sink),
         ]
 
         # MAC filtering
@@ -124,9 +113,9 @@ class LiteEthMACCoreCrossbar(Module):
             self.comb += [
                 core.source.connect(depacketizer.sink),
                 hw_fifo.source.connect(hw_packetizer.sink),
-                hw_packetizer.source.connect(crossbar_rx_fifo.sink),
+                hw_packetizer.source.connect(self.depacketizer.sink),
                 cpu_fifo.source.connect(cpu_packetizer.sink),
-                cpu_packetizer.source.connect(wishbone_rx_fifo.sink),
+                cpu_packetizer.source.connect(self.rx_pipe.sink),
             ]
 
             # RX packetizer broadcast
@@ -144,37 +133,37 @@ class LiteEthMACCoreCrossbar(Module):
         else:
             # RX broadcast
             self.comb += [
-                rx_ready.eq(wishbone_rx_fifo.sink.ready & crossbar_rx_fifo.sink.ready),
+                rx_ready.eq(self.rx_pipe.sink.ready & self.depacketizer.sink.ready),
                 rx_valid.eq(rx_ready & core.source.valid),
-                core.source.connect(wishbone_rx_fifo.sink, omit={"ready", "valid"}),
-                core.source.connect(crossbar_rx_fifo.sink, omit={"ready", "valid"}),
+                core.source.connect(self.rx_pipe.sink, omit={"ready", "valid"}),
+                core.source.connect(self.depacketizer.sink, omit={"ready", "valid"}),
                 core.source.ready.eq(rx_ready),
-                wishbone_rx_fifo.sink.valid.eq(rx_valid),
-                crossbar_rx_fifo.sink.valid.eq(rx_valid),
+                self.rx_pipe.sink.valid.eq(rx_valid),
+                self.depacketizer.sink.valid.eq(rx_valid),
             ]
 
         # TX arbiter
         self.submodules.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(wishbone_tx_fifo.source.valid,
-                wishbone_tx_fifo.source.connect(core.sink),
+            If(self.tx_pipe.source.valid,
+                self.tx_pipe.source.connect(core.sink),
                 NextState("WISHBONE")
             ).Else(
-                If(crossbar_tx_fifo.source.valid,
-                    crossbar_tx_fifo.source.connect(core.sink),
+                If(self.packetizer.source.valid,
+                    self.packetizer.source.connect(core.sink),
                     NextState("CROSSBAR")
                 )
             ),
         )
         fsm.act("WISHBONE",
-            wishbone_tx_fifo.source.connect(core.sink),
-            If(wishbone_tx_fifo.source.valid & core.sink.ready & wishbone_tx_fifo.source.last,
+            self.tx_pipe.source.connect(core.sink),
+            If(self.tx_pipe.source.valid & core.sink.ready & self.tx_pipe.source.last,
                 NextState("IDLE")
             ),
         )
         fsm.act("CROSSBAR",
-            crossbar_tx_fifo.source.connect(core.sink),
-            If(crossbar_tx_fifo.source.valid & core.sink.ready & crossbar_tx_fifo.source.last,
+            self.packetizer.source.connect(core.sink),
+            If(self.packetizer.source.valid & core.sink.ready & self.packetizer.source.last,
                 NextState("IDLE")
             ),
         )
