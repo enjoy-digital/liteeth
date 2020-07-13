@@ -3,11 +3,11 @@
 
 from liteeth.common import *
 
-# TTY TX -------------------------------------------------------------------------------------------
+# Steam 2 UDP TX -----------------------------------------------------------------------------------
 
-class LiteEthTTYTX(Module):
+class LiteEthStream2UDPTX(Module):
     def __init__(self, ip_address, udp_port, fifo_depth=None):
-        self.sink   = sink = stream.Endpoint(eth_tty_description(8))
+        self.sink   = sink   = stream.Endpoint(eth_tty_description(8))
         self.source = source = stream.Endpoint(eth_udp_user_description(8))
 
         # # #
@@ -60,11 +60,11 @@ class LiteEthTTYTX(Module):
                 )
             )
 
-# TTY RX -------------------------------------------------------------------------------------------
+# UDP to Stream RX ---------------------------------------------------------------------------------
 
-class LiteEthTTYRX(Module):
+class LiteEthUDP2StreamRX(Module):
     def __init__(self, ip_address, udp_port, fifo_depth=None):
-        self.sink = sink = stream.Endpoint(eth_udp_user_description(8))
+        self.sink   = sink   = stream.Endpoint(eth_udp_user_description(8))
         self.source = source = stream.Endpoint(eth_tty_description(8))
 
         # # #
@@ -89,14 +89,12 @@ class LiteEthTTYRX(Module):
                 fifo.source.connect(source)
             ]
 
-# TTY ----------------------------------------------------------------------------------------------
+# UDP Streamer -------------------------------------------------------------------------------------
 
-class LiteEthTTY(Module):
-    def __init__(self, udp, ip_address, udp_port,
-            rx_fifo_depth=64,
-            tx_fifo_depth=64):
-        self.submodules.tx = tx = LiteEthTTYTX(ip_address, udp_port, tx_fifo_depth)
-        self.submodules.rx = rx = LiteEthTTYRX(ip_address, udp_port, rx_fifo_depth)
+class LiteEthUDPStreamer(Module):
+    def __init__(self, udp, ip_address, udp_port, rx_fifo_depth=64, tx_fifo_depth=64):
+        self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, tx_fifo_depth)
+        self.submodules.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, rx_fifo_depth)
         udp_port = udp.crossbar.get_port(udp_port, dw=8)
         self.comb += [
             tx.source.connect(udp_port.sink),

@@ -7,7 +7,7 @@ import threading
 
 def test(fpga_ip, udp_port, test_message):
     tx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    rx_sock  = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    rx_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     rx_sock.bind(("", udp_port))
     rx_sock.settimeout(0.5)
 
@@ -38,7 +38,7 @@ def test(fpga_ip, udp_port, test_message):
 
 # # #
 
-test_message = "LiteEth virtual TTY Hello world\n"
+test_message = "LiteEth Stream Hello world\n"
 test("192.168.1.50", 10000, test_message)
 
 # # #

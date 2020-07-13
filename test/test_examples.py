@@ -31,6 +31,6 @@ class TestExamples(unittest.TestCase):
         self.example_test("etherbone", "EtherboneSoC")
         self.example_test("etherbone", "EtherboneSoCDevel")
 
-    def test_tty_example(self):
-        self.example_test("tty", "TTYSoC")
-        self.example_test("tty", "TTYSoCDevel")
+    def test_stream_example(self):
+        self.example_test("stream", "StreamSoC")
+        self.example_test("stream", "StreamSoCDevel")
