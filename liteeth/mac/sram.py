@@ -173,13 +173,15 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         ]
 
         # Length computation
-        counter = Signal(lengthbits)
+        read_address = Signal(lengthbits)
+        counter      = Signal(lengthbits)
 
         # FSM
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             NextValue(counter, 0),
             If(fifo.source.valid,
+                read_address.eq(0),
                 NextState("SEND")
             )
         )
@@ -203,11 +205,13 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         fsm.act("SEND",
             source.valid.eq(1),
             source.last.eq(counter >= (fifo.source.length - 4)),
+            read_address.eq(counter),
             If(source.ready,
+                read_address.eq(counter + 4),
                 NextValue(counter, counter + 4),
                 If(source.last,
                     NextState("END")
-                ),
+                )
             )
         )
         fsm.act("END",
@@ -222,13 +226,13 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         ports   = [None]*nslots
         for n in range(nslots):
             mems[n]  = Memory(dw, depth)
-            ports[n] = mems[n].get_port(async_read=True) # FIXME: avoid async_read by latching data.
+            ports[n] = mems[n].get_port()
             self.specials += ports[n]
         self.mems = mems
 
         cases = {}
         for n, port in enumerate(ports):
-            self.comb += ports[n].adr.eq(counter[2:])
+            self.comb += ports[n].adr.eq(read_address[2:])
             cases[n] = [source.data.eq(port.dat_r)]
         self.comb += Case(rd_slot, cases)
 
