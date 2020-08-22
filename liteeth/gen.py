@@ -118,21 +118,6 @@ _io = [
         Subsignal("tx_data", Pins(4))
     ),
 
-    # Wishbone
-    ("wishbone", 0,
-        Subsignal("adr",   Pins(30)),
-        Subsignal("dat_r", Pins(32)),
-        Subsignal("dat_w", Pins(32)),
-        Subsignal("sel",   Pins(4)),
-        Subsignal("cyc",   Pins(1)),
-        Subsignal("stb",   Pins(1)),
-        Subsignal("ack",   Pins(1)),
-        Subsignal("we",    Pins(1)),
-        Subsignal("cti",   Pins(3)),
-        Subsignal("bte",   Pins(2)),
-        Subsignal("err",   Pins(1))
-    ),
-
     # UDP
     ("udp_sink", 0,
         Subsignal("valid",      Pins(1)),
@@ -236,6 +221,7 @@ class MACCore(PHYCore):
         # Wishbone Interface -----------------------------------------------------------------------
         wb_bus = wishbone.Interface()
         self.add_wb_master(wb_bus)
+        platform.add_extension(wb_bus.get_ios("wishbone"))
         self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
 
         # Interrupt Interface ----------------------------------------------------------------------
