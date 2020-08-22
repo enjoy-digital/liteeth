@@ -234,14 +234,9 @@ class MACCore(PHYCore):
         self.add_csr("ethmac")
 
         # Wishbone Interface -----------------------------------------------------------------------
-        class _WishboneBridge(Module):
-            def __init__(self, interface):
-                self.wishbone = interface
-                self.wishbone.data_width = 32
-
-        bridge = _WishboneBridge(self.platform.request("wishbone"))
-        self.submodules += bridge
-        self.add_wb_master(bridge.wishbone)
+        wb_bus = wishbone.Interface()
+        self.add_wb_master(wb_bus)
+        self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
 
         # Interrupt Interface ----------------------------------------------------------------------
         self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
