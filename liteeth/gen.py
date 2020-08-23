@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 
-# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
-# This file is Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
-# This file is Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
-# License: BSD
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
+# Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
+# SPDX-License-Identifier: BSD-2-Clause
 
 """
 LiteEth standalone core generator

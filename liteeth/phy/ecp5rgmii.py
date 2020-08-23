@@ -1,6 +1,9 @@
-# This file is Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
-# This file is Copyright (c) 2020 Shawn Hoffman <godisgovernment@gmail.com>
-# License: BSD
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2020 Shawn Hoffman <godisgovernment@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
 
 # RGMII PHY for ECP5 Lattice FPGA
 

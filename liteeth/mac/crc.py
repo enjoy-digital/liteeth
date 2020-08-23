@@ -1,8 +1,11 @@
-# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
-# This file is Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
-# This file is Copyright (c) 2017 whitequark <whitequark@whitequark.org>
-# This file is Copyright (c) 2018 Felix Held <felix-github@felixheld.de>
-# License: BSD
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
+# Copyright (c) 2017 whitequark <whitequark@whitequark.org>
+# Copyright (c) 2018 Felix Held <felix-github@felixheld.de>
+# SPDX-License-Identifier: BSD-2-Clause
 
 from functools import reduce
 from operator import xor

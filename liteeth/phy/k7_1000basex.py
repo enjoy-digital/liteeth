@@ -1,5 +1,8 @@
-# This file is Copyright (c) 2018-2020 Florent Kermarrec <florent@enjoy-digital.fr>
-# License: BSD
+#
+# This file is part of MiSoC and has been adapted/modified for LiteEth.
+#
+# Copyright (c) 2018-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer

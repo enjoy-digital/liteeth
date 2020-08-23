@@ -1,7 +1,10 @@
-# This file is Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
-# This file is Copyright (c) 2015-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
-# This file is Copyright (c) 2018 whitequark <whitequark@whitequark.org>
-# License: BSD
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
+# Copyright (c) 2018 whitequark <whitequark@whitequark.org>
+# SPDX-License-Identifier: BSD-2-Clause
 
 import math
 

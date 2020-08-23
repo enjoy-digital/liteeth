@@ -1,5 +1,8 @@
-# This file is Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
-# License: BSD
+#
+# This file is part of MiSoC and has been adapted/modified for LiteEth.
+#
+# Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
+# SPDX-License-Identifier: BSD-2-Clause
 
 from math import ceil
 
