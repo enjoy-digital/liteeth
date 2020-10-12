@@ -6,7 +6,7 @@
 
 import socket
 import time
-from litex.soc.tools.remote.etherbone import *
+from litex.tools.remote.etherbone import *
 
 SRAM_BASE = 0x01000000
 
