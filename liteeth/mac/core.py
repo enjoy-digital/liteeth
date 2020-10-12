@@ -12,6 +12,8 @@ from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
 
+from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SINK
+
 # MAC Core -----------------------------------------------------------------------------------------
 
 class LiteEthMACCore(Module, AutoCSR):
@@ -44,8 +46,8 @@ class LiteEthMACCore(Module, AutoCSR):
             self.submodules += ClockDomainsRenamer("eth_rx")(preamble_checker)
 
             # CRC insert/check
-            crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(phy.dw))
-            crc32_checker  = crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw))
+            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(phy.dw)))
+            crc32_checker  = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw)))
             self.submodules += ClockDomainsRenamer("eth_tx")(crc32_inserter)
             self.submodules += ClockDomainsRenamer("eth_rx")(crc32_checker)
 
