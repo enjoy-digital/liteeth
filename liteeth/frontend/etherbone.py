@@ -293,8 +293,6 @@ class LiteEthEtherboneRecordSender(Module):
         self.submodules += fifo
         self.comb += sink.connect(fifo.sink)
 
-        data_sel = Signal()
-
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             fifo.source.ready.eq(1),
@@ -303,32 +301,26 @@ class LiteEthEtherboneRecordSender(Module):
                 NextState("SEND_BASE_ADDRESS")
             )
         )
-        self.sync += [
+        self.comb += [
             source.byte_enable.eq(fifo.source.be),
             If(fifo.source.we,
                 source.wcount.eq(fifo.source.count)
             ).Else(
                 source.rcount.eq(fifo.source.count)
-            ),
-            If(data_sel,
-                source.data.eq(fifo.source.data)
-            ).Else(
-                source.data.eq(fifo.source.base_addr)
             )
         ]
-
         fsm.act("SEND_BASE_ADDRESS",
             source.valid.eq(1),
             source.last.eq(0),
+            source.data.eq(fifo.source.base_addr),
             If(source.ready,
-                data_sel.eq(1),
                 NextState("SEND_DATA")
             )
         )
         fsm.act("SEND_DATA",
             source.valid.eq(1),
             source.last.eq(fifo.source.last),
-            data_sel.eq(1),
+            source.data.eq(fifo.source.data),
             If(source.valid & source.ready,
                 fifo.source.ready.eq(1),
                 If(source.last,
