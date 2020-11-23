@@ -28,7 +28,10 @@ class BenchSoC(SoCCore):
         platform = arty.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
-        SoCMini.__init__(self, platform, clk_freq=sys_clk_freq, uart_name="bridge")
+        SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,
+            ident          = "LiteEth bench on Arty",
+            ident_version  = True
+        )
 
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
@@ -40,6 +43,9 @@ class BenchSoC(SoCCore):
             with_hw_init_reset = False)
         self.add_csr("ethphy")
         self.add_etherbone(phy=self.ethphy)
+
+        # SRAM -------------------------------------------------------------------------------------
+        self.add_ram("sram", 0x20000000, 0x1000)
 
         # Leds -------------------------------------------------------------------------------------
         from litex.soc.cores.led import LedChaser
