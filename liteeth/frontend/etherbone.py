@@ -323,7 +323,7 @@ class LiteEthEtherboneRecordSender(Module):
 
 
 class LiteEthEtherboneRecord(Module):
-    def __init__(self, endianness="big"):
+    def __init__(self, endianness="big", buffer_depth=4):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
@@ -331,7 +331,7 @@ class LiteEthEtherboneRecord(Module):
 
         # Receive record, decode it and generate mmap stream
         self.submodules.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
-        self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver()
+        self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver(buffer_depth)
         self.comb += [
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
@@ -352,7 +352,7 @@ class LiteEthEtherboneRecord(Module):
         ]
 
         # Receive MMAP stream, encode it and send records
-        self.submodules.sender     = sender     = LiteEthEtherboneRecordSender()
+        self.submodules.sender     = sender     = LiteEthEtherboneRecordSender(buffer_depth)
         self.submodules.packetizer = packetizer = LiteEthEtherboneRecordPacketizer()
         self.comb += [
             sender.source.connect(packetizer.sink),
@@ -495,13 +495,13 @@ class LiteEthEtherboneWishboneSlave(Module):
 # Etherbone ----------------------------------------------------------------------------------------
 
 class LiteEthEtherbone(Module):
-    def __init__(self, udp, udp_port, mode="master", cd="sys"):
+    def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
         # Encode/encode etherbone packets
         self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
 
         # Packets can be probe (etherbone discovering) or records with writes and reads
         self.submodules.probe  = probe = LiteEthEtherboneProbe()
-        self.submodules.record = record = LiteEthEtherboneRecord()
+        self.submodules.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth)
 
         # Arbitrate/dispatch probe/records packets
         dispatcher = Dispatcher(packet.source, [probe.sink, record.sink])
