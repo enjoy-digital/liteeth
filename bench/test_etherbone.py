@@ -14,6 +14,9 @@ import argparse
 
 from litex import RemoteClient
 
+KiB = 1024
+MiB = 1024*KiB
+
 # Identifier Test ----------------------------------------------------------------------------------
 
 def ident_test(port):
@@ -95,6 +98,32 @@ def sram_test(port):
 
     wb.close()
 
+# Speed Test ---------------------------------------------------------------------------------------
+
+def speed_test(port):
+    wb = RemoteClient(port=port)
+    wb.open()
+
+    test_size = 16*KiB
+
+    print("Testing write speed... ", end="")
+    start = time.time()
+    for i in range(test_size//4):
+        wb.write(wb.mems.sram.base + i%0x100, i)
+    end = time.time()
+    duration = (end - start)
+    print("{:3.2f} KiB/s".format(test_size/(duration*KiB)))
+
+    print("Testing read speed... ", end="")
+    start = time.time()
+    for i in range(test_size//4):
+        wb.read(wb.mems.sram.base + i%0x100)
+    end = time.time()
+    duration = (end - start)
+    print("{:3.2f} KiB/s".format(test_size/(duration*KiB)))
+
+    wb.close()
+
 # Run ----------------------------------------------------------------------------------------------
 
 def main():
@@ -103,6 +132,7 @@ def main():
     parser.add_argument("--ident",  action="store_true", help="Read FPGA identifier")
     parser.add_argument("--access", action="store_true", help="Test single Write/Read access over Etherbone")
     parser.add_argument("--sram",   action="store_true", help="Test SRAM access over Etherbone")
+    parser.add_argument("--speed",  action="store_true", help="Test speed over Etherbone")
     args = parser.parse_args()
 
     port = int(args.port, 0)
@@ -115,6 +145,9 @@ def main():
 
     if args.sram:
         sram_test(port=port)
+
+    if args.speed:
+        speed_test(port=port)
 
 if __name__ == "__main__":
     main()
