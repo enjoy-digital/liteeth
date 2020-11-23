@@ -158,11 +158,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
         # # #
 
-        self.clock_domains.cd_eth_rx         = ClockDomain()
-        self.clock_domains.cd_eth_tx         = ClockDomain()
-        self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
-
         # RX
+        self.clock_domains.cd_eth_rx = ClockDomain()
         eth_rx_clk_ibuf = Signal()
         self.specials += [
             Instance("IBUF",
@@ -176,6 +173,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         ]
 
         # TX
+        self.clock_domains.cd_eth_tx         = ClockDomain()
+        self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
         from litex.soc.cores.clock import USPLL

@@ -140,15 +140,13 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
         # # #
 
+        # RX Clock
         self.clock_domains.cd_eth_rx = ClockDomain()
-        self.clock_domains.cd_eth_tx = ClockDomain()
-
-        self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
-
-        # RX
         self.comb += self.cd_eth_rx.clk.eq(clock_pads.rx)
 
-        # TX
+        # TX Clock
+        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
         tx_delay_taps = int(tx_delay/25e-12) # 25ps per tap
         assert tx_delay_taps < 128
 

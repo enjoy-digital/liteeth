@@ -191,12 +191,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
 
         # # #
 
+        # RX clock
         self.clock_domains.cd_eth_rx = ClockDomain()
-        self.clock_domains.cd_eth_tx = ClockDomain()
-
-        self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
-
-        # RX
         eth_rx_clk_ibuf = Signal()
         self.specials += [
             Instance("IBUF",
@@ -209,7 +205,9 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             ),
         ]
 
-        # TX
+        # TX clock
+        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
         tx_delay_taps = int(tx_delay/50e-12) # 50ps per tap
         assert tx_delay_taps < 256
 

@@ -73,19 +73,21 @@ class LiteEthPHYMIICRG(Module, AutoCSR):
         if hasattr(clock_pads, "phy"):
             self.sync.base50 += clock_pads.phy.eq(~clock_pads.phy)
 
+        # RX/TX clocks
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
         self.comb += self.cd_eth_rx.clk.eq(clock_pads.rx)
         self.comb += self.cd_eth_tx.clk.eq(clock_pads.tx)
 
-        reset = Signal()
+        # Reset
+        self.reset = reset = Signal()
         if with_hw_init_reset:
             self.submodules.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
-
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),

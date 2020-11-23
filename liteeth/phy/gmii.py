@@ -55,14 +55,14 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
 
-        # RX: GMII, MII Use PHY clock_pads.rx as eth_rx_clk.
+        # RX clock: GMII, MII Use PHY clock_pads.rx as eth_rx_clk.
         self.specials += Instance("BUFG",
             i_I = clock_pads.rx,
             o_O = ClockSignal("eth_rx"),
         )
 
-        # TX: GMII: Drive clock_pads.gtx, clock_pads.tx unused.
-        #     MII : Use PHY clock_pads.tx as eth_tx_clk, do not drive clock_pads.gtx.
+        # TX clock: GMII: Drive clock_pads.gtx, clock_pads.tx unused.
+        #           MII : Use PHY clock_pads.tx as eth_tx_clk, do not drive clock_pads.gtx.
         self.specials += DDROutput(1, mii_mode, clock_pads.gtx, ClockSignal("eth_tx"))
         eth_tx_clk = Signal()
         self.comb += [
@@ -77,14 +77,15 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
             o_O = ClockSignal("eth_tx"),
         )
 
-        reset = Signal()
+        # Reset
+        self.reset = reset = Signal()
         if with_hw_init_reset:
             self.submodules.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
-
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),

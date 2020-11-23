@@ -98,23 +98,24 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
 
         # # #
 
+        # RX/TX clocks
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
         self.comb += [
             self.cd_eth_rx.clk.eq(ClockSignal("eth")),
             self.cd_eth_tx.clk.eq(ClockSignal("eth"))
         ]
-
         self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
 
-        reset = Signal()
+        # Reset
+        self.reset = reset = Signal()
         if with_hw_init_reset:
             self.submodules.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
-
-        self.comb += pads.rst_n.eq(~reset)
+        if hasattr(pads, "rst_n"):
+            self.comb += pads.rst_n.eq(~reset)
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
