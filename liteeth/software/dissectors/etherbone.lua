@@ -2,6 +2,8 @@
 -- Copyright 2013 OHWR.org
 -- Copyright 2015 EnjoyDigital (global clean up)
 
+USER_DIR = Dir.personal_config_path()..package.config:sub(1,1)
+package.prepend_path(USER_DIR)
 local bit = require("bit")
 
 local VALS_BOOL = {[0] = "False", [1] = "True"}
@@ -51,7 +53,7 @@ proto_eb = Proto("eb", "Etherbone")
 -- declare fields
 local eb = proto_eb.fields
 eb.hdr = ProtoField.uint32("eb.hdr", "Header", base.HEX)
-eb.rec = ProtoField.bytes("eb.rec",  "Record	", base.HEX)
+eb.rec = ProtoField.bytes("eb.rec",  "Record	", base.NONE)
 
 eb.hdr_magic 		= ProtoField.uint16("eb.hdr.magic",		"Magic         ", base.HEX, nil, 0xFFFF)
 eb.hdr_ver 			= ProtoField.uint16("eb.hdr.ver",		"Version       ", base.DEC, nil, 0xF000)
@@ -62,8 +64,8 @@ eb.hdr_adrs 		= ProtoField.uint16("eb.hdr.adrw",		"Address Width ", base.DEC, VA
 eb.hdr_ports 		= ProtoField.uint16("eb.hdr.portw",		"Port    Width ", base.DEC, VALS_SIZE , 0x000F)
 
 eb.rec_hdr			= ProtoField.uint32("eb.rec.hdr",		"Header ", base.HEX)
-eb.rec_writes		= ProtoField.bytes("eb.rec.writes",		"Writes ", base.HEX)
-eb.rec_reads		= ProtoField.bytes("eb.rec.reads",		"Reads  ", base.HEX)
+eb.rec_writes		= ProtoField.bytes("eb.rec.writes",		"Writes ", base.NONE)
+eb.rec_reads		= ProtoField.bytes("eb.rec.reads",		"Reads  ", base.NONE)
 
 eb.rec_hdr_flags	= ProtoField.uint8("eb.rec.hdr.flags",		"Flags  ", base.HEX)
 eb.rec_hdr_select 	= ProtoField.uint8("eb.rec.hdr.select",		"Select ", base.HEX)
