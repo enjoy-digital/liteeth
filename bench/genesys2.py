@@ -42,7 +42,7 @@ class BenchSoC(SoCCore):
             pads       = self.platform.request("eth"),
             with_hw_init_reset = False)
         self.add_csr("ethphy")
-        self.add_etherbone(phy=self.ethphy)
+        self.add_etherbone(phy=self.ethphy, buffer_depth=256)
 
         # SRAM -------------------------------------------------------------------------------------
         self.add_ram("sram", 0x20000000, 0x1000)
