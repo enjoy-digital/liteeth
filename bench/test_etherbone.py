@@ -104,20 +104,21 @@ def speed_test(port):
     wb = RemoteClient(port=port)
     wb.open()
 
-    test_size = 16*KiB
+    test_size  = 16*KiB
+    burst_size = 255 # FIXME: Use 256, fix Etherbone encoding.
 
     print("Testing write speed... ", end="")
     start = time.time()
-    for i in range(test_size//4):
-        wb.write(wb.mems.sram.base + i%0x100, i)
+    for i in range(test_size//(4*burst_size)):
+        wb.write(wb.mems.sram.base, [j for j in range(burst_size)])
     end = time.time()
     duration = (end - start)
     print("{:3.2f} KiB/s".format(test_size/(duration*KiB)))
 
     print("Testing read speed... ", end="")
     start = time.time()
-    for i in range(test_size//4):
-        wb.read(wb.mems.sram.base + i%0x100)
+    for i in range(test_size//(4*burst_size)):
+        wb.read(wb.mems.sram.base, length=burst_size)
     end = time.time()
     duration = (end - start)
     print("{:3.2f} KiB/s".format(test_size/(duration*KiB)))
