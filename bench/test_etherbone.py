@@ -105,7 +105,7 @@ def speed_test(port):
     wb.open()
 
     test_size  = 16*KiB
-    burst_size = 255 # FIXME: Use 256, fix Etherbone encoding.
+    burst_size = 128
 
     print("Testing write speed... ", end="")
     start = time.time()
