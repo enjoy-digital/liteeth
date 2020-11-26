@@ -113,7 +113,7 @@ def speed_test(comm, port):
     wb.open()
 
     test_size  = 16*KiB
-    burst_size = 200
+    burst_size = 255
 
     print("Testing write speed... ", end="")
     start = time.time()
