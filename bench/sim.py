@@ -77,7 +77,7 @@ def main():
 
     sim_config = SimConfig()
     sim_config.add_clocker("sys_clk", freq_hz=1e6)
-    sim_config.add_module("ethernet", "eth", args={"interface": "tap0", "ip": "192.168.1.50"})
+    sim_config.add_module("ethernet", "eth", args={"interface": "tap0", "ip": "192.168.1.100"})
 
     soc     = BenchSoC()
     builder = Builder(soc, csr_csv="csr.csv")
