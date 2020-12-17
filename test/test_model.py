@@ -166,6 +166,7 @@ class TestModel(unittest.TestCase):
         #sock.sendto(bytes(packet), ("192.168.1.1", 20000))
 
         packet = EtherbonePacket(packet)
+        packet.encoded = True
         packet.decode()
         print(packet)
 
