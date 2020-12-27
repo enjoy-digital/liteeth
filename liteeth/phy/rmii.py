@@ -101,9 +101,16 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
         # RX/TX clocks
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
-        self.comb += self.cd_eth_rx.clk.eq(ClockSignal(refclk_cd))
-        self.comb += self.cd_eth_tx.clk.eq(ClockSignal(refclk_cd))
-        if clock_pads is not None:
+
+        if clock_pads is not None and hasattr(clock_pads, 'ref_clk_in'):
+            eth_clk = clock_pads.ref_clk_in
+        else:
+            eth_clk = ClockSignal(refclk_cd)
+
+        self.comb += self.cd_eth_rx.clk.eq(eth_clk)
+        self.comb += self.cd_eth_tx.clk.eq(eth_clk)
+
+        if clock_pads is not None and not hasattr(clock_pads, 'ref_clk_in'):
             self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
 
         # Reset
