@@ -99,12 +99,22 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
         # # #
 
         # RX/TX clocks
+
         self.clock_domains.cd_eth_rx = ClockDomain()
         self.clock_domains.cd_eth_tx = ClockDomain()
-        self.comb += self.cd_eth_rx.clk.eq(ClockSignal(refclk_cd))
-        self.comb += self.cd_eth_tx.clk.eq(ClockSignal(refclk_cd))
-        if clock_pads is not None:
-            self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
+
+        # When no refclk_cd, use clock_pads.ref_clk as RMII reference clock.
+        if refclk_cd is None:
+            self.comb += self.cd_eth_rx.clk.eq(clock_pads.ref_clk)
+            self.comb += self.cd_eth_tx.clk.eq(clock_pads.ref_clk)
+
+        # Else use refclk_cd as RMII reference clock (provided by user design).
+        else:
+            self.comb += self.cd_eth_rx.clk.eq(ClockSignal(refclk_cd))
+            self.comb += self.cd_eth_tx.clk.eq(ClockSignal(refclk_cd))
+            # Drive clock_pads if provided.
+            if clock_pads is not None:
+                self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
 
         # Reset
         self.reset = reset = Signal()
