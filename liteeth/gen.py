@@ -200,7 +200,7 @@ class PHYCore(SoCMini):
                 pads               = platform.request("rgmii_eth"),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
         else:
-            raise ValueError("Unsupported PHY");
+            raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
         self.add_csr("ethphy")
 
