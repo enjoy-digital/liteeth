@@ -18,7 +18,8 @@ class LiteEthMAC(Module, AutoCSR):
         with_preamble_crc = True,
         nrxslots          = 2,
         ntxslots          = 2,
-        hw_mac            = None):
+        hw_mac            = None,
+        timestamp_source  = None):
         assert interface in ["crossbar", "wishbone", "hybrid"]
         self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
         self.csrs = []
@@ -37,7 +38,13 @@ class LiteEthMAC(Module, AutoCSR):
             self.rx_slots  = CSRConstant(nrxslots)
             self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
-            self.submodules.interface = FullMemoryWE()(LiteEthMACWishboneInterface(32, nrxslots, ntxslots, endianness))
+            self.submodules.interface = FullMemoryWE()(LiteEthMACWishboneInterface(
+                dw = 32,
+                nrxslots = nrxslots,
+                ntxslots = ntxslots,
+                endianness = endianness,
+                timestamp_source = timestamp_source,
+            ))
             self.ev, self.bus = self.interface.sram.ev, self.interface.bus
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
             if interface == "hybrid":

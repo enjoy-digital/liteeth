@@ -13,7 +13,7 @@ from litex.soc.interconnect import wishbone
 # MAC Wishbone Interface ---------------------------------------------------------------------------
 
 class LiteEthMACWishboneInterface(Module, AutoCSR):
-    def __init__(self, dw, nrxslots=2, ntxslots=2, endianness="big"):
+    def __init__(self, dw, nrxslots=2, ntxslots=2, endianness="big", timestamp_source=None):
         self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
         self.bus    = wishbone.Interface()
@@ -22,7 +22,7 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
 
         # storage in SRAM
         sram_depth = eth_mtu//(dw//8)
-        self.submodules.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness)
+        self.submodules.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness, timestamp_source)
         self.comb += [
             self.sink.connect(self.sram.sink),
             self.sram.source.connect(self.source)
