@@ -179,27 +179,40 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         lengthbits      = bits_for(depth*4)  # length in bytes
         self.lengthbits = lengthbits
 
+        # MAC Reader command channel
         self._start  = CSR()
         self._ready  = CSRStatus()
         self._level  = CSRStatus(log2_int(nslots) + 1)
         self._slot   = CSRStorage(slotbits,   reset_less=True)
         self._length = CSRStorage(lengthbits, reset_less=True)
 
+        # MAC Reader return channel
+        self._res_slot = CSRStatus(slotbits)
         self.submodules.ev = EventManager()
-        self.ev.done       = EventSourcePulse()
+        self.ev.done       = EventSourceLevel()
         self.ev.finalize()
 
         # # #
 
         # Command FIFO
-        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
-        self.submodules += fifo
+        cmd_fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
+        self.submodules += cmd_fifo
         self.comb += [
-            fifo.sink.valid.eq(self._start.re),
-            fifo.sink.slot.eq(self._slot.storage),
-            fifo.sink.length.eq(self._length.storage),
-            self._ready.status.eq(fifo.sink.ready),
-            self._level.status.eq(fifo.level)
+            cmd_fifo.sink.valid.eq(self._start.re),
+            cmd_fifo.sink.slot.eq(self._slot.storage),
+            cmd_fifo.sink.length.eq(self._length.storage),
+            self._ready.status.eq(cmd_fifo.sink.ready),
+            self._level.status.eq(cmd_fifo.level)
+        ]
+
+        # Result FIFO (return channel)
+        res_fifo = stream.SyncFIFO([("slot", slotbits)], nslots)
+
+        self.submodules += res_fifo
+        self.comb += [
+            res_fifo.source.ready.eq(self.ev.done.clear),
+            self.ev.done.trigger.eq(res_fifo.source.valid),
+            self._res_slot.status.eq(res_fifo.source.slot),
         ]
 
         # Length computation
@@ -210,12 +223,12 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             NextValue(counter, 0),
-            If(fifo.source.valid,
+            If(cmd_fifo.source.valid,
                 read_address.eq(0),
                 NextState("SEND")
             )
         )
-        length_lsb = fifo.source.length[0:2]
+        length_lsb = cmd_fifo.source.length[0:2]
         if endianness == "big":
             self.comb += If(source.last,
                 Case(length_lsb, {
@@ -234,7 +247,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
                 }))
         fsm.act("SEND",
             source.valid.eq(1),
-            source.last.eq(counter >= (fifo.source.length - 4)),
+            source.last.eq(counter >= (cmd_fifo.source.length - 4)),
             read_address.eq(counter),
             If(source.ready,
                 read_address.eq(counter + 4),
@@ -245,13 +258,17 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             )
         )
         fsm.act("END",
-            fifo.source.ready.eq(1),
-            self.ev.done.trigger.eq(1),
+            res_fifo.sink.valid.eq(1),
+            cmd_fifo.source.ready.eq(1),
             NextState("IDLE")
         )
 
+        self.comb += [
+            res_fifo.sink.slot.eq(cmd_fifo.source.slot)
+        ]
+
         # Memory
-        rd_slot = fifo.source.slot
+        rd_slot = cmd_fifo.source.slot
         mems    = [None]*nslots
         ports   = [None]*nslots
         for n in range(nslots):
