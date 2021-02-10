@@ -16,15 +16,18 @@ from litex.soc.interconnect.csr import *
 
 from litex.soc.interconnect.packet import Header, HeaderField
 
+# Ethernet Constants -------------------------------------------------------------------------------
 
-eth_mtu = 1530
-eth_min_len = 46
+eth_mtu             = 1530
+eth_min_len         = 46
 eth_interpacket_gap = 12
-eth_preamble = 0xd555555555555555
-buffer_depth = 2**log2_int(eth_mtu, need_pow2=False)
+eth_preamble        = 0xd555555555555555
+buffer_depth        = 2**log2_int(eth_mtu, need_pow2=False)
 
-ethernet_type_ip = 0x800
-ethernet_type_arp = 0x806
+ethernet_type_ip    = 0x800
+ethernet_type_arp   = 0x806
+
+# MAC Constants/Header -----------------------------------------------------------------------------
 
 mac_header_length = 14
 mac_header_fields = {
@@ -32,16 +35,16 @@ mac_header_fields = {
     "sender_mac":    HeaderField(6,  0, 48),
     "ethernet_type": HeaderField(12, 0, 16)
 }
-mac_header = Header(mac_header_fields,
-                    mac_header_length,
-                    swap_field_bytes=True)
+mac_header = Header(mac_header_fields, mac_header_length, swap_field_bytes=True)
+
+# ARP Constants/Header -----------------------------------------------------------------------------
 
 arp_hwtype_ethernet = 0x0001
-arp_proto_ip = 0x0800
-arp_opcode_request = 0x0001
-arp_opcode_reply = 0x0002
+arp_proto_ip        = 0x0800
+arp_opcode_request  = 0x0001
+arp_opcode_reply    = 0x0002
 
-arp_header_length = 28
+arp_header_length   = 28
 arp_header_fields = {
     "hwtype":     HeaderField(0,  0, 16),
     "proto":      HeaderField(2,  0, 16),
@@ -53,12 +56,14 @@ arp_header_fields = {
     "target_mac": HeaderField(18, 0, 48),
     "target_ip":  HeaderField(24, 0, 32)
 }
-arp_header = Header(arp_header_fields,
-                    arp_header_length,
-                    swap_field_bytes=True)
+arp_header = Header(arp_header_fields, arp_header_length, swap_field_bytes=True)
+
+# Multicast Constants ------------------------------------------------------------------------------
 
 mcast_oui     = C(0x01005e, 24)
 mcast_ip_mask = 224 >> 4
+
+# IPV4 Constants/Header ----------------------------------------------------------------------------
 
 ipv4_header_length = 20
 ipv4_header_fields = {
@@ -72,12 +77,11 @@ ipv4_header_fields = {
     "sender_ip":      HeaderField(12, 0, 32),
     "target_ip":      HeaderField(16, 0, 32)
 }
-ipv4_header = Header(ipv4_header_fields,
-                     ipv4_header_length,
-                     swap_field_bytes=True)
+ipv4_header = Header(ipv4_header_fields, ipv4_header_length, swap_field_bytes=True)
 
-icmp_protocol = 0x01
+# ICMP Constants/Header ----------------------------------------------------------------------------
 
+icmp_protocol      = 0x01
 icmp_header_length = 8
 icmp_header_fields = {
     "msgtype":  HeaderField(0, 0,  8),
@@ -85,12 +89,10 @@ icmp_header_fields = {
     "checksum": HeaderField(2, 0, 16),
     "quench":   HeaderField(4, 0, 32)
 }
-icmp_header  = Header(icmp_header_fields,
-                      icmp_header_length,
-                      swap_field_bytes=True)
+icmp_header  = Header(icmp_header_fields, icmp_header_length, swap_field_bytes=True)
 
-udp_protocol = 0x11
-
+# UDP Constants/Header -----------------------------------------------------------------------------
+udp_protocol      = 0x11
 udp_header_length = 8
 udp_header_fields = {
     "src_port": HeaderField(0, 0, 16),
@@ -98,28 +100,23 @@ udp_header_fields = {
     "length":   HeaderField(4, 0, 16),
     "checksum": HeaderField(6, 0, 16)
 }
-udp_header = Header(udp_header_fields,
-                    udp_header_length,
-                    swap_field_bytes=True)
+udp_header = Header(udp_header_fields, udp_header_length, swap_field_bytes=True)
 
+# Etherbone Constants/Header -----------------------------------------------------------------------
 
-etherbone_magic = 0x4e6f
-etherbone_version = 1
+etherbone_magic                = 0x4e6f
+etherbone_version              = 1
 etherbone_packet_header_length = 8
 etherbone_packet_header_fields = {
     "magic":     HeaderField(0, 0, 16),
-
     "version":   HeaderField(2, 4,  4),
     "nr":        HeaderField(2, 2,  1),
     "pr":        HeaderField(2, 1,  1),
     "pf":        HeaderField(2, 0,  1),
-
     "addr_size": HeaderField(3, 4,  4),
     "port_size": HeaderField(3, 0,  4)
 }
-etherbone_packet_header = Header(etherbone_packet_header_fields,
-                                 etherbone_packet_header_length,
-                                 swap_field_bytes=True)
+etherbone_packet_header = Header(etherbone_packet_header_fields, etherbone_packet_header_length, swap_field_bytes=True)
 
 etherbone_record_header_length = 4
 etherbone_record_header_fields = {
@@ -129,18 +126,14 @@ etherbone_record_header_fields = {
     "cyc":         HeaderField(0, 4, 1),
     "wca":         HeaderField(0, 5, 1),
     "wff":         HeaderField(0, 6, 1),
-
     "byte_enable": HeaderField(1, 0, 8),
-
     "wcount":      HeaderField(2, 0, 8),
-
     "rcount":      HeaderField(3, 0, 8)
 }
-etherbone_record_header = Header(etherbone_record_header_fields,
-                                 etherbone_record_header_length,
-                                 swap_field_bytes=True)
+etherbone_record_header = Header(etherbone_record_header_fields, etherbone_record_header_length, swap_field_bytes=True)
 
-# layouts
+# Helpers ------------------------------------------------------------------------------------------
+
 def _remove_from_layout(layout, *args):
     r = []
     for f in layout:
@@ -152,6 +145,16 @@ def _remove_from_layout(layout, *args):
             r.append(f)
     return r
 
+def convert_ip(s):
+    ip = 0
+    for e in s.split("."):
+        ip = ip << 8
+        ip += int(e)
+    return ip
+
+# Stream Layouts -----------------------------------------------------------------------------------
+
+# PHY
 def eth_phy_description(dw):
     payload_layout = [
         ("data",       dw),
@@ -160,6 +163,7 @@ def eth_phy_description(dw):
     ]
     return EndpointDescription(payload_layout)
 
+# MAC
 def eth_mac_description(dw):
     payload_layout = mac_header.get_layout() + [
         ("data",       dw),
@@ -168,6 +172,7 @@ def eth_mac_description(dw):
     ]
     return EndpointDescription(payload_layout)
 
+# ARP
 def eth_arp_description(dw):
     param_layout = arp_header.get_layout()
     payload_layout = [
@@ -185,6 +190,7 @@ arp_table_response_layout = [
     ("mac_address", 48)
 ]
 
+# IPV4
 def eth_ipv4_description(dw):
     param_layout = ipv4_header.get_layout()
     payload_layout = [
@@ -205,13 +211,7 @@ def eth_ipv4_user_description(dw):
     ]
     return EndpointDescription(payload_layout, param_layout)
 
-def convert_ip(s):
-    ip = 0
-    for e in s.split("."):
-        ip = ip << 8
-        ip += int(e)
-    return ip
-
+# ICMP
 def eth_icmp_description(dw):
     param_layout = icmp_header.get_layout()
     payload_layout = [
@@ -231,6 +231,7 @@ def eth_icmp_user_description(dw):
     ]
     return EndpointDescription(payload_layout, param_layout)
 
+# UDP
 def eth_udp_description(dw):
     param_layout = udp_header.get_layout()
     payload_layout = [
@@ -252,6 +253,7 @@ def eth_udp_user_description(dw):
     ]
     return EndpointDescription(payload_layout, param_layout)
 
+# Etherbone
 def eth_etherbone_packet_description(dw):
     param_layout = etherbone_packet_header.get_layout()
     payload_layout = [
@@ -262,11 +264,7 @@ def eth_etherbone_packet_description(dw):
 
 def eth_etherbone_packet_user_description(dw):
     param_layout = etherbone_packet_header.get_layout()
-    param_layout = _remove_from_layout(param_layout,
-                                       "magic",
-                                       "portsize",
-                                       "addrsize",
-                                       "version")
+    param_layout = _remove_from_layout(param_layout, "magic", "portsize", "addrsize", "version")
     param_layout += eth_udp_user_description(dw).param_layout
     payload_layout = [
         ("data",     dw),
@@ -295,6 +293,7 @@ def eth_etherbone_mmap_description(dw):
     ]
     return EndpointDescription(payload_layout, param_layout)
 
+# TTY
 def eth_tty_description(dw):
     payload_layout = [("data", dw)]
     return EndpointDescription(payload_layout)
