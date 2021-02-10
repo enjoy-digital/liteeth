@@ -102,6 +102,7 @@ class LiteEthUDPTX(Module):
         self.comb += [
             packetizer.sink.valid.eq(sink.valid),
             packetizer.sink.last.eq(sink.last),
+            packetizer.sink.last_be.eq(sink.last_be),
             sink.ready.eq(packetizer.sink.ready),
             packetizer.sink.src_port.eq(sink.src_port),
             packetizer.sink.dst_port.eq(sink.dst_port),

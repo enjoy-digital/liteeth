@@ -36,7 +36,9 @@ class LiteEthARPTX(Module):
 
         # # #
 
-        counter = Signal(max=max(arp_header.length, eth_min_len), reset_less=True)
+        packet_length = max(arp_header.length, eth_min_len)
+        packet_words  = packet_length//(dw//8)
+        counter       = Signal(max=packet_words, reset_less=True)
 
         self.submodules.packetizer = packetizer = LiteEthARPPacketizer(dw)
 
@@ -50,7 +52,8 @@ class LiteEthARPTX(Module):
             )
         )
         self.comb += [
-            packetizer.sink.last.eq(counter == max(arp_header.length, eth_min_len)-1),
+            packetizer.sink.last.eq(counter == (packet_words - 1)),
+            packetizer.sink.last_be.eq(1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length%(dw//8)-1)),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
             packetizer.sink.hwsize.eq(6),

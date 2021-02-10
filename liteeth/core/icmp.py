@@ -34,7 +34,8 @@ class LiteEthICMPTX(Module):
             packetizer.sink.code.eq(sink.code),
             packetizer.sink.checksum.eq(sink.checksum),
             packetizer.sink.quench.eq(sink.quench),
-            packetizer.sink.data.eq(sink.data)
+            packetizer.sink.data.eq(sink.data),
+            packetizer.sink.last_be.eq(sink.last_be)
         ]
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -104,7 +105,8 @@ class LiteEthICMPRX(Module):
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length - icmp_header.length),
             source.data.eq(depacketizer.source.data),
-            source.error.eq(depacketizer.source.error)
+            source.error.eq(depacketizer.source.error),
+            source.last_be.eq(depacketizer.source.last_be)
         ]
         fsm.act("PRESENT",
             source.valid.eq(depacketizer.source.valid),

@@ -106,6 +106,7 @@ class LiteEthIPTX(Module):
         self.comb += [
             packetizer.sink.valid.eq(sink.valid & checksum.done),
             packetizer.sink.last.eq(sink.last),
+            packetizer.sink.last_be.eq(sink.last_be),
             sink.ready.eq(packetizer.sink.ready & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
             packetizer.sink.protocol.eq(sink.protocol),
@@ -231,7 +232,8 @@ class LiteEthIPRX(Module):
             source.protocol.eq(depacketizer.source.protocol),
             source.ip_address.eq(depacketizer.source.sender_ip),
             source.data.eq(depacketizer.source.data),
-            source.error.eq(depacketizer.source.error)
+            source.error.eq(depacketizer.source.error),
+            source.last_be.eq(depacketizer.source.last_be)
         ]
         fsm.act("PRESENT",
             source.valid.eq(depacketizer.source.valid),
