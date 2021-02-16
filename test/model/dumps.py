@@ -9,7 +9,7 @@ import re
 # Helpers ------------------------------------------------------------------------------------------
 
 def format_dump(dump):
-    return [int(s, 16) for s in re.split(r'[;,\s\n]\s*', dump) if s is not ""]
+    return [int(s, 16) for s in re.split(r'[;,\s\n]\s*', dump) if s != ""]
 
 
 def verify_packet(packet, infos):
