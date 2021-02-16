@@ -45,7 +45,7 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         # tx
         tx_stream = user_port.sink
-        if cd is not "sys":
+        if cd != "sys":
             tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
             tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
             self.submodules += tx_cdc
@@ -69,7 +69,7 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
             self.submodules += rx_converter
             self.comb += rx_stream.connect(rx_converter.sink)
             rx_stream = rx_converter.source
-        if cd is not "sys":
+        if cd != "sys":
             rx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
             rx_cdc = ClockDomainsRenamer({"write": "sys", "read": cd})(rx_cdc)
             self.submodules += rx_cdc
