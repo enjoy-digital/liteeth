@@ -37,7 +37,9 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
 
         wb_slaves     = []
         decoderoffset = log2_int(sram_depth, need_pow2=False)
-        decoderbits   = log2_int(len(wb_sram_ifs))
+        rx_decoderbits   = log2_int(len(wb_rx_sram_ifs))
+        tx_decoderbits   = log2_int(len(wb_tx_sram_ifs))
+        decoderbits      = max(rx_decoderbits, tx_decoderbits)+1
         for n, wb_sram_if in enumerate(wb_sram_ifs):
             def slave_filter(a, v=n):
                 return a[decoderoffset:decoderoffset+decoderbits] == v
