@@ -32,6 +32,7 @@ class LiteEthPHYRGMIITX(Module):
                 i2  = sink.valid,
                 o   = tx_ctl_oddrx1f),
             Instance("DELAYG",
+                p_DEL_MODE  = "SCLK_ALIGNED",
                 p_DEL_VALUE = 0,
                 i_A         = tx_ctl_oddrx1f,
                 o_Z         = pads.tx_ctl)
@@ -44,6 +45,7 @@ class LiteEthPHYRGMIITX(Module):
                     i2  = sink.data[4+i],
                     o   = tx_data_oddrx1f[i]),
                 Instance("DELAYG",
+                    p_DEL_MODE  = "SCLK_ALIGNED",
                     p_DEL_VALUE = 0,
                     i_A         = tx_data_oddrx1f[i],
                     o_Z         = pads.tx_data[i]
@@ -87,6 +89,7 @@ class LiteEthPHYRGMIIRX(Module, AutoCSR):
 
         self.specials += [
             Instance("DELAYG",
+                p_DEL_MODE  = "SCLK_ALIGNED",
                 p_DEL_VALUE = rx_delay_taps,
                 i_A         = pads.rx_ctl,
                 o_Z         = rx_ctl_delayf),
@@ -101,6 +104,7 @@ class LiteEthPHYRGMIIRX(Module, AutoCSR):
         for i in range(4):
             self.specials += [
                 Instance("DELAYG",
+                    p_DEL_MODE  = "SCLK_ALIGNED",
                     p_DEL_VALUE = rx_delay_taps,
                     i_A         = pads.rx_data[i],
                     o_Z         = rx_data_delayf[i]),
@@ -158,6 +162,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
                 i2  = 0,
                 o   = eth_tx_clk_o),
             Instance("DELAYG",
+                p_DEL_MODE  = "SCLK_ALIGNED",
                 p_DEL_VALUE = tx_delay_taps,
                 i_A         = eth_tx_clk_o,
                 o_Z         = clock_pads.tx)
