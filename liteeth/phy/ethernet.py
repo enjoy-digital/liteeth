@@ -53,8 +53,8 @@ class LiteEthPHYETHERNETTX(Module):
         if hasattr(pads, "tx") and hasattr(pads, "tx_en"): # RS485 half duplex mode
             self.comb += [pads.tx.eq(tx), pads.txe.eq(txe)]
         else: # A true differential output buffer is not necessary at 20Mbps(manchester)
-            self.comb += [pads.td_p.eq(tx & txe), pads.td_n.eq(~tx & txe)]
-
+            self.specials += Tristate(pads.td_p, tx, txe)
+            self.specials += Tristate(pads.td_n, ~tx, txe)
 
         # Normal Link Pulse generation timer
         NLP_PERIOD = int(40e6/1000*16)
@@ -120,36 +120,31 @@ class LiteEthPHYETHERNETRX(Module):
 
         # Single Ended / Differential input
         rx = Signal()
-        if not hasattr(pads, "rx"):
-            self.specials += DifferentialInput(pads.rd_p, pads.rd_n, rx)
-        else:
+        if hasattr(pads, "rx"):
             self.comb += rx.eq(pads.rx)
+        else:
+            self.specials += DifferentialInput(pads.rd_p, pads.rd_n, rx)
 
-        # Manchester input
-        mc_in_data = Signal(3)
+        # Manchester input, start of frame sync
+        mc_in_data = Signal(4)
         mc_cnt = Signal(2)
-        bit_valid = Signal()
-        bit_value = Signal()
+        bit_valid = Signal(reset_less=True)
+        bit_value = Signal(reset_less=True)
+        # Receive timeout / NLP and noise filter
+        timeout_cnt = Signal(3)
+        timeout = Signal(reset_less=True)
         self.comb += [
-            bit_valid.eq((mc_in_data[2] ^ mc_in_data[1]) & (mc_cnt == 0b00)),
-            bit_value.eq(mc_in_data[2]),
+            bit_valid.eq((mc_in_data[-1] ^ mc_in_data[-2]) & (mc_cnt == 0b00) & (~timeout | bit_value)),
+            bit_value.eq(mc_in_data[-2]),
+            timeout.eq(timeout_cnt == 0),
         ]
         self.sync += [
-            mc_in_data.eq(Cat(rx, mc_in_data[0:1])),
+            mc_in_data.eq(Cat(rx, mc_in_data)),
             If(bit_valid,
                 mc_cnt.eq(3),
             ).Elif(mc_cnt,
                 mc_cnt.eq(mc_cnt-1),
             ),
-        ]
-
-        # Receive timeout / NLP and noise filter
-        timeout_cnt = Signal(3)
-        timeout = Signal()
-        self.comb += [
-            timeout.eq(timeout_cnt == 0),
-        ]
-        self.sync += [
             If(bit_valid,
                 timeout_cnt.eq(0b111),
             ).Elif(timeout_cnt,
@@ -157,20 +152,23 @@ class LiteEthPHYETHERNETRX(Module):
             )
         ]
 
-        # bit to byte logic
+        # bit to byte conversion
         bit_cnt = Signal(3)
         byte = Signal(8)
 
         self.sync += [
+            self.source.valid.eq(0),
             If(timeout,
-                bit_cnt.eq(0),
+                bit_cnt.eq(1),
             ).Elif(bit_valid,
                 bit_cnt.eq(bit_cnt+1),
                 byte.eq(Cat(byte[1:], bit_value)),
+                If(bit_cnt == 7,
+                    self.source.valid.eq(1),
+                )
             ),
         ]
         self.comb += [
-            self.source.valid.eq((bit_cnt == 7) & bit_valid),
             self.source.data.eq(byte),
         ]
 
