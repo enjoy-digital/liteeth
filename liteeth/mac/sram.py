@@ -14,15 +14,21 @@ from litex.soc.interconnect.csr_eventmanager import *
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
-    def __init__(self, dw, depth, nslots=2, endianness="big"):
+    def __init__(self, dw, depth, nslots=2, endianness="big", timestamp_source=None):
         self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
         slotbits   = max(log2_int(nslots), 1)
         lengthbits = 32
+        timestampbits = 0 if timestamp_source is None else value_bits_sign(timestamp_source)[0]
 
         self._slot   = CSRStatus(slotbits)
         self._length = CSRStatus(lengthbits)
+
+        # If a timestamp source is passed in, timestamp all incoming
+        # packets and provide the value in a CSR
+        if timestamp_source is not None:
+            self._rx_timestamp = CSRStatus(timestampbits)
 
         self.errors  = CSRStatus(32)
 
@@ -62,17 +68,29 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         ongoing = Signal()
 
         # Status FIFO
-        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
+        fifo_layout = [("slot", slotbits), ("length", lengthbits)]
+        if timestamp_source is not None:
+            fifo_layout += [("rx_timestamp", timestampbits)]
+
+        fifo = stream.SyncFIFO(fifo_layout, nslots)
         self.submodules += fifo
+
+        # If we timestamp incoming packets we're going to need another
+        # signal to hold the timestamp from the start of packet
+        # reception
+        if timestamp_source is not None:
+            rx_start_timestamp = Signal(timestampbits)
 
         # FSM
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(sink.valid,
                 If(fifo.sink.ready,
-                    ongoing.eq(1),
-                    NextValue(counter, counter + inc),
-                    NextState("WRITE")
+                   ongoing.eq(1),
+                   *([] if timestamp_source is None else
+                     [NextValue(rx_start_timestamp, timestamp_source)]),
+                   NextValue(counter, counter + inc),
+                   NextState("WRITE")
                 ).Else(
                     NextValue(self.errors.status, self.errors.status + 1),
                     NextState("DISCARD_REMAINING")
@@ -109,18 +127,27 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             fifo.sink.slot.eq(slot),
             fifo.sink.length.eq(counter)
         ]
+
         fsm.act("TERMINATE",
             NextValue(counter, 0),
             slot_ce.eq(1),
             fifo.sink.valid.eq(1),
             NextState("IDLE")
         )
+
         self.comb += [
             fifo.source.ready.eq(self.ev.available.clear),
             self.ev.available.trigger.eq(fifo.source.valid),
             self._slot.status.eq(fifo.source.slot),
             self._length.status.eq(fifo.source.length),
         ]
+
+        # RX timestamping to FIFO
+        if timestamp_source is not None:
+            self.comb += [
+                fifo.sink.rx_timestamp.eq(rx_start_timestamp),
+                self._rx_timestamp.status.eq(fifo.source.rx_timestamp),
+            ]
 
         # Memory
         mems  = [None]*nslots
@@ -145,50 +172,83 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
-    def __init__(self, dw, depth, nslots=2, endianness="big"):
+    def __init__(self, dw, depth, nslots=2, endianness="big", timestamp_source=None):
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         slotbits        = max(log2_int(nslots), 1)
         lengthbits      = bits_for(depth*4)  # length in bytes
         self.lengthbits = lengthbits
 
+        # TX packet timestamping, for applications such as IEEE 1588
+        # Precision Time Protocol
+        timestampbits   = 0 if timestamp_source is None else value_bits_sign(timestamp_source)[0]
+
+        # MAC Reader command channel
         self._start  = CSR()
         self._ready  = CSRStatus()
         self._level  = CSRStatus(log2_int(nslots) + 1)
         self._slot   = CSRStorage(slotbits,   reset_less=True)
         self._length = CSRStorage(lengthbits, reset_less=True)
 
+        # MAC Reader return channel
+        self._res_slot = CSRStatus(slotbits)
+        if timestamp_source is not None:
+            self._res_tx_timestamp = CSRStatus(timestampbits)
+
         self.submodules.ev = EventManager()
-        self.ev.done       = EventSourcePulse()
+        self.ev.done       = EventSourceLevel()
         self.ev.finalize()
 
         # # #
 
         # Command FIFO
-        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
-        self.submodules += fifo
+        cmd_fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
+        self.submodules += cmd_fifo
         self.comb += [
-            fifo.sink.valid.eq(self._start.re),
-            fifo.sink.slot.eq(self._slot.storage),
-            fifo.sink.length.eq(self._length.storage),
-            self._ready.status.eq(fifo.sink.ready),
-            self._level.status.eq(fifo.level)
+            cmd_fifo.sink.valid.eq(self._start.re),
+            cmd_fifo.sink.slot.eq(self._slot.storage),
+            cmd_fifo.sink.length.eq(self._length.storage),
+            self._ready.status.eq(cmd_fifo.sink.ready),
+            self._level.status.eq(cmd_fifo.level)
         ]
+
+        # Result FIFO (return channel)
+        res_fifo_layout = [("slot", slotbits)]
+        if timestamp_source is not None:
+            res_fifo_layout += [("tx_timestamp", timestampbits)]
+
+        res_fifo = stream.SyncFIFO(res_fifo_layout, nslots)
+        self.submodules += res_fifo
+
+        self.comb += [
+            res_fifo.source.ready.eq(self.ev.done.clear),
+            self.ev.done.trigger.eq(res_fifo.source.valid),
+            self._res_slot.status.eq(res_fifo.source.slot),
+        ]
+        if timestamp_source is not None:
+            self.comb += self._res_tx_timestamp.status.eq(res_fifo.source.tx_timestamp),
 
         # Length computation
         read_address = Signal(lengthbits)
         counter      = Signal(lengthbits)
 
+        # Store the timestamp of transmission start
+        if timestamp_source is not None:
+            tx_start_timestamp = Signal(timestampbits)
+
         # FSM
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             NextValue(counter, 0),
-            If(fifo.source.valid,
+            If(cmd_fifo.source.valid,
                 read_address.eq(0),
+                *([] if timestamp_source is None
+                  else [NextValue(tx_start_timestamp, timestamp_source)]),
                 NextState("SEND")
             )
         )
-        length_lsb = fifo.source.length[0:2]
+
+        length_lsb = cmd_fifo.source.length[0:2]
         if endianness == "big":
             self.comb += If(source.last,
                 Case(length_lsb, {
@@ -207,7 +267,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
                 }))
         fsm.act("SEND",
             source.valid.eq(1),
-            source.last.eq(counter >= (fifo.source.length - 4)),
+            source.last.eq(counter >= (cmd_fifo.source.length - 4)),
             read_address.eq(counter),
             If(source.ready,
                 read_address.eq(counter + 4),
@@ -218,13 +278,17 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             )
         )
         fsm.act("END",
-            fifo.source.ready.eq(1),
-            self.ev.done.trigger.eq(1),
+            res_fifo.sink.valid.eq(1),
+            cmd_fifo.source.ready.eq(1),
             NextState("IDLE")
         )
 
+        self.comb += res_fifo.sink.slot.eq(cmd_fifo.source.slot)
+        if timestamp_source is not None:
+            self.comb += res_fifo.sink.tx_timestamp.eq(tx_start_timestamp)
+
         # Memory
-        rd_slot = fifo.source.slot
+        rd_slot = cmd_fifo.source.slot
         mems    = [None]*nslots
         ports   = [None]*nslots
         for n in range(nslots):
@@ -242,8 +306,8 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 # MAC SRAM -----------------------------------------------------------------------------------------
 
 class LiteEthMACSRAM(Module, AutoCSR):
-    def __init__(self, dw, depth, nrxslots, ntxslots, endianness):
-        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness)
-        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness)
+    def __init__(self, dw, depth, nrxslots, ntxslots, endianness, timestamp_source=None):
+        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness, timestamp_source)
+        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness, timestamp_source)
         self.submodules.ev     = SharedIRQ(self.writer.ev, self.reader.ev)
         self.sink, self.source = self.writer.sink, self.reader.source
