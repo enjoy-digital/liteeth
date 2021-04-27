@@ -59,13 +59,15 @@ class LiteEthPHYRGMIITX(Module):
 
 
 class LiteEthPHYRGMIIRX(Module):
-    def __init__(self, pads, rx_delay=2e-9):
+    def __init__(self, pads, rx_delay=2e-9, iodelay_clk_freq=200e6):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
-        rx_delay_taps = int(rx_delay/78e-12) # 78ps per tap with 200MHz IDELAYE2 REFCLK
-        assert rx_delay_taps < 32
+        assert iodelay_clk_freq in [200e6, 300e6, 400e6]
+        iodelay_tap_average = 1 / (2*32 * iodelay_clk_freq)
+        rx_delay_taps = round(rx_delay / iodelay_tap_average)
+        assert rx_delay_taps < 32, "Exceeded ODELAYE2 max value: {} >= 32".format(rx_delay_taps)
 
         rx_ctl_ibuf    = Signal()
         rx_ctl_idelay  = Signal()
@@ -79,6 +81,7 @@ class LiteEthPHYRGMIIRX(Module):
             Instance("IDELAYE2",
                 p_IDELAY_TYPE  = "FIXED",
                 p_IDELAY_VALUE = rx_delay_taps,
+                p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                 i_C        = 0,
                 i_LD       = 0,
                 i_CE       = 0,
@@ -107,6 +110,7 @@ class LiteEthPHYRGMIIRX(Module):
                 Instance("IDELAYE2",
                     p_IDELAY_TYPE  = "FIXED",
                     p_IDELAY_VALUE = rx_delay_taps,
+                    p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                     i_C        = 0,
                     i_LD       = 0,
                     i_CE       = 0,
@@ -207,10 +211,10 @@ class LiteEthPHYRGMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9, iodelay_clk_freq=200e6):
         self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, iodelay_clk_freq))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
