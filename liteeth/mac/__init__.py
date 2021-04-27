@@ -159,24 +159,22 @@ class LiteEthMACCoreCrossbar(Module):
         self.submodules.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(self.tx_pipe.source.valid,
-                self.tx_pipe.source.connect(core.sink),
                 NextState("WISHBONE")
             ).Else(
                 If(self.packetizer.source.valid,
-                    self.packetizer.source.connect(core.sink),
                     NextState("CROSSBAR")
                 )
             ),
         )
         fsm.act("WISHBONE",
             self.tx_pipe.source.connect(core.sink),
-            If(self.tx_pipe.source.valid & core.sink.ready & self.tx_pipe.source.last,
+            If(core.sink.valid & core.sink.ready & core.sink.last,
                 NextState("IDLE")
             ),
         )
         fsm.act("CROSSBAR",
             self.packetizer.source.connect(core.sink),
-            If(self.packetizer.source.valid & core.sink.ready & self.packetizer.source.last,
+            If(core.sink.valid & core.sink.ready & core.sink.last,
                 NextState("IDLE")
             ),
         )
