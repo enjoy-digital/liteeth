@@ -264,7 +264,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         if timestamp is not None:
             # Latch Timestamp on start of outgoing packet.
             self.sync == If(start, stat_fifo.sink.timestamp.eq(timestamp))
-            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("IDLE")),
+            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("END")),
             self.comb += stat_fifo.sink.slot.eq(cmd_fifo.source.slot)
             # Trigger event when Status FIFO has contents.
             self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid),
