@@ -206,11 +206,9 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             stat_fifo_layout = [("slot", slotbits), ("timestamp", timestampbits)]
             stat_fifo = stream.SyncFIFO(stat_fifo_layout, nslots)
             self.submodules += stat_fifo
-            self.comb += [
-                stat_fifo.source.ready.eq(self.ev.done.clear),
-                self._timestamp_slot.status.eq(stat_fifo.source.slot),
-                self._timestamp.status.eq(stat_fifo.source.timestamp),
-            ]
+            self.comb += stat_fifo.source.ready.eq(self.ev.done.clear)
+            self.comb += self._timestamp_slot.status.eq(stat_fifo.source.slot)
+            self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
 
         # Length computation
         read_address = Signal(lengthbits)
@@ -264,10 +262,10 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         if timestamp is not None:
             # Latch Timestamp on start of outgoing packet.
             self.sync += If(start, stat_fifo.sink.timestamp.eq(timestamp))
-            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("END")),
+            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("END"))
             self.comb += stat_fifo.sink.slot.eq(cmd_fifo.source.slot)
-            # Trigger event when Status FIFO has contents.
-            self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid),
+            # Trigger event when Status FIFO has contents (Override FSM assignment).
+            self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid)
 
         # Memory
         rd_slot = cmd_fifo.source.slot
