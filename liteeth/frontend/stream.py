@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
@@ -9,13 +9,14 @@ from liteeth.common import *
 # Steam 2 UDP TX -----------------------------------------------------------------------------------
 
 class LiteEthStream2UDPTX(Module):
-    def __init__(self, ip_address, udp_port, fifo_depth=None):
+    def __init__(self, ip_address, udp_port, fifo_depth=None, send_level=1):
         self.sink   = sink   = stream.Endpoint(eth_tty_description(8))
         self.source = source = stream.Endpoint(eth_udp_user_description(8))
 
         # # #
 
         if fifo_depth is None:
+            assert send_level == 1
             self.comb += [
                 source.valid.eq(sink.valid),
                 source.last.eq(1),
@@ -24,38 +25,30 @@ class LiteEthStream2UDPTX(Module):
                 sink.ready.eq(source.ready)
             ]
         else:
-            level   = Signal(max=fifo_depth)
-            counter = Signal(max=fifo_depth)
+            level   = Signal(max=fifo_depth+1)
+            counter = Signal(max=fifo_depth+1)
 
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += sink.connect(fifo.sink)
 
             self.submodules.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
-                If(fifo.source.valid,
+                If(fifo.level >= send_level,
                     NextValue(level, fifo.level),
                     NextValue(counter, 0),
                     NextState("SEND")
                 )
             )
             fsm.act("SEND",
-                source.valid.eq(fifo.source.valid),
-                If(level == 0,
-                    source.last.eq(1),
-                ).Else(
-                    source.last.eq(counter == (level-1)),
-                ),
+                source.valid.eq(1),
+                source.last.eq(counter == (level - 1)),
                 source.src_port.eq(udp_port),
                 source.dst_port.eq(udp_port),
                 source.ip_address.eq(ip_address),
-                If(level == 0,
-                    source.length.eq(1),
-                ).Else(
-                    source.length.eq(level),
-                ),
+                source.length.eq(level),
                 source.data.eq(fifo.source.data),
-                fifo.source.ready.eq(source.ready),
-                If(source.valid & source.ready,
+                If(source.ready,
+                    fifo.source.ready.eq(1),
                     NextValue(counter, counter + 1),
                     If(source.last,
                         NextState("IDLE")
