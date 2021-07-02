@@ -42,7 +42,6 @@ class BenchSoC(SoCCore):
             pads       = self.platform.request("eth"),
             tx_delay   = 0e-9,
             with_hw_init_reset = False)
-        self.add_csr("ethphy")
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
@@ -53,7 +52,6 @@ class BenchSoC(SoCCore):
         self.submodules.leds = LedChaser(
             pads         = platform.request_all("user_led_n"),
             sys_clk_freq = sys_clk_freq)
-        self.add_csr("leds")
 
 # Main ---------------------------------------------------------------------------------------------
 

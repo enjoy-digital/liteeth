@@ -63,7 +63,6 @@ class BenchSoC(SoCCore):
 
         # Etherbone --------------------------------------------------------------------------------
         self.submodules.ethphy = LiteEthPHYModel(self.platform.request("eth"))
-        self.add_csr("ethphy")
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
