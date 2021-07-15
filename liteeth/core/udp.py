@@ -43,40 +43,49 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         user_port     = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(self.dw)
 
-        # tx
-        tx_stream = user_port.sink
-        if cd != "sys":
-            tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
-            tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
-            self.submodules += tx_cdc
-            self.comb += tx_stream.connect(tx_cdc.sink)
-            tx_stream = tx_cdc.source
-        if dw != self.dw:
-            tx_converter = stream.StrideConverter(
-                eth_udp_user_description(user_port.dw),
-                eth_udp_user_description(self.dw))
-            self.submodules += tx_converter
-            self.comb += tx_stream.connect(tx_converter.sink)
-            tx_stream = tx_converter.source
-        self.comb += tx_stream.connect(internal_port.sink)
+        # TX
+        # ---
 
-        # rx
-        rx_stream = internal_port.source
-        if dw != self.dw:
-            rx_converter = stream.StrideConverter(
-                eth_udp_user_description(self.dw),
-                eth_udp_user_description(user_port.dw))
-            self.submodules += rx_converter
-            self.comb += rx_stream.connect(rx_converter.sink)
-            rx_stream = rx_converter.source
-        if cd != "sys":
-            rx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
-            rx_cdc = ClockDomainsRenamer({"write": "sys", "read": cd})(rx_cdc)
-            self.submodules += rx_cdc
-            self.comb += rx_stream.connect(rx_cdc.sink)
-            rx_stream = rx_cdc.source
-        self.comb += rx_stream.connect(user_port.source)
+        # CDC.
+        self.submodules.tx_cdc = tx_cdc = stream.ClockDomainCrossing(
+            layout  = eth_udp_user_description(user_port.dw),
+            cd_from = cd,
+            cd_to   ="sys"
+        )
+        self.comb += user_port.sink.connect(tx_cdc.sink)
 
+        # Data-Width Conversion.
+        self.submodules.tx_converter = tx_converter = stream.StrideConverter(
+            description_from = eth_udp_user_description(user_port.dw),
+            description_to   = eth_udp_user_description(self.dw)
+        )
+        self.comb += tx_cdc.source.connect(tx_converter.sink)
+
+        # Interface.
+        self.comb += tx_converter.source.connect(internal_port.sink)
+
+        # RX
+        # --
+        # Data-Width Conversion.
+        self.submodules.rx_converter = rx_converter = stream.StrideConverter(
+            description_from = eth_udp_user_description(self.dw),
+            description_to   = eth_udp_user_description(user_port.dw)
+        )
+        self.comb += internal_port.source.connect(rx_converter.sink)
+
+        # CDC.
+        self.submodules.rx_cdc = rx_cdc = stream.ClockDomainCrossing(
+            layout  = eth_udp_user_description(user_port.dw),
+            cd_from = "sys",
+            cd_to   = cd
+        )
+        self.comb += rx_converter.source.connect(rx_cdc.sink)
+
+        # Interface.
+        self.comb += rx_cdc.source.connect(user_port.source)
+
+        # Expose/Return User Port.
+        # ------------------------
         self.users[udp_port] = internal_port
 
         return user_port
