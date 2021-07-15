@@ -205,9 +205,11 @@ class LiteEthEtherboneRecordReceiver(Module):
 
         # # #
 
-        # TODO: optimize ressources (no need to store parameters as datas)
-        fifo = stream.SyncFIFO(eth_etherbone_record_description(32), buffer_depth, buffered=True)
-        self.submodules += fifo
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
+            payload_depth = buffer_depth,
+            param_depth   = 1,
+            buffered      = True
+        )
         self.comb += sink.connect(fifo.sink)
 
         base_addr = Signal(32, reset_less=True)
@@ -279,9 +281,11 @@ class LiteEthEtherboneRecordSender(Module):
 
         # # #
 
-        # TODO: optimize ressources (no need to store parameters as datas)
-        fifo = PacketFIFO(eth_etherbone_mmap_description(32), buffer_depth, buffered=True)
-        self.submodules += fifo
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_mmap_description(32),
+            payload_depth = buffer_depth,
+            param_depth   = 1,
+            buffered      = True
+        )
         self.comb += sink.connect(fifo.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
