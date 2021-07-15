@@ -60,22 +60,24 @@ class LiteEthARPTX(Module):
             packetizer.sink.protosize.eq(4),
             packetizer.sink.sender_mac.eq(mac_address),
             packetizer.sink.sender_ip.eq(ip_address),
+            packetizer.sink.target_ip.eq(sink.ip_address),
             If(sink.reply,
                 packetizer.sink.opcode.eq(arp_opcode_reply),
                 packetizer.sink.target_mac.eq(sink.mac_address),
-                packetizer.sink.target_ip.eq(sink.ip_address)
             ).Elif(sink.request,
                 packetizer.sink.opcode.eq(arp_opcode_request),
                 packetizer.sink.target_mac.eq(0xffffffffffff),
-                packetizer.sink.target_ip.eq(sink.ip_address)
             )
         ]
-        fsm.act("SEND",
-            packetizer.sink.valid.eq(1),
-            packetizer.source.connect(source),
+        self.comb += [
+            packetizer.source.connect(source, omit={"valid", "ready"}),
             source.target_mac.eq(packetizer.sink.target_mac),
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
+        ]
+        fsm.act("SEND",
+            packetizer.sink.valid.eq(1),
+            packetizer.source.connect(source, keep={"valid", "ready"}),
             If(source.valid & source.ready,
                 NextValue(counter, counter + 1),
                 If(source.last,
