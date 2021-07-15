@@ -46,11 +46,14 @@ class LiteEthICMPTX(Module):
                 NextState("SEND")
             )
         )
-        fsm.act("SEND",
-            packetizer.source.connect(source),
+        self.comb += [
+            packetizer.source.connect(source, omit={"valid", "ready"}),
             source.length.eq(sink.length + icmp_header.length),
             source.protocol.eq(icmp_protocol),
             source.ip_address.eq(sink.ip_address),
+        ]
+        fsm.act("SEND",
+            packetizer.source.connect(source, keep={"valid", "ready"}),
             If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
