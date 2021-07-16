@@ -198,6 +198,8 @@ class PHYCore(SoCMini):
             ethphy = phy(
                 clock_pads         = platform.request("rgmii_eth_clocks"),
                 pads               = platform.request("rgmii_eth"),
+                tx_delay           = core_config.get("phy_tx_delay", 2e-9),
+                rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
         else:
             raise ValueError("Unsupported PHY")
@@ -299,7 +301,7 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
-        if k == "clk_freq":
+        if k in ["clk_freq", "phy_tx_delay", "phy_rx_delay"]:
             core_config[k] = int(float(core_config[k]))
 
     # Generate core --------------------------------------------------------------------------------
