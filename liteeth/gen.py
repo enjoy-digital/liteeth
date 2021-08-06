@@ -213,14 +213,20 @@ class MACCore(PHYCore):
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
 
+        nrxslots = core_config.get("nrxslots", 2)
+        ntxslots = core_config.get("ntxslots", 2)
+        mac_memsize = (nrxslots + ntxslots) * buffer_depth
+
         # MAC --------------------------------------------------------------------------------------
         self.submodules.ethmac = LiteEthMAC(
             phy        = self.ethphy,
             dw         = 32,
             interface  = "wishbone",
-            endianness = core_config["endianness"])
+            endianness = core_config["endianness"],
+            nrxslots   = nrxslots,
+            ntxslots   = ntxslots)
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
-        self.add_memory_region("ethmac", self.mem_map["ethmac"], 0x2000, type="io")
+        self.add_memory_region("ethmac", self.mem_map["ethmac"], mac_memsize, type="io")
         self.add_csr("ethmac")
 
         # Wishbone Interface -----------------------------------------------------------------------
