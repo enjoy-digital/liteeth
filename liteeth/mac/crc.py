@@ -242,9 +242,9 @@ class LiteEthMACCRCChecker(Module):
     Attributes
     ----------
     sink : in
-        Packet octets with CRC.
+        Packet data with CRC.
     source : out
-        Packet octets without CRC and "error" set to 0
+        Packet data without CRC and "error" set to 0
         on last when CRC OK / set to 1 when CRC KO.
     error : out
         Pulses every time a CRC error is detected.
@@ -258,6 +258,7 @@ class LiteEthMACCRCChecker(Module):
         # # #
 
         dw  = len(sink.data)
+        assert dw in [8, 32]
         crc = crc_class(dw)
         self.submodules += crc
         ratio = crc.width//dw
@@ -285,8 +286,13 @@ class LiteEthMACCRCChecker(Module):
             source.last.eq(sink.last),
             fifo.source.ready.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
+            source.last_be.eq(sink.last_be),
 
-            source.error.eq(sink.error | crc.error),
+            # `source.error` has a width > 1 for dw > 8, but since the crc error
+            # applies to the whole ethernet packet, all the bytes are marked as
+            # containing an error. This way later reducing the data width
+            # doesn't run into issues with missing the error
+            source.error.eq(sink.error | Replicate(crc.error, dw//8)),
             self.error.eq(source.valid & source.last & crc.error),
         ]
 
@@ -295,7 +301,10 @@ class LiteEthMACCRCChecker(Module):
             fifo.reset.eq(1),
             NextState("IDLE"),
         )
-        self.comb += crc.data.eq(sink.data)
+        self.comb += [
+            crc.data.eq(sink.data),
+            crc.last_be.eq(sink.last_be),
+        ]
         fsm.act("IDLE",
             If(sink.valid & sink.ready,
                 crc.ce.eq(1),
