@@ -61,6 +61,11 @@ class LiteEthMACCore(Module, AutoCSR):
             self.sync += If(self.ps_preamble_error.o,
                             self.preamble_errors.status.eq(self.preamble_errors.status + 1)),
 
+        if sys_data_path:
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+            cd_tx = cd_rx = "sys"
+            dw = core_dw
+
         if not isinstance(phy, LiteEthPHYModel) and with_preamble_crc:
             # CRC insert/check
             crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(dw)))
@@ -77,11 +82,6 @@ class LiteEthMACCore(Module, AutoCSR):
             self.comb += self.ps_crc_error.i.eq(crc32_checker.error),
             self.sync += If(self.ps_crc_error.o,
                             self.crc_errors.status.eq(self.crc_errors.status + 1)),
-
-        if sys_data_path:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
-            cd_tx = cd_rx = "sys"
-            dw = core_dw
 
         # Padding
         if with_padding:
