@@ -102,8 +102,10 @@ class LiteEthMACCRC32(Module):
 
     Attributes
     ----------
-    d : in
+    data : in
         Data input.
+    last_be : in
+        Valid byte in data input (optional).
     value : out
         CRC value (used for generator).
     error : out
@@ -114,22 +116,37 @@ class LiteEthMACCRC32(Module):
     init    = 2**width-1
     check   = 0xC704DD7B
     def __init__(self, data_width):
+        dw = data_width//8
+
         self.data  = Signal(data_width)
+        self.last_be = Signal(dw)
         self.value = Signal(self.width)
         self.error = Signal()
+        # Add a separate last_be signal, to maintain backwards compatability
+        last_be = Signal(data_width//8)
 
         # # #
 
-        self.submodules.engine = LiteEthMACCRCEngine(data_width, self.width, self.polynom)
-        reg = Signal(self.width, reset=self.init)
-        self.sync += reg.eq(self.engine.next)
         self.comb += [
-            self.engine.data.eq(self.data),
-            self.engine.last.eq(reg),
-
-            self.value.eq(~reg[::-1]),
-            self.error.eq(self.engine.next != self.check)
+            If(self.last_be != 0,
+                last_be.eq(self.last_be)
+            ).Else(
+                last_be.eq(2**(dw-1)))
         ]
+        # Since the data can end at any byte end, indicated by `last_be`
+        # maintain separate engines for each 8 byte increment in the data word
+        engines = [LiteEthMACCRCEngine((e+1)*8, self.width, self.polynom) for e in range(dw)]
+        self.submodules += engines
+
+        regs = [Signal(self.width, reset=self.init) for e in range(dw)]
+        self.sync += [regs[e].eq(engines[e].next) for e in range(dw)]
+        self.comb += [engines[e].data.eq(self.data[:(e+1)*8]) for e in range(dw)],
+        self.comb += [engines[e].last.eq(regs[-1]) for e in range(dw)]
+        self.comb += [
+                If(last_be[e],
+                    self.value.eq(~(regs[e][::-1])),
+                    self.error.eq(engines[e].next != self.check))
+                        for e in range(dw)]
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
 
