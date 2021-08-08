@@ -17,30 +17,32 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SI
 # MAC Core -----------------------------------------------------------------------------------------
 
 class LiteEthMACCore(Module, AutoCSR):
-    def __init__(self, phy, core_dw,
+    def __init__(self, phy, dw,
                  endianness        = "big",
                  with_preamble_crc = True,
                  sys_data_path     = True,
                  with_padding      = True):
+        core_dw = dw
+
         if core_dw < phy.dw:
             raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy.dw))
 
         rx_pipeline = [phy]
         tx_pipeline = [phy]
 
-        cd_tx = "eth_tx"
-        cd_rx = "eth_rx"
-        dw = phy.dw
+        if sys_data_path:
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+            cd_tx = cd_rx = "sys"
+            dw = core_dw
+        else:
+            cd_tx = "eth_tx"
+            cd_rx = "eth_rx"
+            dw = phy.dw
 
         # Interpacket gap
         tx_gap_inserter = gap.LiteEthMACGap(dw)
         self.submodules += ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
         tx_pipeline += [tx_gap_inserter]
-
-        if sys_data_path:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
-            cd_tx = cd_rx = "sys"
-            dw = core_dw
 
         # Preamble / CRC
         if isinstance(phy, LiteEthPHYModel):
@@ -93,8 +95,6 @@ class LiteEthMACCore(Module, AutoCSR):
 
         if not sys_data_path:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
-            cd_tx = cd_rx = "sys"
-            dw = core_dw
 
         # Graph
         self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
