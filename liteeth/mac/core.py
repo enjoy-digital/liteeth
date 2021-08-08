@@ -77,24 +77,33 @@ class LiteEthMACCore(Module, AutoCSR):
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
 
+        self.data_path_converter(tx_pipeline, rx_pipeline, dw, phy.dw, endianness)
+
+        # Graph
+        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
+        self.submodules.rx_pipeline = stream.Pipeline(*rx_pipeline)
+
+        self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source
+
+    def data_path_converter(self, tx_pipeline, rx_pipeline, dw, phy_dw, endianness):
         # Delimiters
         if dw != 8:
-            tx_last_be = last_be.LiteEthMACTXLastBE(phy.dw)
-            rx_last_be = last_be.LiteEthMACRXLastBE(phy.dw)
+            tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
+            rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_last_be)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_last_be)
             tx_pipeline += [tx_last_be]
             rx_pipeline += [rx_last_be]
 
         # Converters
-        if dw != phy.dw:
+        if dw != phy_dw:
             reverse = endianness == "big"
             tx_converter = stream.StrideConverter(
                 description_from = eth_phy_description(dw),
-                description_to   = eth_phy_description(phy.dw),
+                description_to   = eth_phy_description(phy_dw),
                 reverse          = reverse)
             rx_converter = stream.StrideConverter(
-                description_from = eth_phy_description(phy.dw),
+                description_from = eth_phy_description(phy_dw),
                 description_to   = eth_phy_description(dw),
                 reverse          = reverse)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
@@ -108,9 +117,3 @@ class LiteEthMACCore(Module, AutoCSR):
         self.submodules += tx_cdc, rx_cdc
         tx_pipeline += [tx_cdc]
         rx_pipeline += [rx_cdc]
-
-        # Graph
-        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
-        self.submodules.rx_pipeline = stream.Pipeline(*rx_pipeline)
-
-        self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source
