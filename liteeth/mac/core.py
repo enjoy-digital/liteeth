@@ -44,37 +44,39 @@ class LiteEthMACCore(Module, AutoCSR):
             self._preamble_crc = CSRStatus(reset=1)
         elif with_preamble_crc:
             self._preamble_crc = CSRStatus(reset=1)
-            self.preamble_errors = CSRStatus(32)
-            self.crc_errors = CSRStatus(32)
 
             # Preamble insert/check
             preamble_inserter = preamble.LiteEthMACPreambleInserter(dw)
             preamble_checker  = preamble.LiteEthMACPreambleChecker(dw)
             self.submodules += ClockDomainsRenamer(cd_tx)(preamble_inserter)
             self.submodules += ClockDomainsRenamer(cd_rx)(preamble_checker)
+            tx_pipeline += [preamble_inserter]
+            rx_pipeline += [preamble_checker]
+            self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
 
+
+            # Preamble error counter
+            self.preamble_errors = CSRStatus(32)
+            self.comb += self.ps_preamble_error.i.eq(preamble_checker.error),
+            self.sync += If(self.ps_preamble_error.o,
+                            self.preamble_errors.status.eq(self.preamble_errors.status + 1)),
+
+        if not isinstance(phy, LiteEthPHYModel) and with_preamble_crc:
             # CRC insert/check
             crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(dw)))
             crc32_checker  = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Checker(eth_phy_description(dw)))
             self.submodules += ClockDomainsRenamer(cd_tx)(crc32_inserter)
             self.submodules += ClockDomainsRenamer(cd_rx)(crc32_checker)
 
-            tx_pipeline += [preamble_inserter, crc32_inserter]
-            rx_pipeline += [preamble_checker, crc32_checker]
+            tx_pipeline += [crc32_inserter]
+            rx_pipeline += [crc32_checker]
 
-            # Error counters
-            self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
-            self.submodules.ps_crc_error      = PulseSynchronizer(cd_rx, "sys")
-            self.comb += [
-                self.ps_preamble_error.i.eq(preamble_checker.error),
-                self.ps_crc_error.i.eq(crc32_checker.error),
-            ]
-            self.sync += [
-                If(self.ps_preamble_error.o,
-                    self.preamble_errors.status.eq(self.preamble_errors.status + 1)),
-                If(self.ps_crc_error.o,
-                    self.crc_errors.status.eq(self.crc_errors.status + 1)),
-            ]
+            # CRC error counter
+            self.crc_errors = CSRStatus(32)
+            self.submodules.ps_crc_error = PulseSynchronizer(cd_rx, "sys")
+            self.comb += self.ps_crc_error.i.eq(crc32_checker.error),
+            self.sync += If(self.ps_crc_error.o,
+                            self.crc_errors.status.eq(self.crc_errors.status + 1)),
 
         if sys_data_path:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
