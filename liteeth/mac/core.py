@@ -37,6 +37,11 @@ class LiteEthMACCore(Module, AutoCSR):
         self.submodules += ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
         tx_pipeline += [tx_gap_inserter]
 
+        if sys_data_path:
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+            cd_tx = cd_rx = "sys"
+            dw = core_dw
+
         # Preamble / CRC
         if isinstance(phy, LiteEthPHYModel):
             # In simulation, avoid CRC/Preamble to enable direct connection
@@ -61,12 +66,6 @@ class LiteEthMACCore(Module, AutoCSR):
             self.sync += If(self.ps_preamble_error.o,
                             self.preamble_errors.status.eq(self.preamble_errors.status + 1)),
 
-        if sys_data_path:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
-            cd_tx = cd_rx = "sys"
-            dw = core_dw
-
-        if not isinstance(phy, LiteEthPHYModel) and with_preamble_crc:
             # CRC insert/check
             crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(dw)))
             crc32_checker  = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Checker(eth_phy_description(dw)))
