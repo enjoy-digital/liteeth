@@ -144,7 +144,7 @@ class LiteEthMACCRC32(Module):
         self.comb += [engines[e].last.eq(regs[-1]) for e in range(dw)]
         self.comb += [
                 If(last_be[e],
-                    self.value.eq(~(regs[e][::-1])),
+                    self.value.eq(~(engines[e].next[::-1])),
                     self.error.eq(engines[e].next != self.check))
                         for e in range(dw)]
 
@@ -163,9 +163,9 @@ class LiteEthMACCRCInserter(Module):
     Attributes
     ----------
     sink : in
-        Packets octets without CRC.
+        Packet data without CRC.
     source : out
-        Packets octets with CRC.
+        Packet data with CRC.
     """
     def __init__(self, crc_class, description):
         self.sink   = sink = stream.Endpoint(description)
@@ -174,9 +174,14 @@ class LiteEthMACCRCInserter(Module):
         # # #
 
         dw  = len(sink.data)
+        assert dw in [8, 32]
         crc = crc_class(dw)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
+
+        # crc packet checksum
+        crc_packet = Signal(crc.width)
+        last_be = Signal().like(sink.last_be)
 
         fsm.act("IDLE",
             crc.reset.eq(1),
@@ -189,9 +194,23 @@ class LiteEthMACCRCInserter(Module):
         fsm.act("COPY",
             crc.ce.eq(sink.valid & source.ready),
             crc.data.eq(sink.data),
+            crc.last_be.eq(sink.last_be),
             sink.connect(source),
             source.last.eq(0),
+            source.last_be.eq(0),
+            If(sink.last,
+                # Fill the empty space of the last data word with the
+                # beginning of the crc value
+                [If(sink.last_be[e],
+                    source.data.eq(Cat(sink.data[:(e+1)*8],
+                        crc.value)[:dw])) for e in range(dw//8)],
+            ).Else(
+                crc.ce.eq(sink.valid & source.ready),
+            ),
+
             If(sink.valid & sink.last & source.ready,
+                NextValue(crc_packet, crc.value),
+                NextValue(last_be, sink.last_be),
                 NextState("CRC"),
             )
         )
@@ -201,7 +220,7 @@ class LiteEthMACCRCInserter(Module):
             cnt_done = Signal()
             fsm.act("CRC",
                 source.valid.eq(1),
-                chooser(crc.value, cnt, source.data, reverse=True),
+                chooser(crc_packet, cnt, source.data, reverse=True),
                 If(cnt_done,
                     source.last.eq(1),
                     If(source.ready, NextState("IDLE"))
@@ -219,6 +238,9 @@ class LiteEthMACCRCInserter(Module):
                 source.valid.eq(1),
                 source.last.eq(1),
                 source.data.eq(crc.value),
+                source.last_be.eq(last_be),
+                [If(last_be[e],
+                    source.data.eq(crc_packet[-(e+1)*8:])) for e in range(dw//8)],
                 If(source.ready, NextState("IDLE"))
             )
 
