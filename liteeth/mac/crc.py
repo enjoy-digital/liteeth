@@ -138,15 +138,14 @@ class LiteEthMACCRC32(Module):
         engines = [LiteEthMACCRCEngine((e+1)*8, self.width, self.polynom) for e in range(dw)]
         self.submodules += engines
 
-        regs = [Signal(self.width, reset=self.init) for e in range(dw)]
-        self.sync += [regs[e].eq(engines[e].next) for e in range(dw)]
+        reg = Signal(self.width, reset=self.init)
+        self.sync += reg.eq(engines[-1].next)
         self.comb += [engines[e].data.eq(self.data[:(e+1)*8]) for e in range(dw)],
-        self.comb += [engines[e].last.eq(regs[-1]) for e in range(dw)]
-        self.comb += [
-                If(last_be[e],
-                    self.value.eq(~(engines[e].next[::-1])),
-                    self.error.eq(engines[e].next != self.check))
-                        for e in range(dw)]
+        self.comb += [engines[e].last.eq(reg) for e in range(dw)]
+        self.comb += [If(last_be[e],
+                        self.value.eq(reverse_bits(~engines[e].next)),
+                        self.error.eq(engines[e].next != self.check))
+                            for e in range(dw)]
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
 
