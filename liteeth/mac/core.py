@@ -17,16 +17,24 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SI
 # MAC Core -----------------------------------------------------------------------------------------
 
 class LiteEthMACCore(Module, AutoCSR):
-    def __init__(self, phy, dw, endianness="big", with_preamble_crc=True, with_padding=True):
-        if dw < phy.dw:
-            raise ValueError("Core data width({}) must be larger than PHY data width({})".format(dw, phy.dw))
+    def __init__(self, phy, core_dw,
+                 endianness        = "big",
+                 with_preamble_crc = True,
+                 sys_data_path     = True,
+                 with_padding      = True):
+        if core_dw < phy.dw:
+            raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy.dw))
 
         rx_pipeline = [phy]
         tx_pipeline = [phy]
 
+        cd_tx = "eth_tx"
+        cd_rx = "eth_rx"
+        dw = phy.dw
+
         # Interpacket gap
-        tx_gap_inserter = gap.LiteEthMACGap(phy.dw)
-        self.submodules += ClockDomainsRenamer("eth_tx")(tx_gap_inserter)
+        tx_gap_inserter = gap.LiteEthMACGap(dw)
+        self.submodules += ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
         tx_pipeline += [tx_gap_inserter]
 
         # Preamble / CRC
@@ -40,23 +48,23 @@ class LiteEthMACCore(Module, AutoCSR):
             self.crc_errors = CSRStatus(32)
 
             # Preamble insert/check
-            preamble_inserter = preamble.LiteEthMACPreambleInserter(phy.dw)
-            preamble_checker  = preamble.LiteEthMACPreambleChecker(phy.dw)
-            self.submodules += ClockDomainsRenamer("eth_tx")(preamble_inserter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(preamble_checker)
+            preamble_inserter = preamble.LiteEthMACPreambleInserter(dw)
+            preamble_checker  = preamble.LiteEthMACPreambleChecker(dw)
+            self.submodules += ClockDomainsRenamer(cd_tx)(preamble_inserter)
+            self.submodules += ClockDomainsRenamer(cd_rx)(preamble_checker)
 
             # CRC insert/check
-            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(phy.dw)))
-            crc32_checker  = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Checker(eth_phy_description(phy.dw)))
-            self.submodules += ClockDomainsRenamer("eth_tx")(crc32_inserter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(crc32_checker)
+            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(dw)))
+            crc32_checker  = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Checker(eth_phy_description(dw)))
+            self.submodules += ClockDomainsRenamer(cd_tx)(crc32_inserter)
+            self.submodules += ClockDomainsRenamer(cd_rx)(crc32_checker)
 
             tx_pipeline += [preamble_inserter, crc32_inserter]
             rx_pipeline += [preamble_checker, crc32_checker]
 
             # Error counters
-            self.submodules.ps_preamble_error = PulseSynchronizer("eth_rx", "sys")
-            self.submodules.ps_crc_error      = PulseSynchronizer("eth_rx", "sys")
+            self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
+            self.submodules.ps_crc_error      = PulseSynchronizer(cd_rx, "sys")
             self.comb += [
                 self.ps_preamble_error.i.eq(preamble_checker.error),
                 self.ps_crc_error.i.eq(crc32_checker.error),
@@ -68,16 +76,24 @@ class LiteEthMACCore(Module, AutoCSR):
                     self.crc_errors.status.eq(self.crc_errors.status + 1)),
             ]
 
+        if sys_data_path:
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+            cd_tx = cd_rx = "sys"
+            dw = core_dw
+
         # Padding
         if with_padding:
-            padding_inserter = padding.LiteEthMACPaddingInserter(phy.dw, 60)
-            padding_checker  = padding.LiteEthMACPaddingChecker(phy.dw, 60)
-            self.submodules += ClockDomainsRenamer("eth_tx")(padding_inserter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(padding_checker)
+            padding_inserter = padding.LiteEthMACPaddingInserter(dw, 60)
+            padding_checker  = padding.LiteEthMACPaddingChecker(dw, 60)
+            self.submodules += ClockDomainsRenamer(cd_tx)(padding_inserter)
+            self.submodules += ClockDomainsRenamer(cd_rx)(padding_checker)
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
 
-        self.data_path_converter(tx_pipeline, rx_pipeline, dw, phy.dw, endianness)
+        if not sys_data_path:
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+            cd_tx = cd_rx = "sys"
+            dw = core_dw
 
         # Graph
         self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
