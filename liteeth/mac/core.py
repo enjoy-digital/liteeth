@@ -7,7 +7,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
-from liteeth.mac import gap, preamble, crc, padding, last_be
+from liteeth.mac import gap, preamble, crc, padding, last_be, endian_converter
 from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
@@ -31,7 +31,8 @@ class LiteEthMACCore(Module, AutoCSR):
         tx_pipeline = [phy]
 
         if sys_data_path:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+            # The pipeline for dw>8 only works for little endian
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, "little")
             cd_tx = cd_rx = "sys"
             dw = core_dw
         else:
@@ -93,7 +94,16 @@ class LiteEthMACCore(Module, AutoCSR):
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
 
-        if not sys_data_path:
+        if sys_data_path:
+            # Since the pipeline only works for little endian when dw > 8,
+            # convert to big endian if necessary
+            if endianness == "big" and dw != 8:
+                tx_converter = endian_converter.LiteEthMACEndianConverter(dw)
+                rx_converter = endian_converter.LiteEthMACEndianConverter(dw)
+                self.submodules += tx_converter, rx_converter
+                tx_pipeline += [tx_converter]
+                rx_pipeline += [rx_converter]
+        else:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
 
         # Graph
