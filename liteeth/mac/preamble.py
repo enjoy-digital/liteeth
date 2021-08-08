@@ -25,13 +25,16 @@ class LiteEthMACPreambleInserter(Module):
         Preamble, SFD, and packet octets.
     """
     def __init__(self, dw):
+        assert dw in [8, 16, 32, 64]
         self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
         preamble = Signal(64, reset=eth_preamble)
-        count    = Signal(max=(64//dw)-1, reset_less=True)
+        # For 64 bits, `count` doesn't need to change. But migen won't create a
+        # signal with a width of 0 bits, so add an unused bit for 64 bit path
+        count    = Signal(max=(64//dw) if dw != 64 else 2, reset_less=True)
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             self.sink.ready.eq(1),
