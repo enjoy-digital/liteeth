@@ -219,12 +219,13 @@ class MACCore(PHYCore):
 
         # MAC --------------------------------------------------------------------------------------
         self.submodules.ethmac = LiteEthMAC(
-            phy        = self.ethphy,
-            dw         = 32,
-            interface  = "wishbone",
-            endianness = core_config["endianness"],
-            nrxslots   = nrxslots,
-            ntxslots   = ntxslots)
+            phy            = self.ethphy,
+            dw             = 32,
+            interface      = "wishbone",
+            endianness     = core_config["endianness"],
+            nrxslots       = nrxslots,
+            ntxslots       = ntxslots,
+            full_memory_we = core_config.get("full_memory_we", False))
         self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
         self.add_memory_region("ethmac", self.mem_map["ethmac"], mac_memsize, type="io")
         self.add_csr("ethmac")

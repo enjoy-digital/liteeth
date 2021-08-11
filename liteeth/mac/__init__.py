@@ -19,7 +19,8 @@ class LiteEthMAC(Module, AutoCSR):
         nrxslots          = 2,
         ntxslots          = 2,
         hw_mac            = None,
-        timestamp         = None):
+        timestamp         = None,
+        full_memory_we    = False):
         assert interface in ["crossbar", "wishbone", "hybrid"]
         self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
         self.csrs = []
@@ -38,13 +39,23 @@ class LiteEthMAC(Module, AutoCSR):
             self.rx_slots  = CSRConstant(nrxslots)
             self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
-            self.submodules.interface = FullMemoryWE()(LiteEthMACWishboneInterface(
+            wishbone_interface = LiteEthMACWishboneInterface(
                 dw         = 32,
                 nrxslots   = nrxslots,
                 ntxslots   = ntxslots,
                 endianness = endianness,
                 timestamp  = timestamp,
-            ))
+            )
+            # On some targets (Intel/Altera), the complex ports aren't inferred
+            # as block ram, but are created with LUTs.  FullMemoryWe splits such
+            # `Memory` instances up into 4 separate memory blocks, each
+            # containing 8 bits which gets inferred correctly on intel/altera.
+            # Yosys on ECP5 inferrs the original correctly, so FullMemoryWE
+            # leads to additional block ram instances being used, which
+            # increases memory usage by a lot.
+            if full_memory_we:
+                wishbone_interface = FullMemoryWE()(wishbone_interface)
+            self.submodules.interface = wishbone_interface
             self.ev, self.bus = self.interface.sram.ev, self.interface.bus
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
             if interface == "hybrid":
