@@ -173,7 +173,7 @@ class LiteEthMACCRCInserter(Module):
         # # #
 
         dw  = len(sink.data)
-        assert dw in [8, 32]
+        assert dw in [8, 32, 64]
         crc = crc_class(dw)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
@@ -203,14 +203,28 @@ class LiteEthMACCRCInserter(Module):
                 [If(sink.last_be[e],
                     source.data.eq(Cat(sink.data[:(e+1)*8],
                         crc.value)[:dw])) for e in range(dw//8)],
+                # If the whole crc value fits in the last sink paket, signal the
+                # end. This also means the next state is idle
+                If((dw == 64) & (sink.last_be <= 0xF),
+                    source.last.eq(1),
+                    source.last_be.eq(sink.last_be << (dw//8 - 4))
+                ),
             ).Else(
                 crc.ce.eq(sink.valid & source.ready),
             ),
 
             If(sink.valid & sink.last & source.ready,
-                NextValue(crc_packet, crc.value),
-                NextValue(last_be, sink.last_be),
-                NextState("CRC"),
+                If((dw == 64) & (sink.last_be <= 0xF),
+                    NextState("IDLE"),
+                ).Else(
+                    NextValue(crc_packet, crc.value),
+                    If(dw == 64,
+                        NextValue(last_be, sink.last_be >> 4),
+                    ).Else (
+                        NextValue(last_be, sink.last_be),
+                    ),
+                    NextState("CRC"),
+                )
             )
         )
         ratio = crc.width//dw
