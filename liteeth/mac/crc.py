@@ -10,6 +10,7 @@
 from functools import reduce
 from operator import xor
 from collections import OrderedDict
+from math import ceil
 
 from liteeth.common import *
 
@@ -293,10 +294,10 @@ class LiteEthMACCRCChecker(Module):
         # # #
 
         dw  = len(sink.data)
-        assert dw in [8, 32]
+        assert dw in [8, 32, 64]
         crc = crc_class(dw)
         self.submodules += crc
-        ratio = crc.width//dw
+        ratio = ceil(crc.width/dw)
 
         fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
         self.submodules += fifo
@@ -316,19 +317,6 @@ class LiteEthMACCRCChecker(Module):
             sink.connect(fifo.sink),
             fifo.sink.valid.eq(fifo_in),
             self.sink.ready.eq(fifo_in),
-
-            source.valid.eq(sink.valid & fifo_full),
-            source.last.eq(sink.last),
-            fifo.source.ready.eq(fifo_out),
-            source.payload.eq(fifo.source.payload),
-            source.last_be.eq(sink.last_be),
-
-            # `source.error` has a width > 1 for dw > 8, but since the crc error
-            # applies to the whole ethernet packet, all the bytes are marked as
-            # containing an error. This way later reducing the data width
-            # doesn't run into issues with missing the error
-            source.error.eq(sink.error | Replicate(crc.error, dw//8)),
-            self.error.eq(source.valid & source.last & crc.error),
         ]
 
         fsm.act("RESET",
@@ -346,12 +334,53 @@ class LiteEthMACCRCChecker(Module):
                 NextState("COPY")
             )
         )
+        last_be = Signal().like(sink.last_be)
+        crc_error = Signal()
         fsm.act("COPY",
+            fifo.source.ready.eq(fifo_out),
+            source.valid.eq(sink.valid & fifo_full),
+            source.payload.eq(fifo.source.payload),
+
+            If(dw <= 32,
+                source.last.eq(sink.last),
+                source.last_be.eq(sink.last_be),
+            # For dw == 64 bit, we need to look wether the last word contains only the crc value or both crc and data
+            # In the latter case, the last word also needs to be output
+            # In both cases, last_be needs to be adjusted for the new end position
+            ).Elif(sink.last_be & 0xF,
+                source.last.eq(sink.last),
+                source.last_be.eq(sink.last_be << (dw//8 - 4)),
+            ).Else(
+                NextValue(last_be, sink.last_be >> 4),
+                NextValue(crc_error, crc.error),
+            ),
+
+            # `source.error` has a width > 1 for dw > 8, but since the crc error
+            # applies to the whole ethernet packet, all the bytes are marked as
+            # containing an error. This way later reducing the data width
+            # doesn't run into issues with missing the error
+            source.error.eq(sink.error | Replicate(crc.error, dw//8)),
+            self.error.eq(sink.valid & sink.last & crc.error),
+
             If(sink.valid & sink.ready,
                 crc.ce.eq(1),
-                If(sink.last,
+                # Can only happen for dw == 64
+                If(sink.last & (sink.last_be > 0xF),
+                   NextState("COPY_LAST"),
+                ).Elif(sink.last,
                     NextState("RESET")
                 )
+            )
+        )
+
+        # If the last sink word contains both data and the crc value, shift out
+        # the last value here. Can only happen for dw == 64
+        fsm.act("COPY_LAST",
+            fifo.source.connect(source),
+            source.error.eq(fifo.source.error | Replicate(crc_error, dw//8)),
+            source.last_be.eq(last_be),
+            If(source.valid & source.ready,
+                NextState("RESET")
             )
         )
 
