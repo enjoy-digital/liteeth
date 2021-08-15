@@ -46,7 +46,11 @@ class LiteEthMACPreambleInserter(Module):
         )
         fsm.act("PREAMBLE",
             self.source.valid.eq(1),
-            chooser(preamble, count, self.source.data),
+            # Separate `n` is required as for 64-bit the chooser-statements'
+            # generated Verilog will otherwise contain a statement which reads
+            # beyond the bounds of preamble. This is in a branch which can never
+            # be valid, but is enough reason for Vivado to refuse synthesis.
+            chooser(preamble, count, self.source.data, n=64//dw),
             If(self.source.ready,
                 If(count == (64//dw)-1,
                     NextState("COPY")
