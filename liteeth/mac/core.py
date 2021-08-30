@@ -7,7 +7,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
-from liteeth.mac import gap, preamble, crc, padding, last_be, endian_converter
+from liteeth.mac import gap, preamble, crc, padding, last_be
 from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
@@ -18,7 +18,6 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SI
 
 class LiteEthMACCore(Module, AutoCSR):
     def __init__(self, phy, dw,
-                 endianness        = "big",
                  with_preamble_crc = True,
                  sys_data_path     = True,
                  with_padding      = True):
@@ -31,8 +30,7 @@ class LiteEthMACCore(Module, AutoCSR):
         tx_pipeline = [phy]
 
         if sys_data_path:
-            # The pipeline for dw>8 only works for little endian
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, "little")
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
             cd_tx = cd_rx = "sys"
             dw = core_dw
         else:
@@ -94,17 +92,8 @@ class LiteEthMACCore(Module, AutoCSR):
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
 
-        if sys_data_path:
-            # Since the pipeline only works for little endian when dw > 8,
-            # convert to big endian if necessary
-            if endianness == "big" and dw != 8:
-                tx_converter = endian_converter.LiteEthMACEndianConverter(dw)
-                rx_converter = endian_converter.LiteEthMACEndianConverter(dw)
-                self.submodules += tx_converter, rx_converter
-                tx_pipeline += [tx_converter]
-                rx_pipeline += [rx_converter]
-        else:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw, endianness)
+        if not sys_data_path:
+            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
 
         # Graph
         self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
@@ -112,7 +101,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source
 
-    def data_path_converter(self, tx_pipeline, rx_pipeline, dw, phy_dw, endianness):
+    def data_path_converter(self, tx_pipeline, rx_pipeline, dw, phy_dw):
         # Delimiters
         if dw != 8:
             tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
@@ -124,15 +113,12 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Converters
         if dw != phy_dw:
-            reverse = endianness == "big"
             tx_converter = stream.StrideConverter(
                 description_from = eth_phy_description(dw),
-                description_to   = eth_phy_description(phy_dw),
-                reverse          = reverse)
+                description_to   = eth_phy_description(phy_dw))
             rx_converter = stream.StrideConverter(
                 description_from = eth_phy_description(phy_dw),
-                description_to   = eth_phy_description(dw),
-                reverse          = reverse)
+                description_to   = eth_phy_description(dw))
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
             tx_pipeline += [tx_converter]

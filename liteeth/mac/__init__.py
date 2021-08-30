@@ -23,7 +23,7 @@ class LiteEthMAC(Module, AutoCSR):
         full_memory_we    = False,
         sys_data_path     = True):
         assert interface in ["crossbar", "wishbone", "hybrid"]
-        self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc, sys_data_path)
+        self.submodules.core = LiteEthMACCore(phy, dw, with_preamble_crc, sys_data_path)
         self.csrs = []
         if interface == "crossbar":
             self.submodules.crossbar     = LiteEthMACCrossbar(dw)
@@ -63,7 +63,7 @@ class LiteEthMAC(Module, AutoCSR):
                 assert dw == 8
                 # Hardware MAC
                 self.submodules.crossbar     = LiteEthMACCrossbar(dw)
-                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, endianness, hw_mac)
+                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
             else:
                 assert dw == 32
                 self.comb += self.interface.source.connect(self.core.sink)
@@ -75,11 +75,9 @@ class LiteEthMAC(Module, AutoCSR):
 # MAC Core Crossbar --------------------------------------------------------------------------------
 
 class LiteEthMACCoreCrossbar(Module):
-    def __init__(self, core, crossbar, interface, dw, endianness, hw_mac=None):
+    def __init__(self, core, crossbar, interface, dw, hw_mac=None):
         rx_ready = Signal()
         rx_valid = Signal()
-
-        reverse = endianness == "big"
 
         tx_pipe = []
         rx_pipe = []
@@ -91,13 +89,11 @@ class LiteEthMACCoreCrossbar(Module):
         self.submodules += tx_last_be, rx_last_be
 
         tx_converter = stream.StrideConverter(
-            description_from = eth_phy_description(32),
-            description_to   = eth_phy_description(dw),
-            reverse          = reverse)
+            description_from=eth_phy_description(32),
+            description_to=eth_phy_description(dw))
         rx_converter = stream.StrideConverter(
-            description_from = eth_phy_description(dw),
-            description_to   = eth_phy_description(32),
-            reverse          = reverse)
+            description_from=eth_phy_description(dw),
+            description_to=eth_phy_description(32))
         rx_pipe += [rx_converter]
         tx_pipe += [tx_converter]
         self.submodules += tx_converter, rx_converter
