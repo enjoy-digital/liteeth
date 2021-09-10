@@ -17,7 +17,8 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SI
 # MAC Core -----------------------------------------------------------------------------------------
 
 class LiteEthMACCore(Module, AutoCSR):
-    def __init__(self, phy, dw, endianness="big", with_preamble_crc=True, with_padding=True):
+    def __init__(self, phy, dw, endianness="big", with_preamble_crc=True, with_padding=True,
+                 cdc_tx_depth=32, cdc_rx_depth=32):
         if dw < phy.dw:
             raise ValueError("Core data width({}) must be larger than PHY data width({})".format(dw, phy.dw))
 
@@ -103,8 +104,10 @@ class LiteEthMACCore(Module, AutoCSR):
             rx_pipeline += [rx_converter]
 
         # Cross Domain Crossing
-        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="sys",    cd_to="eth_tx", depth=32)
-        rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="eth_rx", cd_to="sys",    depth=32)
+        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="sys",
+                                            cd_to="eth_tx", depth=cdc_tx_depth)
+        rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="eth_rx",
+                                            cd_to="sys", depth=cdc_rx_depth)
         self.submodules += tx_cdc, rx_cdc
         tx_pipeline += [tx_cdc]
         rx_pipeline += [rx_cdc]
