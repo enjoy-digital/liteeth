@@ -10,6 +10,7 @@ import os
 import argparse
 
 from migen import *
+from migen.genlib.cdc import MultiReg
 from migen.genlib.misc import WaitTimer
 
 from litex_boards.platforms import arty
@@ -19,6 +20,7 @@ from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
+from litex.soc.cores.led import LedChaser
 
 from liteeth.phy.mii import LiteEthPHYMII
 
@@ -59,7 +61,6 @@ class BenchSoC(SoCCore):
         leds_pads = platform.request_all("user_led")
 
         # Led Chaser (Default).
-        from litex.soc.cores.led import LedChaser
         chaser_leds = Signal(len(leds_pads))
         self.submodules.leds = LedChaser(
             pads         = chaser_leds,
@@ -82,6 +83,32 @@ class BenchSoC(SoCCore):
                 leds_pads.eq(udp_leds)
             )
         ]
+
+        # Switches ---------------------------------------------------------------------------------
+
+        if False:
+            # Resynchronize Swiches inputs.
+            switches_pads = platform.request_all("user_sw")
+            switches      = Signal(len(switches_pads))
+            self.specials += MultiReg(switches_pads, switches)
+
+            # Send Switches value on UDP Streamer TX every 500ms.
+            switches_timer = WaitTimer(int(500e-3*sys_clk_freq))
+            switches_fsm   = FSM(reset_state="IDLE")
+            self.submodules += switches_timer, switches_fsm
+            switches_fsm.act("IDLE",
+                switches_timer.wait.eq(1),
+                If(switches_timer.done,
+                    NextState("SEND")
+                )
+            )
+            switches_fsm.act("SEND",
+                udp_streamer.sink.valid.eq(1),
+                udp_streamer.sink.data.eq(switches),
+                If(udp_streamer.sink.ready,
+                    NextState("IDLE")
+                )
+        )
 
 # Main ---------------------------------------------------------------------------------------------
 
