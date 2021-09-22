@@ -193,6 +193,12 @@ class PHYCore(SoCMini):
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"))
+        elif phy in [liteeth_phys.LiteEthPHYGMIIMII]:
+            assert self.clk_freq >= 125e6
+            ethphy = phy(
+                clock_pads = platform.request("gmii_eth_clocks"),
+                pads       = platform.request("gmii_eth"),
+                clk_freq   = self.clk_freq)
         elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
             assert self.clk_freq >= 125e6
             ethphy = phy(
