@@ -39,25 +39,16 @@ class LiteEthEtherbonePacketTX(Module):
 
         self.submodules.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
         self.comb += [
-            packetizer.sink.valid.eq(sink.valid),
-            packetizer.sink.last.eq(sink.last),
-            sink.ready.eq(packetizer.sink.ready),
-
+            sink.connect(packetizer.sink, keep={"valid", "last", "ready", "data"}),
+            sink.connect(packetizer.sink, keep={"pf", "pr", "nr"}),
+            packetizer.sink.version.eq(etherbone_version),
             packetizer.sink.magic.eq(etherbone_magic),
             packetizer.sink.port_size.eq(32//8),
             packetizer.sink.addr_size.eq(32//8),
-            packetizer.sink.pf.eq(sink.pf),
-            packetizer.sink.pr.eq(sink.pr),
-            packetizer.sink.nr.eq(sink.nr),
-            packetizer.sink.version.eq(etherbone_version),
-
-            packetizer.sink.data.eq(sink.data)
         ]
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
                 NextState("SEND")
             )
         )
@@ -93,43 +84,26 @@ class LiteEthEtherbonePacketRX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid,
-                depacketizer.source.ready.eq(0),
-                NextState("CHECK")
-            )
-        )
-        valid = Signal(reset_less=True)
-        self.sync += valid.eq(
-            depacketizer.source.valid &
-            (depacketizer.source.magic == etherbone_magic)
-        )
-        fsm.act("CHECK",
-            If(valid,
-                NextState("PRESENT")
-            ).Else(
-                NextState("DROP")
+                NextState("DROP"),
+                If(depacketizer.source.magic == etherbone_magic,
+                    NextState("RECEIVE")
+                )
             )
         )
         self.comb += [
-            source.last.eq(depacketizer.source.last),
-
-            source.pf.eq(depacketizer.source.pf),
-            source.pr.eq(depacketizer.source.pr),
-            source.nr.eq(depacketizer.source.nr),
-
-            source.data.eq(depacketizer.source.data),
-
+            depacketizer.source.connect(source, keep={"last", "pf", "pr", "nr", "data"}),
             source.src_port.eq(sink.src_port),
             source.dst_port.eq(sink.dst_port),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length - etherbone_packet_header.length)
         ]
-        fsm.act("PRESENT",
-            source.valid.eq(depacketizer.source.valid),
-            depacketizer.source.ready.eq(source.ready),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+        fsm.act("RECEIVE",
+            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
         fsm.act("DROP",
@@ -165,9 +139,7 @@ class LiteEthEtherboneProbe(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
             If(sink.valid,
-                sink.ready.eq(0),
                 NextState("PROBE_RESPONSE")
             )
         )
@@ -175,8 +147,10 @@ class LiteEthEtherboneProbe(Module):
             sink.connect(source),
             source.pf.eq(0),
             source.pr.eq(1),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
 
@@ -290,9 +264,7 @@ class LiteEthEtherboneRecordSender(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            fifo.source.ready.eq(1),
             If(fifo.source.valid,
-                fifo.source.ready.eq(0),
                 NextState("SEND_BASE_ADDRESS")
             )
         )
@@ -347,9 +319,7 @@ class LiteEthEtherboneRecord(Module):
         last_ip_address = Signal(32, reset_less=True)
         self.sync += [
             If(sink.valid & sink.ready,
-                If(first,
-                    last_ip_address.eq(sink.ip_address),
-                ),
+                If(first, last_ip_address.eq(sink.ip_address)),
                 first.eq(sink.last)
             )
         ]
@@ -361,8 +331,8 @@ class LiteEthEtherboneRecord(Module):
             sender.source.connect(packetizer.sink),
             packetizer.source.connect(source),
             source.length.eq(etherbone_record_header.length +
-                             (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
-                             (sender.source.rcount != 0)*4 + sender.source.rcount*4),
+                (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
+                (sender.source.rcount != 0)*4 + sender.source.rcount*4),
             source.ip_address.eq(last_ip_address)
         ]
         if endianness is "big":
@@ -417,20 +387,17 @@ class LiteEthEtherboneWishboneMaster(Module):
             )
         )
         self.sync += [
-            source.base_addr.eq(sink.base_addr),
-            source.addr.eq(sink.addr),
-            source.count.eq(sink.count),
-            source.be.eq(sink.be),
+            sink.connect(source, keep={
+                "base_addr",
+                "addr",
+                "count",
+                "be"}),
             source.we.eq(1),
-            If(data_update,
-                source.data.eq(bus.dat_r)
-            )
+            If(data_update, source.data.eq(bus.dat_r))
         ]
         fsm.act("SEND_DATA",
-            source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+            sink.connect(source, keep={"valid", "last", "ready"}),
             If(source.valid & source.ready,
-                sink.ready.eq(1),
                 If(source.last,
                     NextState("IDLE")
                 ).Else(
