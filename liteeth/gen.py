@@ -318,10 +318,12 @@ def main():
             core_config[k] = int(float(core_config[k]))
 
     # Generate core --------------------------------------------------------------------------------
+    if  "device" not in core_config:
+        core_config["device"] = ""
     if core_config["vendor"] == "lattice":
-        platform = LatticePlatform("", io=[], toolchain="diamond")
+        platform = LatticePlatform(core_config["device"], io=[], toolchain="diamond")
     elif core_config["vendor"] == "xilinx":
-        platform = XilinxPlatform("", io=[], toolchain="vivado")
+        platform = XilinxPlatform(core_config["device"], io=[], toolchain="vivado")
     else:
         raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
     platform.add_extension(_io)
