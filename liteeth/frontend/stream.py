@@ -15,6 +15,8 @@ class LiteEthStream2UDPTX(Module):
 
         # # #
 
+        ip_address = convert_ip(ip_address)
+
         if fifo_depth is None:
             assert send_level == 1
             self.comb += [
@@ -64,6 +66,8 @@ class LiteEthUDP2StreamRX(Module):
         self.source = source = stream.Endpoint(eth_tty_description(8))
 
         # # #
+
+        ip_address = convert_ip(ip_address)
 
         valid = Signal()
         self.comb += valid.eq(
