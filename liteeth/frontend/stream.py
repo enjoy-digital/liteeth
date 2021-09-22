@@ -72,20 +72,18 @@ class LiteEthUDP2StreamRX(Module):
         valid = Signal()
         self.comb += valid.eq(
             (sink.ip_address == ip_address) &
-            (sink.dst_port == udp_port)
+            (sink.dst_port   == udp_port)
         )
         if fifo_depth is None:
             self.comb += [
+                sink.connect(source, keep={"last", "ready", "data"}),
                 source.valid.eq(sink.valid & valid),
-                source.data.eq(sink.data),
-                sink.ready.eq(source.ready)
             ]
         else:
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += [
+                sink.connect(fifo.sink, keep={"last", "ready", "data"}),
                 fifo.sink.valid.eq(sink.valid & valid),
-                fifo.sink.data.eq(sink.data),
-                sink.ready.eq(fifo.sink.ready),
                 fifo.source.connect(source)
             ]
 
