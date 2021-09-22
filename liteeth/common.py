@@ -146,11 +146,14 @@ def _remove_from_layout(layout, *args):
     return r
 
 def convert_ip(s):
-    ip = 0
-    for e in s.split("."):
-        ip = ip << 8
-        ip += int(e)
-    return ip
+    if isinstance(s, str):
+        ip = 0
+        for e in s.split("."):
+            ip = ip << 8
+            ip += int(e)
+        return ip
+    else:
+        return s
 
 # Stream Layouts -----------------------------------------------------------------------------------
 
