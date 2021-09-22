@@ -44,10 +44,8 @@ class LiteEthARPTX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
             NextValue(counter, 0),
             If(sink.valid,
-                sink.ready.eq(0),
                 NextState("SEND")
             )
         )
