@@ -10,6 +10,7 @@ import os
 import argparse
 
 from migen import *
+from migen.genlib.misc import WaitTimer
 
 from litex_boards.platforms import arty
 from litex_boards.targets.arty import _CRG
@@ -46,11 +47,41 @@ class BenchSoC(SoCCore):
         # SRAM -------------------------------------------------------------------------------------
         self.add_ram("sram", 0x20000000, 0x1000)
 
+        # UDP Streamer -----------------------------------------------------------------------------
+        from liteeth.frontend.stream import LiteEthUDPStreamer
+        self.submodules.udp_streamer = udp_streamer = LiteEthUDPStreamer(
+            udp        = self.ethcore.udp,
+            ip_address = "192.168.1.100",
+            udp_port   = 6000,
+        )
+
         # Leds -------------------------------------------------------------------------------------
+        leds_pads = platform.request_all("user_led")
+
+        # Led Chaser (Default).
         from litex.soc.cores.led import LedChaser
+        chaser_leds = Signal(len(leds_pads))
         self.submodules.leds = LedChaser(
-            pads         = platform.request_all("user_led"),
+            pads         = chaser_leds,
             sys_clk_freq = sys_clk_freq)
+
+        # Led Control from UDP Streamer RX.
+        udp_leds = Signal(len(leds_pads))
+        self.comb += udp_streamer.source.ready.eq(1)
+        self.sync += If(udp_streamer.rx.source.valid,
+            udp_leds.eq(udp_streamer.source.data)
+        )
+
+        # Led Mux: Switch to received UDP value for 1s then switch back to Led Chaser.
+        self.submodules.leds_timer = leds_timer = WaitTimer(sys_clk_freq)
+        self.comb += [
+            leds_timer.wait.eq(~udp_streamer.rx.source.valid), # Reload Timer on new UDP value.
+            If(leds_timer.done,
+                leds_pads.eq(chaser_leds)
+            ).Else(
+                leds_pads.eq(udp_leds)
+            )
+        ]
 
 # Main ---------------------------------------------------------------------------------------------
 
