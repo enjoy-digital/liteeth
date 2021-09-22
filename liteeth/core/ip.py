@@ -98,36 +98,38 @@ class LiteEthIPTX(Module):
 
         # # #
 
+        # Checksum.
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
         self.comb += checksum.ce.eq(sink.valid)
         self.comb += checksum.reset.eq(source.valid & source.last & source.ready)
 
+        # Packetizer.
         self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [
+            sink.connect(packetizer.sink, keep={
+                "last",
+                "last_be",
+                "protocol",
+                "data"}),
             packetizer.sink.valid.eq(sink.valid & checksum.done),
-            packetizer.sink.last.eq(sink.last),
-            packetizer.sink.last_be.eq(sink.last_be),
             sink.ready.eq(packetizer.sink.ready & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
-            packetizer.sink.protocol.eq(sink.protocol),
             packetizer.sink.total_length.eq(ipv4_header.length + sink.length),
             packetizer.sink.version.eq(0x4),     # ipv4
             packetizer.sink.ihl.eq(ipv4_header.length//4),
             packetizer.sink.identification.eq(0),
             packetizer.sink.ttl.eq(0x80),
             packetizer.sink.sender_ip.eq(ip_address),
-            packetizer.sink.data.eq(sink.data),
             checksum.header.eq(packetizer.header),
             packetizer.sink.checksum.eq(checksum.value)
         ]
 
         target_mac = Signal(48, reset_less=True)
 
+        # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
                 If(sink.ip_address[28:] == mcast_ip_mask,
                     NextValue(target_mac, Cat(sink.ip_address[:23], 0, mcast_oui)),
                     NextState("SEND")
@@ -190,56 +192,47 @@ class LiteEthIPRX(Module):
 
         # # #
 
+        # Depacketizer.
         self.submodules.depacketizer = depacketizer = LiteEthIPV4Depacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
+        # Checksum.
         self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
         self.comb += [
             checksum.header.eq(depacketizer.header),
-            checksum.reset.eq(~(depacketizer.source.valid)),
+            checksum.reset.eq(~depacketizer.source.valid),
             checksum.ce.eq(1)
         ]
 
+        # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ready.eq(1),
-            If(depacketizer.source.valid,
-                depacketizer.source.ready.eq(0),
-                NextState("CHECK")
-            )
-        )
-        self.valid = valid = Signal(reset_less=True)
-        self.sync += valid.eq(
-            depacketizer.source.valid &
-            (depacketizer.source.target_ip == ip_address) &
-            (depacketizer.source.version == 0x4) &
-            (depacketizer.source.ihl == 0x5) &
-            (checksum.value == 0)
-        )
-
-        fsm.act("CHECK",
-            If(checksum.done,
-                If(valid,
-                    NextState("PRESENT")
-                ).Else(
-                    NextState("DROP")
+            If(depacketizer.source.valid & checksum.done,
+                NextState("DROP"),
+                If((depacketizer.source.target_ip == ip_address) &
+                   (depacketizer.source.version == 0x4) &
+                   (depacketizer.source.ihl == 0x5) &
+                   (checksum.value == 0),
+                   NextState("RECEIVE")
                 )
             )
         )
         self.comb += [
-            source.last.eq(depacketizer.source.last),
+            depacketizer.source.connect(source, keep={
+                "last",
+                "protocol",
+                "data",
+                "error",
+                "last_be"}),
             source.length.eq(depacketizer.source.total_length - (0x5*4)),
-            source.protocol.eq(depacketizer.source.protocol),
             source.ip_address.eq(depacketizer.source.sender_ip),
-            source.data.eq(depacketizer.source.data),
-            source.error.eq(depacketizer.source.error),
-            source.last_be.eq(depacketizer.source.last_be)
         ]
-        fsm.act("PRESENT",
-            source.valid.eq(depacketizer.source.valid),
-            depacketizer.source.ready.eq(source.ready),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+        fsm.act("RECEIVE",
+            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
         fsm.act("DROP",
