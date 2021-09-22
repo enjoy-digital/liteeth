@@ -25,24 +25,23 @@ class LiteEthICMPTX(Module):
 
         # # #
 
+        # Packetizer.
         self.submodules.packetizer = packetizer = LiteEthICMPPacketizer(dw)
-        self.comb += [
-            packetizer.sink.valid.eq(sink.valid),
-            packetizer.sink.last.eq(sink.last),
-            sink.ready.eq(packetizer.sink.ready),
-            packetizer.sink.msgtype.eq(sink.msgtype),
-            packetizer.sink.code.eq(sink.code),
-            packetizer.sink.checksum.eq(sink.checksum),
-            packetizer.sink.quench.eq(sink.quench),
-            packetizer.sink.data.eq(sink.data),
-            packetizer.sink.last_be.eq(sink.last_be)
-        ]
+        self.comb += sink.connect(packetizer.sink, keep={
+            "valid",
+            "last",
+            "ready",
+            "msgtype",
+            "code",
+            "checksum",
+            "quench",
+            "data",
+            "last_be"})
 
+        # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
                 NextState("SEND")
             )
         )
@@ -76,46 +75,39 @@ class LiteEthICMPRX(Module):
 
         # # #
 
+        # Depacketizer.
         self.submodules.depacketizer = depacketizer = LiteEthICMPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
+        # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid,
-                depacketizer.source.ready.eq(0),
-                NextState("CHECK")
-            )
-        )
-        valid = Signal(reset_less=True)
-        self.sync += valid.eq(
-            depacketizer.source.valid &
-            (sink.protocol == icmp_protocol)
-        )
-        fsm.act("CHECK",
-            If(valid,
-                NextState("PRESENT")
-            ).Else(
-                NextState("DROP")
+                NextState("DROP"),
+                If(sink.protocol == icmp_protocol,
+                    NextState("RECEIVE")
+                )
             )
         )
         self.comb += [
-            source.last.eq(depacketizer.source.last),
-            source.msgtype.eq(depacketizer.source.msgtype),
-            source.code.eq(depacketizer.source.code),
-            source.checksum.eq(depacketizer.source.checksum),
-            source.quench.eq(depacketizer.source.quench),
+            depacketizer.source.connect(source, keep={
+                "last",
+                "msgtype",
+                "code",
+                "checksum",
+                "quench",
+                "data",
+                "error",
+                "last_be"}),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length - icmp_header.length),
-            source.data.eq(depacketizer.source.data),
-            source.error.eq(depacketizer.source.error),
-            source.last_be.eq(depacketizer.source.last_be)
         ]
-        fsm.act("PRESENT",
-            source.valid.eq(depacketizer.source.valid),
-            depacketizer.source.ready.eq(source.ready),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+        fsm.act("RECEIVE",
+            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
         fsm.act("DROP",
