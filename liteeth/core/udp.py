@@ -107,24 +107,27 @@ class LiteEthUDPTX(Module):
 
         # # #
 
+        # Packetizer.
         self.submodules.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
+
+        # Data-Path.
         self.comb += [
-            packetizer.sink.valid.eq(sink.valid),
-            packetizer.sink.last.eq(sink.last),
-            packetizer.sink.last_be.eq(sink.last_be),
-            sink.ready.eq(packetizer.sink.ready),
-            packetizer.sink.src_port.eq(sink.src_port),
-            packetizer.sink.dst_port.eq(sink.dst_port),
+            sink.connect(packetizer.sink, keep={
+                "valid",
+                "ready",
+                "last",
+                "last_be",
+                "src_port",
+                "dst_port",
+                "data"}),
             packetizer.sink.length.eq(sink.length + udp_header.length),
-            packetizer.sink.checksum.eq(0),  # Disabled (MAC CRC is enough)
-            packetizer.sink.data.eq(sink.data)
+            packetizer.sink.checksum.eq(0), # UDP Checksum is not used, we only rely on MAC CRC.
         ]
 
+        # Control-Path (FSM).
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
                 NextState("SEND")
             )
         )
@@ -133,8 +136,10 @@ class LiteEthUDPTX(Module):
             source.length.eq(packetizer.sink.length),
             source.protocol.eq(udp_protocol),
             source.ip_address.eq(sink.ip_address),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
 
