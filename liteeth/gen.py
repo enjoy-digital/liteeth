@@ -179,28 +179,23 @@ class PHYCore(SoCMini):
         # PHY --------------------------------------------------------------------------------------
         phy = core_config["phy"]
         if phy in [liteeth_phys.LiteEthPHYMII]:
-            assert self.clk_freq >= 12.5e6
             ethphy = phy(
                 clock_pads = platform.request("mii_eth_clocks"),
                 pads       = platform.request("mii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
-            assert self.clk_freq >= 12.5e6
             ethphy = phy(
                 clock_pads = platform.request("rmii_eth_clocks"),
                 pads       = platform.request("rmii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
-            assert self.clk_freq >= 125e6
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYGMIIMII]:
-            assert self.clk_freq >= 125e6
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"),
                 clk_freq   = self.clk_freq)
         elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
-            assert self.clk_freq >= 125e6
             ethphy = phy(
                 clock_pads         = platform.request("rgmii_eth_clocks"),
                 pads               = platform.request("rgmii_eth"),
