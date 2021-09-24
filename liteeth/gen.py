@@ -207,6 +207,17 @@ class PHYCore(SoCMini):
         self.submodules.ethphy = ethphy
         self.add_csr("ethphy")
 
+        # Generate timing constraints to ensure the "keep" attribute is properly set
+        # on the various clocks. This also adds the constraints to the generated xdc
+        # that can then be "imported" in the project using the core.
+        eth_rx_clk = getattr(ethphy, "crg", ethphy).cd_eth_rx.clk
+        eth_tx_clk = getattr(ethphy, "crg", ethphy).cd_eth_tx.clk
+        from liteeth.phy.model import LiteEthPHYModel
+        if not isinstance(ethphy, LiteEthPHYModel):
+            self.platform.add_period_constraint(eth_rx_clk, 1e9/phy.rx_clk_freq)
+            self.platform.add_period_constraint(eth_tx_clk, 1e9/phy.tx_clk_freq)
+            self.platform.add_false_path_constraints(self.crg.cd_sys.clk, eth_rx_clk, eth_tx_clk)
+
 # MAC Core -----------------------------------------------------------------------------------------
 
 class MACCore(PHYCore):
