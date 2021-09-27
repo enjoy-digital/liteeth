@@ -179,22 +179,23 @@ class PHYCore(SoCMini):
         # PHY --------------------------------------------------------------------------------------
         phy = core_config["phy"]
         if phy in [liteeth_phys.LiteEthPHYMII]:
-            assert self.clk_freq >= 12.5e6
             ethphy = phy(
                 clock_pads = platform.request("mii_eth_clocks"),
                 pads       = platform.request("mii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
-            assert self.clk_freq >= 12.5e6
             ethphy = phy(
                 clock_pads = platform.request("rmii_eth_clocks"),
                 pads       = platform.request("rmii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
-            assert self.clk_freq >= 125e6
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"))
+        elif phy in [liteeth_phys.LiteEthPHYGMIIMII]:
+            ethphy = phy(
+                clock_pads = platform.request("gmii_eth_clocks"),
+                pads       = platform.request("gmii_eth"),
+                clk_freq   = self.clk_freq)
         elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
-            assert self.clk_freq >= 125e6
             ethphy = phy(
                 clock_pads         = platform.request("rgmii_eth_clocks"),
                 pads               = platform.request("rgmii_eth"),
@@ -205,6 +206,17 @@ class PHYCore(SoCMini):
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
         self.add_csr("ethphy")
+
+        # Generate timing constraints to ensure the "keep" attribute is properly set
+        # on the various clocks. This also adds the constraints to the generated xdc
+        # that can then be "imported" in the project using the core.
+        eth_rx_clk = getattr(ethphy, "crg", ethphy).cd_eth_rx.clk
+        eth_tx_clk = getattr(ethphy, "crg", ethphy).cd_eth_tx.clk
+        from liteeth.phy.model import LiteEthPHYModel
+        if not isinstance(ethphy, LiteEthPHYModel):
+            self.platform.add_period_constraint(eth_rx_clk, 1e9/phy.rx_clk_freq)
+            self.platform.add_period_constraint(eth_tx_clk, 1e9/phy.tx_clk_freq)
+            self.platform.add_false_path_constraints(self.crg.cd_sys.clk, eth_rx_clk, eth_tx_clk)
 
 # MAC Core -----------------------------------------------------------------------------------------
 
@@ -312,10 +324,12 @@ def main():
             core_config[k] = int(float(core_config[k]))
 
     # Generate core --------------------------------------------------------------------------------
+    if  "device" not in core_config:
+        core_config["device"] = ""
     if core_config["vendor"] == "lattice":
-        platform = LatticePlatform("", io=[], toolchain="diamond")
+        platform = LatticePlatform(core_config["device"], io=[], toolchain="diamond")
     elif core_config["vendor"] == "xilinx":
-        platform = XilinxPlatform("", io=[], toolchain="vivado")
+        platform = XilinxPlatform(core_config["device"], io=[], toolchain="vivado")
     else:
         raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
     platform.add_extension(_io)
