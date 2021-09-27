@@ -37,6 +37,7 @@ from litex.build.lattice.platform import LatticePlatform
 from litex.soc.interconnect import wishbone
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
+from litex.soc.integration.soc import SoCRegion
 
 from liteeth.common import *
 
@@ -174,8 +175,8 @@ class PHYCore(SoCMini):
         SoCMini.__init__(self, platform, clk_freq=core_config["clk_freq"], **soc_args)
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = CRG(platform.request("sys_clock"),
-                                  platform.request("sys_reset"))
+        self.submodules.crg = CRG(platform.request("sys_clock"), platform.request("sys_reset"))
+
         # PHY --------------------------------------------------------------------------------------
         phy = core_config["phy"]
         if phy in [liteeth_phys.LiteEthPHYMII]:
@@ -206,9 +207,10 @@ class PHYCore(SoCMini):
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
 
-        # Generate timing constraints to ensure the "keep" attribute is properly set
-        # on the various clocks. This also adds the constraints to the generated xdc
-        # that can then be "imported" in the project using the core.
+        # Timing constaints.
+        # Generate timing constraints to ensure the "keep" attribute is properly set on the various
+        # clocks. This also adds the constraints to the generated .xdc that can then be "imported"
+        # in the project using the core.
         eth_rx_clk = getattr(ethphy, "crg", ethphy).cd_eth_rx.clk
         eth_tx_clk = getattr(ethphy, "crg", ethphy).cd_eth_tx.clk
         from liteeth.phy.model import LiteEthPHYModel
@@ -221,15 +223,15 @@ class PHYCore(SoCMini):
 
 class MACCore(PHYCore):
     def __init__(self, platform, core_config):
+        # Parameters -------------------------------------------------------------------------------
+        nrxslots = core_config.get("nrxslots", 2)
+        ntxslots = core_config.get("ntxslots", 2)
+
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
 
-        nrxslots = core_config.get("nrxslots", 2)
-        ntxslots = core_config.get("ntxslots", 2)
-        mac_memsize = (nrxslots + ntxslots) * buffer_depth
-
         # MAC --------------------------------------------------------------------------------------
-        self.submodules.ethmac = LiteEthMAC(
+        self.submodules.ethmac = ethmac = LiteEthMAC(
             phy            = self.ethphy,
             dw             = 32,
             interface      = "wishbone",
@@ -237,14 +239,11 @@ class MACCore(PHYCore):
             nrxslots       = nrxslots,
             ntxslots       = ntxslots,
             full_memory_we = core_config.get("full_memory_we", False))
-        self.add_wb_slave(self.mem_map["ethmac"], self.ethmac.bus)
-        self.add_memory_region("ethmac", self.mem_map["ethmac"], mac_memsize, type="io")
 
         # Wishbone Interface -----------------------------------------------------------------------
-        wb_bus = wishbone.Interface()
-        self.add_wb_master(wb_bus)
-        platform.add_extension(wb_bus.get_ios("wishbone"))
-        self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
+        ethmac_region_size = (nrxslots + ntxslots)*buffer_depth
+        ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
+        self.bus.add_slave(name="ethmac", slave=ethmac.bus, region=ethmac_region)
 
         # Interrupt Interface ----------------------------------------------------------------------
         self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
