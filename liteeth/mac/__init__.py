@@ -20,9 +20,10 @@ class LiteEthMAC(Module, AutoCSR):
         ntxslots          = 2,
         hw_mac            = None,
         timestamp         = None,
-        full_memory_we    = False):
+        full_memory_we    = False,
+        sys_data_path     = True):
         assert interface in ["crossbar", "wishbone", "hybrid"]
-        self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc)
+        self.submodules.core = LiteEthMACCore(phy, dw, endianness, with_preamble_crc, sys_data_path)
         self.csrs = []
         if interface == "crossbar":
             self.submodules.crossbar     = LiteEthMACCrossbar(dw)

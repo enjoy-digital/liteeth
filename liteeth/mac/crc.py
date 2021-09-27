@@ -102,8 +102,10 @@ class LiteEthMACCRC32(Module):
 
     Attributes
     ----------
-    d : in
+    data : in
         Data input.
+    last_be : in
+        Valid byte in data input (optional).
     value : out
         CRC value (used for generator).
     error : out
@@ -114,22 +116,36 @@ class LiteEthMACCRC32(Module):
     init    = 2**width-1
     check   = 0xC704DD7B
     def __init__(self, data_width):
+        dw = data_width//8
+
         self.data  = Signal(data_width)
+        self.last_be = Signal(dw)
         self.value = Signal(self.width)
         self.error = Signal()
+        # Add a separate last_be signal, to maintain backwards compatability
+        last_be = Signal(data_width//8)
 
         # # #
 
-        self.submodules.engine = LiteEthMACCRCEngine(data_width, self.width, self.polynom)
-        reg = Signal(self.width, reset=self.init)
-        self.sync += reg.eq(self.engine.next)
         self.comb += [
-            self.engine.data.eq(self.data),
-            self.engine.last.eq(reg),
-
-            self.value.eq(~reg[::-1]),
-            self.error.eq(self.engine.next != self.check)
+            If(self.last_be != 0,
+                last_be.eq(self.last_be)
+            ).Else(
+                last_be.eq(2**(dw-1)))
         ]
+        # Since the data can end at any byte end, indicated by `last_be`
+        # maintain separate engines for each 8 byte increment in the data word
+        engines = [LiteEthMACCRCEngine((e+1)*8, self.width, self.polynom) for e in range(dw)]
+        self.submodules += engines
+
+        reg = Signal(self.width, reset=self.init)
+        self.sync += reg.eq(engines[-1].next)
+        self.comb += [engines[e].data.eq(self.data[:(e+1)*8]) for e in range(dw)],
+        self.comb += [engines[e].last.eq(reg) for e in range(dw)]
+        self.comb += [If(last_be[e],
+                        self.value.eq(reverse_bits(~engines[e].next)),
+                        self.error.eq(engines[e].next != self.check))
+                            for e in range(dw)]
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
 
@@ -146,9 +162,9 @@ class LiteEthMACCRCInserter(Module):
     Attributes
     ----------
     sink : in
-        Packets octets without CRC.
+        Packet data without CRC.
     source : out
-        Packets octets with CRC.
+        Packet data with CRC.
     """
     def __init__(self, crc_class, description):
         self.sink   = sink = stream.Endpoint(description)
@@ -157,9 +173,14 @@ class LiteEthMACCRCInserter(Module):
         # # #
 
         dw  = len(sink.data)
+        assert dw in [8, 32]
         crc = crc_class(dw)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
+
+        # crc packet checksum
+        crc_packet = Signal(crc.width)
+        last_be = Signal().like(sink.last_be)
 
         fsm.act("IDLE",
             crc.reset.eq(1),
@@ -172,9 +193,23 @@ class LiteEthMACCRCInserter(Module):
         fsm.act("COPY",
             crc.ce.eq(sink.valid & source.ready),
             crc.data.eq(sink.data),
+            crc.last_be.eq(sink.last_be),
             sink.connect(source),
             source.last.eq(0),
+            source.last_be.eq(0),
+            If(sink.last,
+                # Fill the empty space of the last data word with the
+                # beginning of the crc value
+                [If(sink.last_be[e],
+                    source.data.eq(Cat(sink.data[:(e+1)*8],
+                        crc.value)[:dw])) for e in range(dw//8)],
+            ).Else(
+                crc.ce.eq(sink.valid & source.ready),
+            ),
+
             If(sink.valid & sink.last & source.ready,
+                NextValue(crc_packet, crc.value),
+                NextValue(last_be, sink.last_be),
                 NextState("CRC"),
             )
         )
@@ -184,7 +219,7 @@ class LiteEthMACCRCInserter(Module):
             cnt_done = Signal()
             fsm.act("CRC",
                 source.valid.eq(1),
-                chooser(crc.value, cnt, source.data, reverse=True),
+                chooser(crc_packet, cnt, source.data, reverse=True),
                 If(cnt_done,
                     source.last.eq(1),
                     If(source.ready, NextState("IDLE"))
@@ -202,6 +237,9 @@ class LiteEthMACCRCInserter(Module):
                 source.valid.eq(1),
                 source.last.eq(1),
                 source.data.eq(crc.value),
+                source.last_be.eq(last_be),
+                [If(last_be[e],
+                    source.data.eq(crc_packet[-(e+1)*8:])) for e in range(dw//8)],
                 If(source.ready, NextState("IDLE"))
             )
 
@@ -225,9 +263,9 @@ class LiteEthMACCRCChecker(Module):
     Attributes
     ----------
     sink : in
-        Packet octets with CRC.
+        Packet data with CRC.
     source : out
-        Packet octets without CRC and "error" set to 0
+        Packet data without CRC and "error" set to 0
         on last when CRC OK / set to 1 when CRC KO.
     error : out
         Pulses every time a CRC error is detected.
@@ -241,6 +279,7 @@ class LiteEthMACCRCChecker(Module):
         # # #
 
         dw  = len(sink.data)
+        assert dw in [8, 32]
         crc = crc_class(dw)
         self.submodules += crc
         ratio = crc.width//dw
@@ -268,8 +307,13 @@ class LiteEthMACCRCChecker(Module):
             source.last.eq(sink.last),
             fifo.source.ready.eq(fifo_out),
             source.payload.eq(fifo.source.payload),
+            source.last_be.eq(sink.last_be),
 
-            source.error.eq(sink.error | crc.error),
+            # `source.error` has a width > 1 for dw > 8, but since the crc error
+            # applies to the whole ethernet packet, all the bytes are marked as
+            # containing an error. This way later reducing the data width
+            # doesn't run into issues with missing the error
+            source.error.eq(sink.error | Replicate(crc.error, dw//8)),
             self.error.eq(source.valid & source.last & crc.error),
         ]
 
@@ -278,7 +322,10 @@ class LiteEthMACCRCChecker(Module):
             fifo.reset.eq(1),
             NextState("IDLE"),
         )
-        self.comb += crc.data.eq(sink.data)
+        self.comb += [
+            crc.data.eq(sink.data),
+            crc.last_be.eq(sink.last_be),
+        ]
         fsm.act("IDLE",
             If(sink.valid & sink.ready,
                 crc.ce.eq(1),
