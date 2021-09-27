@@ -19,11 +19,11 @@ class LiteEthMACTXLastBE(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="COPY")
         fsm.act("COPY",
-            sink.connect(source, omit={"last", "last_be"}),
-            source.last.eq(sink.last_be),
+            sink.connect(source),
+            source.last.eq(sink.last_be != 0),
             If(sink.valid & sink.ready,
                 # If last Byte but not last packet token.
-                If(sink.last_be & ~sink.last,
+                If(source.last & ~sink.last,
                     NextState("WAIT-LAST")
                 )
             )
@@ -47,5 +47,10 @@ class LiteEthMACRXLastBE(Module):
 
         self.comb += [
             sink.connect(source),
-            source.last_be.eq(sink.last)
+            If(dw == 8,
+                # 8bit PHYs will only drive last, thus `last_be` must be
+                # controlled accordingly. PHYs > 8bit must drive `last_be`
+                # themselves.
+                source.last_be.eq(sink.last)
+            )
         ]
