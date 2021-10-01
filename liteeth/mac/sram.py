@@ -14,39 +14,11 @@ from liteeth.common import *
 from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
 
-# Helpers ------------------------------------------------------------------------------------------
-
-class LastBEDecoder(Module):
-    def __init__(self, dw, last_be):
-        bytes = dw // 8
-
-        # Decoded needs to be able to represent a count from 0 up to
-        # and including `bytes`, as a single bus transfer can hold 0
-        # up to (inclusive) `bytes` octets. Thus add 1 prior to taking
-        # the log2. This will round up.
-        self.decoded = Signal(log2_int(bytes + 1, need_pow2=False))
-
-        cases = {
-            **{(1 << (b - 1)): self.decoded.eq(b) for b in range(1, bytes)},
-            "default": self.decoded.eq(bytes),
-        }
-
-        self.comb += Case(last_be, cases)
-
-class LastBEEncoder(Module):
-    def __init__(self, dw, length_lsb):
-        bytes = dw // 8
-
-        self.encoded = Signal(bytes)
-
-        self.comb += Case(length_lsb, {
-            b: self.encoded.eq(1 << ((b - 1) % bytes)) for b in range(0, bytes)
-        })
-
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
+        assert dw in [32, 64]
         self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
@@ -72,10 +44,26 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         # Packet dropped if no slot available
         sink.ready.reset = 1
 
-        # Length computation
-        last_be_dec = LastBEDecoder(dw, sink.last_be)
-        self.submodules += last_be_dec
-        inc = last_be_dec.decoded
+        # Decode Length increment from from last_be.
+        inc = Signal(4)
+        if dw == 32:
+            self.comb += Case(sink.last_be, {
+                0b0001   : inc.eq(1),
+                0b0010   : inc.eq(2),
+                0b0100   : inc.eq(3),
+               "default" : inc.eq(4)
+            })
+        else:
+            self.comb += Case(sink.last_be, {
+                0b00000001 : inc.eq(1),
+                0b00000010 : inc.eq(2),
+                0b00000100 : inc.eq(3),
+                0b00001000 : inc.eq(4),
+                0b00010000 : inc.eq(5),
+                0b00100000 : inc.eq(6),
+                0b01000000 : inc.eq(7),
+                "default"  : inc.eq(8)
+            })
 
         counter = Signal(lengthbits)
 
@@ -184,6 +172,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
+        assert dw in [32, 64]
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         slotbits        = max(log2_int(nslots), 1)
@@ -245,14 +234,30 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             )
         )
 
-        # Length encoding
+        # Encode Length to last_be.
         length_lsb = cmd_fifo.source.length[0:log2_int(dw // 8)]
-        last_be_enc = LastBEEncoder(dw, length_lsb)
-        self.submodules += last_be_enc
-        self.comb += [
-            If(source.last,
-                source.last_be.eq(last_be_enc.encoded))
-        ]
+        if dw == 32:
+            self.comb += If(source.last,
+                Case(length_lsb, {
+                    1         : source.last_be.eq(0b0001),
+                    2         : source.last_be.eq(0b0010),
+                    3         : source.last_be.eq(0b0100),
+                    "default" : source.last_be.eq(0b1000),
+                })
+            )
+        else:
+            self.comb += If(source.last,
+                Case(length_lsb, {
+                    1         : source.last_be.eq(0b00000001),
+                    2         : source.last_be.eq(0b00000010),
+                    3         : source.last_be.eq(0b00000100),
+                    4         : source.last_be.eq(0b00001000),
+                    5         : source.last_be.eq(0b00010000),
+                    6         : source.last_be.eq(0b00100000),
+                    7         : source.last_be.eq(0b01000000),
+                    "default" : source.last_be.eq(0b10000000),
+                })
+            )
 
         fsm.act("SEND",
             source.valid.eq(1),
