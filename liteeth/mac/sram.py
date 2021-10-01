@@ -17,8 +17,7 @@ from litex.soc.interconnect.csr_eventmanager import *
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LastBEDecoder(Module):
-    def __init__(self, dw, endianness, last_be):
-        assert endianness in ["big", "little"], "endianness must be either big or litte!"
+    def __init__(self, dw, last_be):
         assert dw % 8 == 0, "dw must be evenly divisible by 8!"
 
         bytes = dw // 8
@@ -29,21 +28,17 @@ class LastBEDecoder(Module):
         # the log2. This will round up.
         self.decoded = Signal(log2_int(bytes + 1, need_pow2=False))
 
-        if endianness == "big":
-            cases = {
-                **{(1 << (bytes - b)): self.decoded.eq(b) for b in range(1, bytes)},
-                "default": self.decoded.eq(bytes),
-            }
-        elif endianness == "little":
-            cases = {
-                **{(1 << (b - 1)): self.decoded.eq(b) for b in range(1, bytes)},
-                "default": self.decoded.eq(bytes),
-            }
+        cases = {
+            **{(1 << (b - 1)): self.decoded.eq(b) for b in range(1, bytes)},
+            "default": self.decoded.eq(bytes),
+        }
 
         self.comb += Case(last_be, cases)
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
+        assert endianness in [
+            "big", "little"], "endianness must be either big or litte!"
         self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
@@ -70,7 +65,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         sink.ready.reset = 1
 
         # Length computation
-        last_be_dec = LastBEDecoder(dw, endianness, sink.last_be)
+        last_be_dec = LastBEDecoder(dw, sink.last_be)
         self.submodules += last_be_dec
         inc = last_be_dec.decoded
 
@@ -164,12 +159,13 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             ports[n] = mems[n].get_port(write_capable=True)
             self.specials += ports[n]
         self.mems = mems
+        data = reverse_bytes(sink.data) if endianness == "big" else sink.data
 
         cases = {}
         for n, port in enumerate(ports):
             cases[n] = [
                 ports[n].adr.eq(counter[log2_int(dw // 8):]),
-                ports[n].dat_w.eq(sink.data),
+                ports[n].dat_w.eq(data),
                 If(sink.valid & ongoing,
                     ports[n].we.eq(0xf)
                 )
@@ -179,23 +175,15 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LastBEEncoder(Module):
-    def __init__(self, dw, endianness, length_lsb):
-        assert endianness in ["big", "little"], "endianness must be either big or litte!"
+    def __init__(self, dw, length_lsb):
         assert dw % 8 == 0, "dw must be evenly divisible by 8!"
         bytes = dw // 8
 
         self.encoded = Signal(bytes)
 
-        if endianness == "big":
-            cases = {
-                b: self.encoded.eq(1 << ((bytes - b) % bytes)) for b in range(0, bytes)
-            }
-        elif endianness == "little":
-            cases = {
-                b: self.encoded.eq(1 << ((b - 1) % bytes)) for b in range(0, bytes)
-            }
-
-        self.comb += Case(length_lsb, cases)
+        self.comb += Case(length_lsb, {
+            b: self.encoded.eq(1 << ((b - 1) % bytes)) for b in range(0, bytes)
+        })
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
@@ -262,7 +250,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
         # Length encoding
         length_lsb = cmd_fifo.source.length[0:log2_int(dw // 8)]
-        last_be_enc = LastBEEncoder(dw, endianness, length_lsb)
+        last_be_enc = LastBEEncoder(dw, length_lsb)
         self.submodules += last_be_enc
         self.comb += [
             If(source.last,
@@ -304,12 +292,17 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             ports[n] = mems[n].get_port()
             self.specials += ports[n]
         self.mems = mems
+        data = Signal().like(source.data)
 
         cases = {}
         for n, port in enumerate(ports):
             self.comb += ports[n].adr.eq(read_address[log2_int(dw // 8):])
-            cases[n] = [source.data.eq(port.dat_r)]
-        self.comb += Case(rd_slot, cases)
+            cases[n] = [data.eq(port.dat_r)]
+
+        self.comb += [
+            Case(rd_slot, cases),
+            source.data.eq(reverse_bytes(data) if endianness == "big" else data),
+        ]
 
 # MAC SRAM -----------------------------------------------------------------------------------------
 
