@@ -18,8 +18,6 @@ from litex.soc.interconnect.csr_eventmanager import *
 
 class LastBEDecoder(Module):
     def __init__(self, dw, last_be):
-        assert dw % 8 == 0, "dw must be evenly divisible by 8!"
-
         bytes = dw // 8
 
         # Decoded needs to be able to represent a count from 0 up to
@@ -37,7 +35,6 @@ class LastBEDecoder(Module):
 
 class LastBEEncoder(Module):
     def __init__(self, dw, length_lsb):
-        assert dw % 8 == 0, "dw must be evenly divisible by 8!"
         bytes = dw // 8
 
         self.encoded = Signal(bytes)
@@ -50,8 +47,6 @@ class LastBEEncoder(Module):
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
-        assert endianness in [
-            "big", "little"], "endianness must be either big or litte!"
         self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
