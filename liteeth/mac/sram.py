@@ -14,7 +14,7 @@ from liteeth.common import *
 from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
 
-# MAC SRAM Writer ----------------------------------------------------------------------------------
+# Helpers ------------------------------------------------------------------------------------------
 
 class LastBEDecoder(Module):
     def __init__(self, dw, last_be):
@@ -34,6 +34,19 @@ class LastBEDecoder(Module):
         }
 
         self.comb += Case(last_be, cases)
+
+class LastBEEncoder(Module):
+    def __init__(self, dw, length_lsb):
+        assert dw % 8 == 0, "dw must be evenly divisible by 8!"
+        bytes = dw // 8
+
+        self.encoded = Signal(bytes)
+
+        self.comb += Case(length_lsb, {
+            b: self.encoded.eq(1 << ((b - 1) % bytes)) for b in range(0, bytes)
+        })
+
+# MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
@@ -173,17 +186,6 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         self.comb += Case(slot, cases)
 
 # MAC SRAM Reader ----------------------------------------------------------------------------------
-
-class LastBEEncoder(Module):
-    def __init__(self, dw, length_lsb):
-        assert dw % 8 == 0, "dw must be evenly divisible by 8!"
-        bytes = dw // 8
-
-        self.encoded = Signal(bytes)
-
-        self.comb += Case(length_lsb, {
-            b: self.encoded.eq(1 << ((b - 1) % bytes)) for b in range(0, bytes)
-        })
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
