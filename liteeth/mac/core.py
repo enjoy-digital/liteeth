@@ -28,9 +28,10 @@ class LiteEthMACCore(Module, AutoCSR):
         self.source = stream.Endpoint(eth_phy_description(dw))
 
         # Parameters.
-        core_dw = dw
-        if core_dw < phy.dw:
-            raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy.dw))
+        self.core_dw = core_dw = dw
+        self.phy_dw  =  phy_dw = phy.dw
+        if core_dw < phy_dw:
+            raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy_dw))
 
         if with_sys_datapath:
             cd_tx       = "sys"
@@ -39,7 +40,7 @@ class LiteEthMACCore(Module, AutoCSR):
         else:
             cd_tx       = "eth_tx"
             cd_rx       = "eth_rx"
-            datapath_dw = phy.dw
+            datapath_dw = phy_dw
 
         # CSRs.
         if with_preamble_crc:
@@ -56,16 +57,16 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Late sys conversion.
         if not with_sys_datapath:
-            self.add_tx_converter(core_dw, phy.dw)
+            self.add_tx_converter()
 
-        # Padding
+        # Padding.
         if with_padding:
             tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, (eth_min_frame_length - eth_fcs_length))
             tx_padding = ClockDomainsRenamer(cd_tx)(tx_padding)
             self.submodules += tx_padding
             tx_datapath.append(tx_padding)
 
-        # Preamble / CRC
+        # Preamble / CRC.
         if with_preamble_crc:
             # CRC insert.
             tx_crc = crc.LiteEthMACCRC32Inserter(eth_phy_description(datapath_dw))
@@ -80,7 +81,7 @@ class LiteEthMACCore(Module, AutoCSR):
             self.submodules += tx_preamble
             tx_datapath.append(tx_preamble)
 
-        # Interpacket gap
+        # Interpacket gap.
         tx_gap = gap.LiteEthMACGap(datapath_dw)
         tx_gap = ClockDomainsRenamer(cd_tx)(tx_gap)
         self.submodules += tx_gap
@@ -88,7 +89,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Early sys conversion.
         if with_sys_datapath:
-            self.add_tx_converter(core_dw, phy.dw)
+            self.add_tx_converter(core_dw, phy_dw)
 
         # PHY.
         tx_datapath.append(phy)
@@ -105,9 +106,9 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Early sys conversion.
         if with_sys_datapath:
-            self.add_rx_converter(core_dw, phy.dw)
+            self.add_rx_converter()
 
-        # Preamble / CRC
+        # Preamble / CRC.
         if with_preamble_crc:
             # Preamble check.
             rx_preamble = preamble.LiteEthMACPreambleChecker(datapath_dw)
@@ -148,7 +149,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Late sys conversion.
         if not with_sys_datapath:
-            self.add_rx_converter(core_dw, phy.dw)
+            self.add_rx_converter()
 
         # Source.
         rx_datapath.append(self.source)
@@ -156,9 +157,9 @@ class LiteEthMACCore(Module, AutoCSR):
         # Data-Path.
         self.submodules.rx_pipeline = stream.Pipeline(*rx_datapath)
 
-    def add_tx_converter(self, dw, phy_dw):
+    def add_tx_converter(self):
         # Cross Domain Crossing.
-        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(self.core_dw),
             cd_from = "sys",
             cd_to   = "eth_tx",
             depth   = 32)
@@ -166,40 +167,40 @@ class LiteEthMACCore(Module, AutoCSR):
         self.tx_datapath.append(tx_cdc)
 
         # Converters.
-        if dw != phy_dw:
+        if self.core_dw != self.phy_dw:
             tx_converter = stream.StrideConverter(
-                description_from = eth_phy_description(dw),
-                description_to   = eth_phy_description(phy_dw))
+                description_from = eth_phy_description(self.core_dw),
+                description_to   = eth_phy_description(self.phy_dw))
             tx_converter = ClockDomainsRenamer("eth_tx")(tx_converter)
             self.submodules += tx_converter
             self.tx_datapath.append(tx_converter)
 
         # Delimiters.
-        if dw != 8:
-            tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
+        if self.core_dw != 8:
+            tx_last_be = last_be.LiteEthMACTXLastBE(self.phy_dw)
             tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
             self.submodules += tx_last_be
             self.tx_datapath.append(tx_last_be)
 
-    def add_rx_converter(self, dw, phy_dw):
+    def add_rx_converter(self):
         # Delimiters.
-        if dw != 8:
-            rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
+        if self.core_dw != 8:
+            rx_last_be = last_be.LiteEthMACRXLastBE(self.phy_dw)
             rx_last_be = ClockDomainsRenamer("eth_rx")(rx_last_be)
             self.submodules += rx_last_be
             self.rx_datapath.append(rx_last_be)
 
         # Converters.
-        if dw != phy_dw:
+        if self.core_dw != self.phy_dw:
             rx_converter = stream.StrideConverter(
-                description_from = eth_phy_description(phy_dw),
-                description_to   = eth_phy_description(dw))
+                description_from = eth_phy_description(self.phy_dw),
+                description_to   = eth_phy_description(self.core_dw))
             rx_converter = ClockDomainsRenamer("eth_rx")(rx_converter)
             self.submodules += rx_converter
             self.rx_datapath.append(rx_converter)
 
         # Cross Domain Crossing
-        rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+        rx_cdc = stream.ClockDomainCrossing(eth_phy_description(self.core_dw),
             cd_from = "eth_rx",
             cd_to   = "sys",
             depth   = 32)
