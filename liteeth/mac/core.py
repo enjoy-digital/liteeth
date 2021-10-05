@@ -32,7 +32,8 @@ class LiteEthMACCore(Module, AutoCSR):
 
         if with_sys_datapath:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
-            cd_tx = cd_rx = "sys"
+            cd_tx = "sys"
+            cd_rx = "sys"
             dw = core_dw
         else:
             cd_tx = "eth_tx"
@@ -42,7 +43,7 @@ class LiteEthMACCore(Module, AutoCSR):
         # Interpacket gap
         tx_gap_inserter = gap.LiteEthMACGap(dw)
         self.submodules += ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
-        tx_pipeline += [tx_gap_inserter]
+        tx_pipeline.append(tx_gap_inserter)
 
         # Preamble / CRC
         if isinstance(phy, LiteEthPHYModel):
@@ -57,16 +58,18 @@ class LiteEthMACCore(Module, AutoCSR):
             preamble_checker  = preamble.LiteEthMACPreambleChecker(dw)
             self.submodules += ClockDomainsRenamer(cd_tx)(preamble_inserter)
             self.submodules += ClockDomainsRenamer(cd_rx)(preamble_checker)
-            tx_pipeline += [preamble_inserter]
-            rx_pipeline += [preamble_checker]
+            tx_pipeline.append(preamble_inserter)
+            rx_pipeline.append(preamble_checker)
             self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
 
 
             # Preamble error counter
             self.preamble_errors = CSRStatus(32)
-            self.comb += self.ps_preamble_error.i.eq(preamble_checker.error),
-            self.sync += If(self.ps_preamble_error.o,
-                            self.preamble_errors.status.eq(self.preamble_errors.status + 1)),
+            self.comb += self.ps_preamble_error.i.eq(preamble_checker.error)
+            self.sync += [
+                If(self.ps_preamble_error.o,
+                    self.preamble_errors.status.eq(self.preamble_errors.status + 1))
+            ]
 
             # CRC insert/check
             crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(dw)))
@@ -74,15 +77,18 @@ class LiteEthMACCore(Module, AutoCSR):
             self.submodules += ClockDomainsRenamer(cd_tx)(crc32_inserter)
             self.submodules += ClockDomainsRenamer(cd_rx)(crc32_checker)
 
-            tx_pipeline += [crc32_inserter]
-            rx_pipeline += [crc32_checker]
+            tx_pipeline.append(crc32_inserter)
+            rx_pipeline.append(crc32_checker)
 
             # CRC error counter
             self.crc_errors = CSRStatus(32)
             self.submodules.ps_crc_error = PulseSynchronizer(cd_rx, "sys")
             self.comb += self.ps_crc_error.i.eq(crc32_checker.error),
-            self.sync += If(self.ps_crc_error.o,
-                            self.crc_errors.status.eq(self.crc_errors.status + 1)),
+            self.sync += [
+                If(self.ps_crc_error.o,
+                    self.crc_errors.status.eq(self.crc_errors.status + 1)
+                )
+            ]
 
         # Padding
         if with_padding:
@@ -90,8 +96,8 @@ class LiteEthMACCore(Module, AutoCSR):
             padding_checker  = padding.LiteEthMACPaddingChecker(dw, 60)
             self.submodules += ClockDomainsRenamer(cd_tx)(padding_inserter)
             self.submodules += ClockDomainsRenamer(cd_rx)(padding_checker)
-            tx_pipeline += [padding_inserter]
-            rx_pipeline += [padding_checker]
+            tx_pipeline.append(padding_inserter)
+            rx_pipeline.append(padding_checker)
 
         if not with_sys_datapath:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
@@ -109,8 +115,8 @@ class LiteEthMACCore(Module, AutoCSR):
             rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_last_be)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_last_be)
-            tx_pipeline += [tx_last_be]
-            rx_pipeline += [rx_last_be]
+            tx_pipeline.append(tx_last_be)
+            rx_pipeline.append(rx_last_be)
 
         # Converters
         if dw != phy_dw:
@@ -122,12 +128,12 @@ class LiteEthMACCore(Module, AutoCSR):
                 description_to   = eth_phy_description(dw))
             self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
             self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
-            tx_pipeline += [tx_converter]
-            rx_pipeline += [rx_converter]
+            tx_pipeline.append(tx_converter)
+            rx_pipeline.append(rx_converter)
 
         # Cross Domain Crossing
         tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="sys",    cd_to="eth_tx", depth=32)
         rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="eth_rx", cd_to="sys",    depth=32)
         self.submodules += tx_cdc, rx_cdc
-        tx_pipeline += [tx_cdc]
-        rx_pipeline += [rx_cdc]
+        tx_pipeline.append(tx_cdc)
+        rx_pipeline.append(rx_cdc)
