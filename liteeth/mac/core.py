@@ -54,10 +54,10 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Padding
         if with_padding:
-            padding_inserter = padding.LiteEthMACPaddingInserter(dw, 60)
-            padding_inserter = ClockDomainsRenamer(cd_tx)(padding_inserter)
-            self.submodules += padding_inserter
-            tx_datapath.append(padding_inserter)
+            tx_padding = padding.LiteEthMACPaddingInserter(dw, 60)
+            tx_padding = ClockDomainsRenamer(cd_tx)(tx_padding)
+            self.submodules += tx_padding
+            tx_datapath.append(tx_padding)
 
         # Preamble / CRC
         if isinstance(phy, LiteEthPHYModel):
@@ -66,23 +66,23 @@ class LiteEthMACCore(Module, AutoCSR):
         elif with_preamble_crc:
             self._preamble_crc = CSRStatus(reset=1)
             # CRC insert.
-            crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(dw))
-            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc32_inserter) # FIXME: Still required?
-            crc32_inserter = ClockDomainsRenamer(cd_tx)(crc32_inserter)
-            self.submodules += crc32_inserter
-            tx_datapath.append(crc32_inserter)
+            tx_crc = crc.LiteEthMACCRC32Inserter(eth_phy_description(dw))
+            tx_crc = BufferizeEndpoints({"sink": DIR_SINK})(tx_crc) # FIXME: Still required?
+            tx_crc = ClockDomainsRenamer(cd_tx)(tx_crc)
+            self.submodules += tx_crc
+            tx_datapath.append(tx_crc)
 
             # Preamble insert.
-            preamble_inserter = preamble.LiteEthMACPreambleInserter(dw)
-            preamble_inserter = ClockDomainsRenamer(cd_tx)(preamble_inserter)
-            self.submodules += preamble_inserter
-            tx_datapath.append(preamble_inserter)
+            tx_preamble = preamble.LiteEthMACPreambleInserter(dw)
+            tx_preamble = ClockDomainsRenamer(cd_tx)(tx_preamble)
+            self.submodules += tx_preamble
+            tx_datapath.append(tx_preamble)
 
         # Interpacket gap
-        tx_gap_inserter = gap.LiteEthMACGap(dw)
-        tx_gap_inserter = ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
-        self.submodules += tx_gap_inserter
-        tx_datapath.append(tx_gap_inserter)
+        tx_gap = gap.LiteEthMACGap(dw)
+        tx_gap = ClockDomainsRenamer(cd_tx)(tx_gap)
+        self.submodules += tx_gap
+        tx_datapath.append(tx_gap)
 
         # Early sys conversion.
         if with_sys_datapath:
@@ -108,31 +108,31 @@ class LiteEthMACCore(Module, AutoCSR):
         # Preamble / CRC
         if with_preamble_crc:
             # Preamble check.
-            preamble_checker = preamble.LiteEthMACPreambleChecker(dw)
-            preamble_checker = ClockDomainsRenamer(cd_rx)(preamble_checker)
-            self.submodules += preamble_checker
-            rx_datapath.append(preamble_checker)
+            rx_preamble = preamble.LiteEthMACPreambleChecker(dw)
+            rx_preamble = ClockDomainsRenamer(cd_rx)(rx_preamble)
+            self.submodules += rx_preamble
+            rx_datapath.append(rx_preamble)
 
             # Preamble error counter.
             self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
             self.preamble_errors = CSRStatus(32)
-            self.comb += self.ps_preamble_error.i.eq(preamble_checker.error)
+            self.comb += self.ps_preamble_error.i.eq(rx_preamble.error)
             self.sync += [
                 If(self.ps_preamble_error.o,
                     self.preamble_errors.status.eq(self.preamble_errors.status + 1))
             ]
 
             # CRC check.
-            crc32_checker = crc.LiteEthMACCRC32Checker(eth_phy_description(dw))
-            crc32_checker = BufferizeEndpoints({"sink": DIR_SINK})(crc32_checker) # FIXME: Still required?
-            crc32_checker = ClockDomainsRenamer(cd_rx)(crc32_checker)
-            self.submodules += crc32_checker
-            rx_datapath.append(crc32_checker)
+            rx_crc = crc.LiteEthMACCRC32Checker(eth_phy_description(dw))
+            rx_crc = BufferizeEndpoints({"sink": DIR_SINK})(rx_crc) # FIXME: Still required?
+            rx_crc = ClockDomainsRenamer(cd_rx)(rx_crc)
+            self.submodules += rx_crc
+            rx_datapath.append(rx_crc)
 
             # CRC error counter.
             self.crc_errors = CSRStatus(32)
             self.submodules.ps_crc_error = PulseSynchronizer(cd_rx, "sys")
-            self.comb += self.ps_crc_error.i.eq(crc32_checker.error),
+            self.comb += self.ps_crc_error.i.eq(rx_crc.error),
             self.sync += [
                 If(self.ps_crc_error.o,
                     self.crc_errors.status.eq(self.crc_errors.status + 1)
@@ -141,10 +141,10 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Padding.
         if with_padding:
-            padding_checker = padding.LiteEthMACPaddingChecker(dw, 60)
-            padding_checker = ClockDomainsRenamer(cd_rx)(padding_checker)
-            self.submodules += padding_checker
-            rx_datapath.append(padding_checker)
+            rx_padding = padding.LiteEthMACPaddingChecker(dw, 60)
+            rx_padding = ClockDomainsRenamer(cd_rx)(rx_padding)
+            self.submodules += rx_padding
+            rx_datapath.append(rx_padding)
 
         # Late sys conversion.
         if not with_sys_datapath:
