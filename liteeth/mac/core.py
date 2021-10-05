@@ -33,13 +33,19 @@ class LiteEthMACCore(Module, AutoCSR):
             raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy.dw))
 
         if with_sys_datapath:
-            cd_tx = "sys"
-            cd_rx = "sys"
-            dw = core_dw
+            cd_tx       = "sys"
+            cd_rx       = "sys"
+            datapath_dw = core_dw
         else:
-            cd_tx = "eth_tx"
-            cd_rx = "eth_rx"
-            dw = phy.dw
+            cd_tx       = "eth_tx"
+            cd_rx       = "eth_rx"
+            datapath_dw = phy.dw
+
+        # CSRs.
+        if with_preamble_crc:
+            self.preamble_crc    = CSRStatus(reset=1)
+            self.preamble_errors = CSRStatus(32)
+            self.crc_errors      = CSRStatus(32)
 
         # TX Data-Path (Core --> PHY).
         # ------------------------------------------------------------------------------------------
@@ -54,32 +60,28 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Padding
         if with_padding:
-            tx_padding = padding.LiteEthMACPaddingInserter(dw, 60)
+            tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, 60)
             tx_padding = ClockDomainsRenamer(cd_tx)(tx_padding)
             self.submodules += tx_padding
             tx_datapath.append(tx_padding)
 
         # Preamble / CRC
-        if isinstance(phy, LiteEthPHYModel):
-            # In simulation, avoid CRC/Preamble to enable direct connection to the Ethernet tap.
-            self._preamble_crc = CSRStatus(reset=1)
-        elif with_preamble_crc:
-            self._preamble_crc = CSRStatus(reset=1)
+        if with_preamble_crc:
             # CRC insert.
-            tx_crc = crc.LiteEthMACCRC32Inserter(eth_phy_description(dw))
+            tx_crc = crc.LiteEthMACCRC32Inserter(eth_phy_description(datapath_dw))
             tx_crc = BufferizeEndpoints({"sink": DIR_SINK})(tx_crc) # FIXME: Still required?
             tx_crc = ClockDomainsRenamer(cd_tx)(tx_crc)
             self.submodules += tx_crc
             tx_datapath.append(tx_crc)
 
             # Preamble insert.
-            tx_preamble = preamble.LiteEthMACPreambleInserter(dw)
+            tx_preamble = preamble.LiteEthMACPreambleInserter(datapath_dw)
             tx_preamble = ClockDomainsRenamer(cd_tx)(tx_preamble)
             self.submodules += tx_preamble
             tx_datapath.append(tx_preamble)
 
         # Interpacket gap
-        tx_gap = gap.LiteEthMACGap(dw)
+        tx_gap = gap.LiteEthMACGap(datapath_dw)
         tx_gap = ClockDomainsRenamer(cd_tx)(tx_gap)
         self.submodules += tx_gap
         tx_datapath.append(tx_gap)
@@ -108,14 +110,13 @@ class LiteEthMACCore(Module, AutoCSR):
         # Preamble / CRC
         if with_preamble_crc:
             # Preamble check.
-            rx_preamble = preamble.LiteEthMACPreambleChecker(dw)
+            rx_preamble = preamble.LiteEthMACPreambleChecker(datapath_dw)
             rx_preamble = ClockDomainsRenamer(cd_rx)(rx_preamble)
             self.submodules += rx_preamble
             rx_datapath.append(rx_preamble)
 
             # Preamble error counter.
             self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
-            self.preamble_errors = CSRStatus(32)
             self.comb += self.ps_preamble_error.i.eq(rx_preamble.error)
             self.sync += [
                 If(self.ps_preamble_error.o,
@@ -123,14 +124,13 @@ class LiteEthMACCore(Module, AutoCSR):
             ]
 
             # CRC check.
-            rx_crc = crc.LiteEthMACCRC32Checker(eth_phy_description(dw))
+            rx_crc = crc.LiteEthMACCRC32Checker(eth_phy_description(datapath_dw))
             rx_crc = BufferizeEndpoints({"sink": DIR_SINK})(rx_crc) # FIXME: Still required?
             rx_crc = ClockDomainsRenamer(cd_rx)(rx_crc)
             self.submodules += rx_crc
             rx_datapath.append(rx_crc)
 
             # CRC error counter.
-            self.crc_errors = CSRStatus(32)
             self.submodules.ps_crc_error = PulseSynchronizer(cd_rx, "sys")
             self.comb += self.ps_crc_error.i.eq(rx_crc.error),
             self.sync += [
@@ -141,7 +141,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Padding.
         if with_padding:
-            rx_padding = padding.LiteEthMACPaddingChecker(dw, 60)
+            rx_padding = padding.LiteEthMACPaddingChecker(datapath_dw, 60)
             rx_padding = ClockDomainsRenamer(cd_rx)(rx_padding)
             self.submodules += rx_padding
             rx_datapath.append(rx_padding)
