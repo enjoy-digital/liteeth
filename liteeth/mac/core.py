@@ -60,7 +60,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Padding
         if with_padding:
-            tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, 60)
+            tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, (eth_min_frame_length - eth_fcs_length))
             tx_padding = ClockDomainsRenamer(cd_tx)(tx_padding)
             self.submodules += tx_padding
             tx_datapath.append(tx_padding)
@@ -141,7 +141,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # Padding.
         if with_padding:
-            rx_padding = padding.LiteEthMACPaddingChecker(datapath_dw, 60)
+            rx_padding = padding.LiteEthMACPaddingChecker(datapath_dw, (eth_min_frame_length - eth_fcs_length))
             rx_padding = ClockDomainsRenamer(cd_rx)(rx_padding)
             self.submodules += rx_padding
             rx_datapath.append(rx_padding)

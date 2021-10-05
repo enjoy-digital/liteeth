@@ -36,7 +36,7 @@ class LiteEthARPTX(Module):
 
         # # #
 
-        packet_length = max(arp_header.length, eth_min_len)
+        packet_length = max(arp_header.length, arp_min_length)
         packet_words  = packet_length//(dw//8)
         counter       = Signal(max=packet_words, reset_less=True)
 
