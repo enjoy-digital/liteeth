@@ -32,7 +32,6 @@ class LiteEthMACCore(Module, AutoCSR):
         phy_dw  = phy.dw
         if core_dw < phy_dw:
             raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy_dw))
-
         if with_sys_datapath:
             cd_tx       = "sys"
             cd_rx       = "sys"
@@ -41,6 +40,8 @@ class LiteEthMACCore(Module, AutoCSR):
             cd_tx       = "eth_tx"
             cd_rx       = "eth_rx"
             datapath_dw = phy_dw
+        if isinstance(phy, LiteEthPHYModel):
+            with_preamble_crc = False # Disable Preamble/CRC with PHY Model for direct connection to the Ethernet tap.
 
         # CSRs.
         if with_preamble_crc:
