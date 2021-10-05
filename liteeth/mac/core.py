@@ -52,31 +52,27 @@ class LiteEthMACCore(Module, AutoCSR):
             def __init__(self):
                 self.pipeline = []
 
+            def add_cdc(self):
+                tx_cdc = stream.ClockDomainCrossing(eth_phy_description(core_dw),
+                    cd_from = "sys",
+                    cd_to   = "eth_tx",
+                    depth   = 32)
+                self.submodules += tx_cdc
+                self.pipeline.append(tx_cdc)
+
             def add_converter(self):
-                    # CHECKME: Order probably needs to be adapted based on core_dw/phy_dw ratio.
-                    # Cross Domain Crossing.
-                    tx_cdc = stream.ClockDomainCrossing(eth_phy_description(core_dw),
-                        cd_from = "sys",
-                        cd_to   = "eth_tx",
-                        depth   = 32)
-                    self.submodules += tx_cdc
-                    self.pipeline.append(tx_cdc)
+                tx_converter = stream.StrideConverter(
+                    description_from = eth_phy_description(core_dw),
+                    description_to   = eth_phy_description(phy_dw))
+                tx_converter = ClockDomainsRenamer("eth_tx")(tx_converter)
+                self.submodules += tx_converter
+                self.pipeline.append(tx_converter)
 
-                    # Converters.
-                    if core_dw != phy_dw:
-                        tx_converter = stream.StrideConverter(
-                            description_from = eth_phy_description(core_dw),
-                            description_to   = eth_phy_description(phy_dw))
-                        tx_converter = ClockDomainsRenamer("eth_tx")(tx_converter)
-                        self.submodules += tx_converter
-                        self.pipeline.append(tx_converter)
-
-                    # Delimiters.
-                    if core_dw != 8:
-                        tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
-                        tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
-                        self.submodules += tx_last_be
-                        self.pipeline.append(tx_last_be)
+            def add_last_be(self):
+                tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
+                tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
+                self.submodules += tx_last_be
+                self.pipeline.append(tx_last_be)
 
             def add_padding(self):
                 tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, (eth_min_frame_length - eth_fcs_length))
@@ -109,7 +105,12 @@ class LiteEthMACCore(Module, AutoCSR):
         tx_datapath = TXDatapath()
         tx_datapath.pipeline.append(self.sink)
         if not with_sys_datapath:
-            tx_datapath.add_converter()
+            # CHECKME: Verify converter/cdc order for the different cases.
+            tx_datapath.add_cdc()
+            if core_dw != phy_dw:
+                tx_datapath.add_converter()
+            if core_dw != 8:
+                tx_datapath.add_last_be()
         if with_padding:
             tx_datapath.add_padding()
         if with_preamble_crc:
@@ -117,7 +118,12 @@ class LiteEthMACCore(Module, AutoCSR):
             tx_datapath.add_preamble()
         tx_datapath.add_gap()
         if with_sys_datapath:
-            tx_datapath.add_converter()
+            # CHECKME: Verify converter/cdc order for the different cases.
+            tx_datapath.add_cdc()
+            if core_dw != phy_dw:
+                tx_datapath.add_converter()
+            if core_dw != 8:
+                tx_datapath.add_last_be()
         tx_datapath.pipeline.append(phy)
         self.submodules.tx_datapath = tx_datapath
 
@@ -159,25 +165,21 @@ class LiteEthMACCore(Module, AutoCSR):
                 self.submodules += rx_padding
                 self.pipeline.append(rx_padding)
 
+            def add_last_be(self):
+                rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
+                rx_last_be = ClockDomainsRenamer("eth_rx")(rx_last_be)
+                self.submodules += rx_last_be
+                self.pipeline.append(rx_last_be)
+
             def add_converter(self):
-                # CHECKME: Order probably needs to be adapted based on core_dw/phy_dw ratio.
-                # Delimiters.
-                if core_dw != 8:
-                    rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
-                    rx_last_be = ClockDomainsRenamer("eth_rx")(rx_last_be)
-                    self.submodules += rx_last_be
-                    self.pipeline.append(rx_last_be)
+                rx_converter = stream.StrideConverter(
+                    description_from = eth_phy_description(phy_dw),
+                    description_to   = eth_phy_description(core_dw))
+                rx_converter = ClockDomainsRenamer("eth_rx")(rx_converter)
+                self.submodules += rx_converter
+                self.pipeline.append(rx_converter)
 
-                # Converters.
-                if core_dw != phy_dw:
-                    rx_converter = stream.StrideConverter(
-                        description_from = eth_phy_description(phy_dw),
-                        description_to   = eth_phy_description(core_dw))
-                    rx_converter = ClockDomainsRenamer("eth_rx")(rx_converter)
-                    self.submodules += rx_converter
-                    self.pipeline.append(rx_converter)
-
-                # Cross Domain Crossing
+            def add_cdc(self):
                 rx_cdc = stream.ClockDomainCrossing(eth_phy_description(core_dw),
                     cd_from = "eth_rx",
                     cd_to   = "sys",
@@ -191,13 +193,23 @@ class LiteEthMACCore(Module, AutoCSR):
         rx_datapath = RXDatapath()
         rx_datapath.pipeline.append(phy)
         if with_sys_datapath:
-            rx_datapath.add_converter()
+            if core_dw != 8:
+                rx_datapath.add_last_be()
+            # CHECKME: Verify converter/cdc order for the different cases.
+            if core_dw != phy_dw:
+                rx_datapath.add_converter()
+            rx_datapath.add_cdc()
         if with_preamble_crc:
             rx_datapath.add_preamble()
             rx_datapath.add_crc()
         if with_padding:
             rx_datapath.add_padding()
         if not with_sys_datapath:
-            rx_datapath.add_converter()
+            if core_dw != 8:
+                rx_datapath.add_last_be()
+            # CHECKME: Verify converter/cdc order for the different cases.
+            if core_dw != phy_dw:
+                rx_datapath.add_converter()
+            rx_datapath.add_cdc()
         rx_datapath.pipeline.append(self.source)
         self.submodules.rx_datapath = rx_datapath
