@@ -22,16 +22,17 @@ class LiteEthMACCore(Module, AutoCSR):
                  with_sys_datapath = False,
                  with_preamble_crc = True,
                  with_padding      = True):
-        core_dw = dw
 
+        # Endpoints.
+        self.sink   = stream.Endpoint(eth_phy_description(dw))
+        self.source = stream.Endpoint(eth_phy_description(dw))
+
+        # Parameters.
+        core_dw = dw
         if core_dw < phy.dw:
             raise ValueError("Core data width({}) must be larger than PHY data width({})".format(core_dw, phy.dw))
 
-        rx_pipeline = [phy]
-        tx_pipeline = [phy]
-
         if with_sys_datapath:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
             cd_tx = "sys"
             cd_rx = "sys"
             dw = core_dw
@@ -40,30 +41,73 @@ class LiteEthMACCore(Module, AutoCSR):
             cd_rx = "eth_rx"
             dw = phy.dw
 
+        # TX Data-Path (Core --> PHY).
+        # ------------------------------------------------------------------------------------------
+        self.tx_datapath = tx_datapath = [phy]
+
+        # Early sys conversion.
+        if with_sys_datapath:
+            self.add_tx_converter(core_dw, phy.dw)
+
         # Interpacket gap
         tx_gap_inserter = gap.LiteEthMACGap(dw)
-        self.submodules += ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
-        tx_pipeline.append(tx_gap_inserter)
+        tx_gap_inserter = ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
+        self.submodules += tx_gap_inserter
+        tx_datapath.append(tx_gap_inserter)
 
         # Preamble / CRC
         if isinstance(phy, LiteEthPHYModel):
-            # In simulation, avoid CRC/Preamble to enable direct connection
-            # to the Ethernet tap.
+            # In simulation, avoid CRC/Preamble to enable direct connection to the Ethernet tap.
             self._preamble_crc = CSRStatus(reset=1)
         elif with_preamble_crc:
             self._preamble_crc = CSRStatus(reset=1)
 
-            # Preamble insert/check
+            # Preamble insert.
             preamble_inserter = preamble.LiteEthMACPreambleInserter(dw)
-            preamble_checker  = preamble.LiteEthMACPreambleChecker(dw)
-            self.submodules += ClockDomainsRenamer(cd_tx)(preamble_inserter)
-            self.submodules += ClockDomainsRenamer(cd_rx)(preamble_checker)
-            tx_pipeline.append(preamble_inserter)
-            rx_pipeline.append(preamble_checker)
+            preamble_inserter = ClockDomainsRenamer(cd_tx)(preamble_inserter)
+            self.submodules += preamble_inserter
+            tx_datapath.append(preamble_inserter)
+
+            # CRC insert.
+            crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(dw))
+            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc32_inserter)
+            crc32_inserter = ClockDomainsRenamer(cd_tx)(crc32_inserter)
+            self.submodules += crc32_inserter
+            tx_datapath.append(crc32_inserter)
+
+        # Padding
+        if with_padding:
+            padding_inserter = padding.LiteEthMACPaddingInserter(dw, 60)
+            padding_inserter = ClockDomainsRenamer(cd_tx)(padding_inserter)
+            self.submodules += padding_inserter
+            tx_datapath.append(padding_inserter)
+
+        # Late sys conversion.
+        if not with_sys_datapath:
+            self.add_tx_converter(core_dw, phy.dw)
+
+        # Data-Path.
+        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_datapath))
+        self.comb += self.sink.connect(self.tx_pipeline.sink)
+
+        # RX Data-Path (PHY --> Core).
+        # ------------------------------------------------------------------------------------------
+        self.rx_datapath = rx_datapath = [phy]
+
+        # Early sys conversion.
+        if with_sys_datapath:
+            self.add_rx_converter(core_dw, phy.dw)
+
+        # Preamble / CRC
+        if with_preamble_crc:
+            # Preamble check.
+            preamble_checker = preamble.LiteEthMACPreambleChecker(dw)
+            preamble_checker = ClockDomainsRenamer(cd_rx)(preamble_checker)
+            self.submodules += preamble_checker
+            rx_datapath.append(preamble_checker)
+
+            # Preamble error counter.
             self.submodules.ps_preamble_error = PulseSynchronizer(cd_rx, "sys")
-
-
-            # Preamble error counter
             self.preamble_errors = CSRStatus(32)
             self.comb += self.ps_preamble_error.i.eq(preamble_checker.error)
             self.sync += [
@@ -71,16 +115,14 @@ class LiteEthMACCore(Module, AutoCSR):
                     self.preamble_errors.status.eq(self.preamble_errors.status + 1))
             ]
 
-            # CRC insert/check
-            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Inserter(eth_phy_description(dw)))
-            crc32_checker  = BufferizeEndpoints({"sink": DIR_SINK})(crc.LiteEthMACCRC32Checker(eth_phy_description(dw)))
-            self.submodules += ClockDomainsRenamer(cd_tx)(crc32_inserter)
-            self.submodules += ClockDomainsRenamer(cd_rx)(crc32_checker)
+            # CRC check.
+            crc32_checker = crc.LiteEthMACCRC32Checker(eth_phy_description(dw))
+            crc32_checker = BufferizeEndpoints({"sink": DIR_SINK})(crc32_checker)
+            crc32_checker = ClockDomainsRenamer(cd_rx)(crc32_checker)
+            self.submodules += crc32_checker
+            rx_datapath.append(crc32_checker)
 
-            tx_pipeline.append(crc32_inserter)
-            rx_pipeline.append(crc32_checker)
-
-            # CRC error counter
+            # CRC error counter.
             self.crc_errors = CSRStatus(32)
             self.submodules.ps_crc_error = PulseSynchronizer(cd_rx, "sys")
             self.comb += self.ps_crc_error.i.eq(crc32_checker.error),
@@ -90,50 +132,67 @@ class LiteEthMACCore(Module, AutoCSR):
                 )
             ]
 
-        # Padding
+        # Padding.
         if with_padding:
-            padding_inserter = padding.LiteEthMACPaddingInserter(dw, 60)
-            padding_checker  = padding.LiteEthMACPaddingChecker(dw, 60)
-            self.submodules += ClockDomainsRenamer(cd_tx)(padding_inserter)
-            self.submodules += ClockDomainsRenamer(cd_rx)(padding_checker)
-            tx_pipeline.append(padding_inserter)
-            rx_pipeline.append(padding_checker)
+            padding_checker = padding.LiteEthMACPaddingChecker(dw, 60)
+            padding_checker = ClockDomainsRenamer(cd_rx)(padding_checker)
+            self.submodules += padding_checker
+            rx_datapath.append(padding_checker)
 
+        # Late sys conversion.
         if not with_sys_datapath:
-            self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
+            self.add_rx_converter(core_dw, phy.dw)
 
-        # Graph
-        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_pipeline))
-        self.submodules.rx_pipeline = stream.Pipeline(*rx_pipeline)
+        # Data-Path.
+        self.submodules.rx_pipeline = stream.Pipeline(*rx_datapath)
+        self.comb += self.rx_pipeline.source.connect(self.source)
 
-        self.sink, self.source = self.tx_pipeline.sink, self.rx_pipeline.source
-
-    def data_path_converter(self, tx_pipeline, rx_pipeline, dw, phy_dw):
-        # Delimiters
+    def add_tx_converter(self, dw, phy_dw):
+        # Delimiters.
         if dw != 8:
             tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
-            rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
-            self.submodules += ClockDomainsRenamer("eth_tx")(tx_last_be)
-            self.submodules += ClockDomainsRenamer("eth_rx")(rx_last_be)
-            tx_pipeline.append(tx_last_be)
-            rx_pipeline.append(rx_last_be)
+            tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
+            self.submodules += tx_last_be
+            self.tx_datapath.append(tx_last_be)
 
-        # Converters
+        # Converters.
         if dw != phy_dw:
             tx_converter = stream.StrideConverter(
                 description_from = eth_phy_description(dw),
                 description_to   = eth_phy_description(phy_dw))
+            tx_converter = ClockDomainsRenamer("eth_tx")(tx_converter)
+            self.submodules += tx_converter
+            self.tx_datapath.append(tx_converter)
+
+        # Cross Domain Crossing.
+        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+            cd_from = "sys",
+            cd_to   = "eth_tx",
+            depth   = 32)
+        self.submodules += tx_cdc
+        self.tx_datapath.append(tx_cdc)
+
+    def add_rx_converter(self, dw, phy_dw):
+        # Delimiters.
+        if dw != 8:
+            rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
+            rx_last_be = ClockDomainsRenamer("eth_rx")(rx_last_be)
+            self.submodules += rx_last_be
+            self.rx_datapath.append(rx_last_be)
+
+        # Converters.
+        if dw != phy_dw:
             rx_converter = stream.StrideConverter(
                 description_from = eth_phy_description(phy_dw),
                 description_to   = eth_phy_description(dw))
-            self.submodules += ClockDomainsRenamer("eth_tx")(tx_converter)
-            self.submodules += ClockDomainsRenamer("eth_rx")(rx_converter)
-            tx_pipeline.append(tx_converter)
-            rx_pipeline.append(rx_converter)
+            rx_converter = ClockDomainsRenamer("eth_rx")(rx_converter)
+            self.submodules += rx_converter
+            self.rx_datapath.append(rx_converter)
 
         # Cross Domain Crossing
-        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="sys",    cd_to="eth_tx", depth=32)
-        rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw), cd_from="eth_rx", cd_to="sys",    depth=32)
-        self.submodules += tx_cdc, rx_cdc
-        tx_pipeline.append(tx_cdc)
-        rx_pipeline.append(rx_cdc)
+        rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+            cd_from = "eth_rx",
+            cd_to   = "sys",
+            depth   = 32)
+        self.submodules += rx_cdc
+        self.rx_datapath.append(rx_cdc)
