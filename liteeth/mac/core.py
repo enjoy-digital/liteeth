@@ -43,37 +43,14 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # TX Data-Path (Core --> PHY).
         # ------------------------------------------------------------------------------------------
-        self.tx_datapath = tx_datapath = [phy]
+        self.tx_datapath = tx_datapath = []
 
-        # Early sys conversion.
-        if with_sys_datapath:
+        # Sink.
+        tx_datapath.append(self.sink)
+
+        # Late sys conversion.
+        if not with_sys_datapath:
             self.add_tx_converter(core_dw, phy.dw)
-
-        # Interpacket gap
-        tx_gap_inserter = gap.LiteEthMACGap(dw)
-        tx_gap_inserter = ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
-        self.submodules += tx_gap_inserter
-        tx_datapath.append(tx_gap_inserter)
-
-        # Preamble / CRC
-        if isinstance(phy, LiteEthPHYModel):
-            # In simulation, avoid CRC/Preamble to enable direct connection to the Ethernet tap.
-            self._preamble_crc = CSRStatus(reset=1)
-        elif with_preamble_crc:
-            self._preamble_crc = CSRStatus(reset=1)
-
-            # Preamble insert.
-            preamble_inserter = preamble.LiteEthMACPreambleInserter(dw)
-            preamble_inserter = ClockDomainsRenamer(cd_tx)(preamble_inserter)
-            self.submodules += preamble_inserter
-            tx_datapath.append(preamble_inserter)
-
-            # CRC insert.
-            crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(dw))
-            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc32_inserter)
-            crc32_inserter = ClockDomainsRenamer(cd_tx)(crc32_inserter)
-            self.submodules += crc32_inserter
-            tx_datapath.append(crc32_inserter)
 
         # Padding
         if with_padding:
@@ -82,17 +59,47 @@ class LiteEthMACCore(Module, AutoCSR):
             self.submodules += padding_inserter
             tx_datapath.append(padding_inserter)
 
-        # Late sys conversion.
-        if not with_sys_datapath:
+        # Preamble / CRC
+        if isinstance(phy, LiteEthPHYModel):
+            # In simulation, avoid CRC/Preamble to enable direct connection to the Ethernet tap.
+            self._preamble_crc = CSRStatus(reset=1)
+        elif with_preamble_crc:
+            self._preamble_crc = CSRStatus(reset=1)
+            # CRC insert.
+            crc32_inserter = crc.LiteEthMACCRC32Inserter(eth_phy_description(dw))
+            crc32_inserter = BufferizeEndpoints({"sink": DIR_SINK})(crc32_inserter) # FIXME: Still required?
+            crc32_inserter = ClockDomainsRenamer(cd_tx)(crc32_inserter)
+            self.submodules += crc32_inserter
+            tx_datapath.append(crc32_inserter)
+
+            # Preamble insert.
+            preamble_inserter = preamble.LiteEthMACPreambleInserter(dw)
+            preamble_inserter = ClockDomainsRenamer(cd_tx)(preamble_inserter)
+            self.submodules += preamble_inserter
+            tx_datapath.append(preamble_inserter)
+
+        # Interpacket gap
+        tx_gap_inserter = gap.LiteEthMACGap(dw)
+        tx_gap_inserter = ClockDomainsRenamer(cd_tx)(tx_gap_inserter)
+        self.submodules += tx_gap_inserter
+        tx_datapath.append(tx_gap_inserter)
+
+        # Early sys conversion.
+        if with_sys_datapath:
             self.add_tx_converter(core_dw, phy.dw)
 
+        # PHY.
+        tx_datapath.append(phy)
+
         # Data-Path.
-        self.submodules.tx_pipeline = stream.Pipeline(*reversed(tx_datapath))
-        self.comb += self.sink.connect(self.tx_pipeline.sink)
+        self.submodules.tx_pipeline = stream.Pipeline(*tx_datapath)
 
         # RX Data-Path (PHY --> Core).
         # ------------------------------------------------------------------------------------------
-        self.rx_datapath = rx_datapath = [phy]
+        self.rx_datapath = rx_datapath = []
+
+        # PHY.
+        rx_datapath.append(phy)
 
         # Early sys conversion.
         if with_sys_datapath:
@@ -117,7 +124,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
             # CRC check.
             crc32_checker = crc.LiteEthMACCRC32Checker(eth_phy_description(dw))
-            crc32_checker = BufferizeEndpoints({"sink": DIR_SINK})(crc32_checker)
+            crc32_checker = BufferizeEndpoints({"sink": DIR_SINK})(crc32_checker) # FIXME: Still required?
             crc32_checker = ClockDomainsRenamer(cd_rx)(crc32_checker)
             self.submodules += crc32_checker
             rx_datapath.append(crc32_checker)
@@ -143,17 +150,20 @@ class LiteEthMACCore(Module, AutoCSR):
         if not with_sys_datapath:
             self.add_rx_converter(core_dw, phy.dw)
 
+        # Source.
+        rx_datapath.append(self.source)
+
         # Data-Path.
         self.submodules.rx_pipeline = stream.Pipeline(*rx_datapath)
-        self.comb += self.rx_pipeline.source.connect(self.source)
 
     def add_tx_converter(self, dw, phy_dw):
-        # Delimiters.
-        if dw != 8:
-            tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
-            tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
-            self.submodules += tx_last_be
-            self.tx_datapath.append(tx_last_be)
+        # Cross Domain Crossing.
+        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+            cd_from = "sys",
+            cd_to   = "eth_tx",
+            depth   = 32)
+        self.submodules += tx_cdc
+        self.tx_datapath.append(tx_cdc)
 
         # Converters.
         if dw != phy_dw:
@@ -164,13 +174,12 @@ class LiteEthMACCore(Module, AutoCSR):
             self.submodules += tx_converter
             self.tx_datapath.append(tx_converter)
 
-        # Cross Domain Crossing.
-        tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
-            cd_from = "sys",
-            cd_to   = "eth_tx",
-            depth   = 32)
-        self.submodules += tx_cdc
-        self.tx_datapath.append(tx_cdc)
+        # Delimiters.
+        if dw != 8:
+            tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
+            tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
+            self.submodules += tx_last_be
+            self.tx_datapath.append(tx_last_be)
 
     def add_rx_converter(self, dw, phy_dw):
         # Delimiters.
