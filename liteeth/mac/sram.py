@@ -133,63 +133,74 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         ]
         if timestamp is not None:
             # Latch Timestamp on start of packet.
-            self.sync += If(sink.length == 0, stat_fifo.sink.timestamp.eq(timestamp))
+            self.sync += If(length == 0, stat_fifo.sink.timestamp.eq(timestamp))
             self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
 
         # Memory.
+        wr_slot = slot
+        wr_addr = length[int(math.log2(dw//8)):]
+        wr_data = Signal(len(sink.data))
+
+        # Create a Memory per Slot.
         mems  = [None] * nslots
         ports = [None] * nslots
         for n in range(nslots):
-            mems[n] = Memory(dw, depth)
+            mems[n]  = Memory(dw, depth)
             ports[n] = mems[n].get_port(write_capable=True)
             self.specials += ports[n]
         self.mems = mems
-        data = reverse_bytes(sink.data) if endianness == "big" else sink.data
 
+        # Endianness Handling.
+        self.comb += wr_data.eq({"big": reverse_bytes(sink.data), "little": sink.data}[endianness])
+
+        # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
             cases[n] = [
-                ports[n].adr.eq(length[int(math.log2(dw//8)):]),
-                ports[n].dat_w.eq(data),
+                ports[n].adr.eq(wr_addr),
+                ports[n].dat_w.eq(wr_data),
                 If(sink.valid & write,
-                    ports[n].we.eq(0xf)
+                    ports[n].we.eq(2**len(ports[n].we) - 1)
                 )
             ]
-        self.comb += Case(slot, cases)
+        self.comb += Case(wr_slot, cases)
 
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
-        assert dw in [32, 64]
+        # Endpoint / Signals.
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
-        slotbits        = max(int(math.log2(nslots)), 1)
-        lengthbits      = bits_for(depth * dw//8)
-        self.lengthbits = lengthbits
+        # Parameters Check / Compute.
+        assert dw in [32, 64]
+        slotbits   = max(int(math.log2(nslots)), 1)
+        lengthbits = bits_for(depth * dw//8)
 
+        # CSRs.
         self._start  = CSR()
         self._ready  = CSRStatus()
         self._level  = CSRStatus(int(math.log2(nslots)) + 1)
         self._slot   = CSRStorage(slotbits,   reset_less=True)
         self._length = CSRStorage(lengthbits, reset_less=True)
 
+        # Optional Timestamp of the outgoing packets and expose value to software.
         if timestamp is not None:
-            # Timestamp the outgoing packets when a Timestamp source is provided
-            # and expose value to a software.
             timestampbits        = len(timestamp)
             self._timestamp_slot = CSRStatus(slotbits)
             self._timestamp      = CSRStatus(timestampbits)
 
+        # Event Manager.
         self.submodules.ev = EventManager()
         self.ev.done       = EventSourcePulse() if timestamp is None else EventSourceLevel()
         self.ev.finalize()
 
         # # #
 
-        start = Signal()
+        read   = Signal()
+        length = Signal(lengthbits)
 
-        # Command FIFO
+        # Command FIFO.
         cmd_fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += cmd_fifo
         self.comb += [
@@ -208,20 +219,6 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             self.comb += stat_fifo.source.ready.eq(self.ev.done.clear)
             self.comb += self._timestamp_slot.status.eq(stat_fifo.source.slot)
             self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
-
-        # Length computation
-        read_address = Signal(lengthbits)
-        counter      = Signal(lengthbits)
-
-        # FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            NextValue(counter, 0),
-            If(cmd_fifo.source.valid,
-                start.eq(1),
-                NextState("SEND")
-            )
-        )
 
         # Encode Length to last_be.
         length_lsb = cmd_fifo.source.length[0:int(math.log2(dw//8))]
@@ -248,19 +245,28 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
                 })
             )
 
-        fsm.act("SEND",
+        # FSM.
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            If(cmd_fifo.source.valid,
+                read.eq(1),
+                NextValue(length, dw//8),
+                NextState("READ")
+            )
+        )
+        fsm.act("READ",
             source.valid.eq(1),
-            source.last.eq(counter >= (cmd_fifo.source.length - dw//8)),
-            read_address.eq(counter),
+            source.last.eq(length >= cmd_fifo.source.length),
             If(source.ready,
-                read_address.eq(counter + dw//8),
-                NextValue(counter, counter + dw//8),
+                read.eq(1),
+                NextValue(length, length + dw//8),
                 If(source.last,
-                    NextState("END")
+                    NextState("TERMINATE")
                 )
             )
         )
-        fsm.act("END",
+        fsm.act("TERMINATE",
+            NextValue(length, 0),
             self.ev.done.trigger.eq(1),
             cmd_fifo.source.ready.eq(1),
             NextState("IDLE")
@@ -268,32 +274,37 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
         if timestamp is not None:
             # Latch Timestamp on start of outgoing packet.
-            self.sync += If(start, stat_fifo.sink.timestamp.eq(timestamp))
+            self.sync += If(length == 0, stat_fifo.sink.timestamp.eq(timestamp))
             self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("END"))
             self.comb += stat_fifo.sink.slot.eq(cmd_fifo.source.slot)
             # Trigger event when Status FIFO has contents (Override FSM assignment).
             self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid)
 
-        # Memory
+        # Memory.
         rd_slot = cmd_fifo.source.slot
+        rd_addr = Signal(lengthbits)
+        rd_data = Signal(len(source.data))
+
+        # Create a Memory per Slot.
         mems    = [None]*nslots
         ports   = [None]*nslots
         for n in range(nslots):
             mems[n]  = Memory(dw, depth)
-            ports[n] = mems[n].get_port()
+            ports[n] = mems[n].get_port(has_re=True)
             self.specials += ports[n]
         self.mems = mems
-        data = Signal().like(source.data)
 
+        # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
-            self.comb += ports[n].adr.eq(read_address[int(math.log2(dw//8)):])
-            cases[n] = [data.eq(port.dat_r)]
+            self.comb += ports[n].re.eq(read)
+            self.comb += ports[n].adr.eq(length[int(math.log2(dw//8)):])
+            cases[n] = [rd_data.eq(port.dat_r)]
 
-        self.comb += [
-            Case(rd_slot, cases),
-            source.data.eq(reverse_bytes(data) if endianness == "big" else data),
-        ]
+        self.comb += Case(rd_slot, cases)
+
+        # Endianness Handling.
+        self.comb += source.data.eq({"big" : reverse_bytes(rd_data), "little": rd_data}[endianness])
 
 # MAC SRAM -----------------------------------------------------------------------------------------
 
