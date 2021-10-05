@@ -19,8 +19,8 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SI
 
 class LiteEthMACCore(Module, AutoCSR):
     def __init__(self, phy, dw,
+                 with_sys_datapath = False,
                  with_preamble_crc = True,
-                 sys_data_path     = True,
                  with_padding      = True):
         core_dw = dw
 
@@ -30,7 +30,7 @@ class LiteEthMACCore(Module, AutoCSR):
         rx_pipeline = [phy]
         tx_pipeline = [phy]
 
-        if sys_data_path:
+        if with_sys_datapath:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
             cd_tx = cd_rx = "sys"
             dw = core_dw
@@ -93,7 +93,7 @@ class LiteEthMACCore(Module, AutoCSR):
             tx_pipeline += [padding_inserter]
             rx_pipeline += [padding_checker]
 
-        if not sys_data_path:
+        if not with_sys_datapath:
             self.data_path_converter(tx_pipeline, rx_pipeline, core_dw, phy.dw)
 
         # Graph
