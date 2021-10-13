@@ -51,7 +51,11 @@ class LiteEthARPTX(Module):
         )
         self.comb += [
             packetizer.sink.last.eq(counter == (packet_words - 1)),
-            packetizer.sink.last_be.eq(1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length%(dw//8)-1)),
+            If(packetizer.sink.last,
+                packetizer.sink.last_be.eq(
+                    1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length % (dw // 8) - 1)
+                ),
+            ),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
             packetizer.sink.hwsize.eq(6),
