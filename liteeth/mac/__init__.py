@@ -74,7 +74,6 @@ class LiteEthMAC(Module, AutoCSR):
                 self.submodules.crossbar     = LiteEthMACCrossbar(dw)
                 self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
             else:
-                assert dw == 32
                 self.comb += self.interface.source.connect(self.core.sink)
                 self.comb += self.core.source.connect(self.interface.sink)
 
