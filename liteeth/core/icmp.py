@@ -6,7 +6,8 @@
 
 from liteeth.common import *
 
-from litex.soc.interconnect.packet import Depacketizer, Packetizer, PacketFIFO
+from litex.soc.interconnect.packet import PacketFIFO
+from liteeth.packet import Depacketizer, Packetizer
 
 # ICMP TX ------------------------------------------------------------------------------------------
 
