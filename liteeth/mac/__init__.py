@@ -8,6 +8,7 @@ from liteeth.common import *
 from liteeth.mac.common import *
 from liteeth.mac.core import LiteEthMACCore
 from liteeth.mac.wishbone import LiteEthMACWishboneInterface
+from litex.soc.interconnect.stream import Buffer
 
 # MAC ----------------------------------------------------------------------------------------------
 
@@ -50,7 +51,8 @@ class LiteEthMAC(Module, AutoCSR):
             self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
             wishbone_interface = LiteEthMACWishboneInterface(
-                dw         = dw,
+                # The dw has to be at least the wb data width
+                dw=dw if dw != 8 else 32,
                 nrxslots   = nrxslots,
                 ntxslots   = ntxslots,
                 endianness = endianness,
@@ -69,11 +71,13 @@ class LiteEthMAC(Module, AutoCSR):
             self.ev, self.bus = self.interface.sram.ev, self.interface.bus
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
             if interface == "hybrid":
-                assert dw == 8
                 # Hardware MAC
-                self.submodules.crossbar     = LiteEthMACCrossbar(dw)
-                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
+                self.submodules.crossbar = LiteEthMACCrossbar(dw)
+                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(
+                    self.core, self.crossbar, self.interface, dw, hw_mac
+                )
             else:
+                assert dw in [32, 64]
                 self.comb += self.interface.source.connect(self.core.sink)
                 self.comb += self.core.source.connect(self.interface.sink)
 
@@ -89,22 +93,30 @@ class LiteEthMACCoreCrossbar(Module):
 
         tx_pipe = []
         rx_pipe = []
+        if dw == 8:
+            tx_last_be = last_be.LiteEthMACLastBEDownConverter(
+                eth_phy_description(phy_dw)
+            )
+            tx_pipe += [tx_last_be]
+            self.submodules += tx_last_be
 
-        tx_last_be = last_be.LiteEthMACTXLastBE(dw)
-        rx_last_be = last_be.LiteEthMACRXLastBE(dw)
-        tx_pipe += [tx_last_be]
-        rx_pipe += [rx_last_be]
-        self.submodules += tx_last_be, rx_last_be
-
-        tx_converter = stream.StrideConverter(
-            description_from=eth_phy_description(32),
-            description_to=eth_phy_description(dw))
-        rx_converter = stream.StrideConverter(
-            description_from=eth_phy_description(dw),
-            description_to=eth_phy_description(32))
-        rx_pipe += [rx_converter]
-        tx_pipe += [tx_converter]
-        self.submodules += tx_converter, rx_converter
+            tx_converter = stream.StrideConverter(
+                description_from=eth_phy_description(32),
+                description_to=eth_phy_description(dw),
+            )
+            rx_converter = stream.StrideConverter(
+                description_from=eth_phy_description(dw),
+                description_to=eth_phy_description(32),
+            )
+            rx_pipe += [rx_converter]
+            tx_pipe += [tx_converter]
+            self.submodules += tx_converter, rx_converter
+        else:
+            tx_buffer = Buffer(eth_phy_description(dw))
+            rx_buffer = Buffer(eth_phy_description(dw))
+            tx_pipe += [tx_buffer]
+            rx_pipe += [rx_buffer]
+            self.submodules += tx_buffer, rx_buffer
 
         # CPU packet processing
         self.submodules.tx_pipe = stream.Pipeline(*reversed(tx_pipe))
