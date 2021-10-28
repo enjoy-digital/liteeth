@@ -43,6 +43,10 @@ class Packetizer(Module):
         if header_words != 1:
             self.sync += If(sr_shift, sr.eq(sr[data_width:]))
 
+        source_last_a = Signal()
+        source_last_b = Signal()
+        source_last_s = Signal()
+
         # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm_from_idle = Signal()
@@ -52,7 +56,7 @@ class Packetizer(Module):
             If(sink.valid,
                 sink.ready.eq(0),
                 source.valid.eq(1),
-                source.last.eq(0),
+                source_last_a.eq(0),
                 source.data.eq(self.header[:data_width]),
                 If(source.valid & source.ready,
                     sr_load.eq(1),
@@ -67,7 +71,7 @@ class Packetizer(Module):
         )
         fsm.act("HEADER-SEND",
             source.valid.eq(1),
-            source.last.eq(0),
+            source_last_a.eq(0),
             source.data.eq(sr[min(data_width, len(sr)-1):]),
             If(source.valid & source.ready,
                 sr_shift.eq(1),
@@ -82,7 +86,7 @@ class Packetizer(Module):
         )
         fsm.act("ALIGNED-DATA-COPY",
             source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+            source_last_a.eq(sink.last),
             source.data.eq(sink.data),
             If(source.valid & source.ready,
                sink.ready.eq(1),
@@ -96,7 +100,7 @@ class Packetizer(Module):
             self.sync += If(source.ready, sink_d.eq(sink))
             fsm.act("UNALIGNED-DATA-COPY",
                 source.valid.eq(sink.valid | sink_d.last),
-                source.last.eq(sink.last | sink_d.last),
+                source_last_a.eq(sink.last | sink_d.last),
                 If(fsm_from_idle,
                     source.data[:max(header_leftover*8, 1)].eq(sr[min(header_offset_multiplier*data_width, len(sr)-1):])
                 ).Else(
@@ -161,7 +165,8 @@ class Packetizer(Module):
                 If(in_data_copy & sink.last & (sink_last_be > new_last_be),
                     # Right shift did not wrap around, need to delay the
                     # calculated last_be value and last by one cycle.
-                    source.last.eq(0),
+                    source_last_b.eq(0),
+                    source_last_s.eq(1),
                     source.last_be.eq(0),
                     If(source.ready & source.valid,
                         NextValue(delayed_last_be, new_last_be),
@@ -170,7 +175,8 @@ class Packetizer(Module):
                 ).Elif(in_data_copy,
                     # Output the calculated last_be value on the current packet
                     # already. For the next sink packet, ignore any last_be
-                    source.last.eq(sink.last),
+                    source_last_b.eq(sink.last),
+                    source_last_s.eq(1),
                     source.last_be.eq(new_last_be),
                 ),
                 If(in_data_copy,
@@ -182,13 +188,22 @@ class Packetizer(Module):
 
             self.last_be_fsm.act("DELAYED",
                 # Output the delayed last and last_be signals
-                source.last.eq(1),
+                source_last_b.eq(1),
+                source_last_s.eq(1),
                 source.last_be.eq(delayed_last_be),
                 sink.ready.eq(0),
                 If(source.ready,
                     NextState("DEFAULT"),
                 ),
             )
+
+        self.comb += [
+            If(source_last_s,
+                source.last.eq(source_last_b),
+            ).Else(
+                source.last.eq(source_last_a),
+            )
+        ]
 
         # Error.
         if hasattr(sink, "error") and hasattr(source, "error"):
@@ -229,6 +244,10 @@ class Depacketizer(Module):
         self.comb += self.header.eq(sr)
         self.comb += header.decode(self.header, source)
 
+        source_last_a = Signal()
+        source_last_b = Signal()
+        source_last_s = Signal()
+
         # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm_from_idle = Signal()
@@ -258,7 +277,7 @@ class Depacketizer(Module):
         )
         fsm.act("ALIGNED-DATA-COPY",
             source.valid.eq(sink.valid | sink_d.last),
-            source.last.eq(sink.last | sink_d.last),
+            source_last_a.eq(sink.last | sink_d.last),
             sink.ready.eq(source.ready),
             source.data.eq(sink.data),
             If(source.valid & source.ready,
@@ -272,7 +291,7 @@ class Depacketizer(Module):
             self.sync += If(sink.valid & sink.ready, sink_d.eq(sink))
             fsm.act("UNALIGNED-DATA-COPY",
                 source.valid.eq(sink.valid | sink_d.last),
-                source.last.eq(sink_d.last),
+                source_last_a.eq(sink_d.last),
                 sink.ready.eq(source.ready & ~source.last),
                 source.data.eq(sink_d.data[header_leftover*8:]),
                 source.data[min((bytes_per_clk-header_leftover)*8, data_width-1):].eq(sink.data),
@@ -351,7 +370,8 @@ class Depacketizer(Module):
                 If(sink.valid & sink.last & (sink_last_be > new_last_be),
                     # last_be did wrap around. Need to delay the calculated
                     # last_be value and last by one cycle.
-                    source.last.eq(0),
+                    source_last_b.eq(0),
+                    source_last_s.eq(1),
                     source.last_be.eq(0),
                     # Normally just wait until a source bus transaction occurred
                     # (ready + valid) until the delayed last_be can be
@@ -369,7 +389,8 @@ class Depacketizer(Module):
                     ),
                 ).Elif(sink.last,
                     # Simply forward the calculated last_be value.
-                    source.last.eq(1),
+                    source_last_b.eq(1),
+                    source_last_s.eq(1),
                     source.last_be.eq(new_last_be),
                 ),
                 If(self.fsm.ongoing("ALIGNED-DATA-COPY") \
@@ -382,10 +403,19 @@ class Depacketizer(Module):
 
             self.last_be_fsm.act("DELAYED",
                 # Output the delayed last and last_be signals
-                source.last.eq(1),
+                source_last_b.eq(1),
+                source_last_s.eq(1),
                 source.last_be.eq(delayed_last_be),
                 sink.ready.eq(0),
                 If(source.ready & source.valid,
                     NextState("DEFAULT"),
                 ),
             )
+
+        self.comb += [
+            If(source_last_s,
+                source.last.eq(source_last_b),
+            ).Else(
+                source.last.eq(source_last_a),
+            ),
+        ]
