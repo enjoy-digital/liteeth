@@ -8,6 +8,7 @@ from liteeth.common import *
 from liteeth.mac.common import *
 from liteeth.mac.core import LiteEthMACCore
 from liteeth.mac.wishbone import LiteEthMACWishboneInterface
+from liteeth.converter import LiteEthConverterBidir
 from litex.soc.interconnect.stream import Buffer
 
 # MAC ----------------------------------------------------------------------------------------------
@@ -91,36 +92,14 @@ class LiteEthMACCoreCrossbar(Module):
         rx_ready = Signal()
         rx_valid = Signal()
 
-        tx_pipe = []
-        rx_pipe = []
-        if dw == 8:
-            tx_last_be = last_be.LiteEthMACLastBEDownConverter(
-                eth_phy_description(phy_dw)
-            )
-            tx_pipe += [tx_last_be]
-            self.submodules += tx_last_be
+        # Doesn't do anything if in & out are the same
+        self.submodules.converter = converter = LiteEthConverterBidir(
+            description_a = eth_phy_description(dw),
+            description_b = eth_phy_description(32 if dw == 8 else dw),
+        )
+        self.tx_pipe = converter.ba
+        self.rx_pipe = converter.ab
 
-            tx_converter = stream.StrideConverter(
-                description_from=eth_phy_description(32),
-                description_to=eth_phy_description(dw),
-            )
-            rx_converter = stream.StrideConverter(
-                description_from=eth_phy_description(dw),
-                description_to=eth_phy_description(32),
-            )
-            rx_pipe += [rx_converter]
-            tx_pipe += [tx_converter]
-            self.submodules += tx_converter, rx_converter
-        else:
-            tx_buffer = Buffer(eth_phy_description(dw))
-            rx_buffer = Buffer(eth_phy_description(dw))
-            tx_pipe += [tx_buffer]
-            rx_pipe += [rx_buffer]
-            self.submodules += tx_buffer, rx_buffer
-
-        # CPU packet processing
-        self.submodules.tx_pipe = stream.Pipeline(*reversed(tx_pipe))
-        self.submodules.rx_pipe = stream.Pipeline(*rx_pipe)
         # IP core packet processing
         self.submodules.packetizer   = LiteEthMACPacketizer(dw)
         self.submodules.depacketizer = LiteEthMACDepacketizer(dw)

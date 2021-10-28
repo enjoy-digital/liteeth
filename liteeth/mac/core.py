@@ -8,7 +8,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
-from liteeth.mac import gap, preamble, crc, padding, last_be
+from liteeth.mac import gap, preamble, crc, padding
+from liteeth import converter
 from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
@@ -70,7 +71,7 @@ class LiteEthMACCore(Module, AutoCSR):
                 self.pipeline.append(tx_converter)
 
             def add_last_be(self):
-                tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
+                tx_last_be = converter.LiteEthConverterLastBEDown(eth_phy_description(phy_dw))
                 tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
                 self.submodules += tx_last_be
                 self.pipeline.append(tx_last_be)
@@ -167,7 +168,7 @@ class LiteEthMACCore(Module, AutoCSR):
                 self.pipeline.append(rx_padding)
 
             def add_last_be(self):
-                rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
+                rx_last_be = converter.LiteEthConverterLastBEUp(eth_phy_description(phy_dw))
                 rx_last_be = ClockDomainsRenamer("eth_rx")(rx_last_be)
                 self.submodules += rx_last_be
                 self.pipeline.append(rx_last_be)
