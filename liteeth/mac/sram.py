@@ -23,7 +23,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         self.crc_error = Signal()
 
         # Parameters Check / Compute.
-        assert dw in [32, 64]
+        assert dw in [8, 16, 32, 64]
         slotbits   = max(int(math.log2(nslots)), 1)
         lengthbits = bits_for(depth * dw//8)
 
@@ -55,24 +55,16 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         sink.ready.reset = 1
 
         # Decode Length increment from from last_be.
-        if dw == 32:
-            self.comb += Case(sink.last_be, {
-                0b0001   : length_inc.eq(1),
-                0b0010   : length_inc.eq(2),
-                0b0100   : length_inc.eq(3),
-               "default" : length_inc.eq(4)
-            })
-        else:
-            self.comb += Case(sink.last_be, {
-                0b00000001 : length_inc.eq(1),
-                0b00000010 : length_inc.eq(2),
-                0b00000100 : length_inc.eq(3),
-                0b00001000 : length_inc.eq(4),
-                0b00010000 : length_inc.eq(5),
-                0b00100000 : length_inc.eq(6),
-                0b01000000 : length_inc.eq(7),
-                "default"  : length_inc.eq(8)
-            })
+        self.comb += Case(sink.last_be, {
+            0b00000001 : length_inc.eq(1),
+            0b00000010 : length_inc.eq(2),
+            0b00000100 : length_inc.eq(3),
+            0b00001000 : length_inc.eq(4),
+            0b00010000 : length_inc.eq(5),
+            0b00100000 : length_inc.eq(6),
+            0b01000000 : length_inc.eq(7),
+            "default"  : length_inc.eq(dw//8)
+        })
 
         # Status FIFO.
         stat_fifo_layout = [("slot", slotbits), ("length", lengthbits)]
@@ -173,7 +165,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # Parameters Check / Compute.
-        assert dw in [32, 64]
+        assert dw in [8, 16, 32, 64]
         slotbits   = max(int(math.log2(nslots)), 1)
         lengthbits = bits_for(depth * dw//8)
 
@@ -222,28 +214,18 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
         # Encode Length to last_be.
         length_lsb = cmd_fifo.source.length[0:int(math.log2(dw//8))]
-        if dw == 32:
-            self.comb += If(source.last,
-                Case(length_lsb, {
-                    1         : source.last_be.eq(0b0001),
-                    2         : source.last_be.eq(0b0010),
-                    3         : source.last_be.eq(0b0100),
-                    "default" : source.last_be.eq(0b1000),
-                })
-            )
-        else:
-            self.comb += If(source.last,
-                Case(length_lsb, {
-                    1         : source.last_be.eq(0b00000001),
-                    2         : source.last_be.eq(0b00000010),
-                    3         : source.last_be.eq(0b00000100),
-                    4         : source.last_be.eq(0b00001000),
-                    5         : source.last_be.eq(0b00010000),
-                    6         : source.last_be.eq(0b00100000),
-                    7         : source.last_be.eq(0b01000000),
-                    "default" : source.last_be.eq(0b10000000),
-                })
-            )
+        self.comb += If(source.last,
+            Case(length_lsb, {
+                1         : source.last_be.eq(0b00000001),
+                2         : source.last_be.eq(0b00000010),
+                3         : source.last_be.eq(0b00000100),
+                4         : source.last_be.eq(0b00001000),
+                5         : source.last_be.eq(0b00010000),
+                6         : source.last_be.eq(0b00100000),
+                7         : source.last_be.eq(0b01000000),
+                "default" : source.last_be.eq(2**(dw//8 - 1)),
+            })
+        )
 
         # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
