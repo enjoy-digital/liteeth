@@ -213,7 +213,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
 
         # Encode Length to last_be.
-        length_lsb = cmd_fifo.source.length[0:int(math.log2(dw//8))]
+        length_lsb = cmd_fifo.source.length[:int(math.log2(dw/8)) + 1]
         self.comb += If(source.last,
             Case(length_lsb, {
                 1         : source.last_be.eq(0b00000001),
