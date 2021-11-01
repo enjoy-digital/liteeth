@@ -69,7 +69,6 @@ class LiteEthMAC(Module, AutoCSR):
             self.ev, self.bus = self.interface.sram.ev, self.interface.bus
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
             if interface == "hybrid":
-                assert dw == 8
                 # Hardware MAC
                 self.submodules.crossbar     = LiteEthMACCrossbar(dw)
                 self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
@@ -87,39 +86,11 @@ class LiteEthMACCoreCrossbar(Module):
         rx_ready = Signal()
         rx_valid = Signal()
 
-        tx_pipe = []
-        rx_pipe = []
-
-        tx_last_be = last_be.LiteEthMACTXLastBE(dw)
-        rx_last_be = last_be.LiteEthMACRXLastBE(dw)
-        tx_pipe += [tx_last_be]
-        rx_pipe += [rx_last_be]
-        self.submodules += tx_last_be, rx_last_be
-
-        tx_converter = stream.StrideConverter(
-            description_from=eth_phy_description(32),
-            description_to=eth_phy_description(dw))
-        rx_converter = stream.StrideConverter(
-            description_from=eth_phy_description(dw),
-            description_to=eth_phy_description(32))
-        rx_pipe += [rx_converter]
-        tx_pipe += [tx_converter]
-        self.submodules += tx_converter, rx_converter
-
-        # CPU packet processing
-        self.submodules.tx_pipe = stream.Pipeline(*reversed(tx_pipe))
-        self.submodules.rx_pipe = stream.Pipeline(*rx_pipe)
         # IP core packet processing
         self.submodules.packetizer   = LiteEthMACPacketizer(dw)
         self.submodules.depacketizer = LiteEthMACDepacketizer(dw)
 
         self.comb += [
-            # CPU output path
-            # interface -> tx_pipe
-            interface.source.connect(self.tx_pipe.sink),
-            # CPU input path
-            # rx_pipe -> interface
-            self.rx_pipe.source.connect(interface.sink),
             # HW input path
             # depacketizer -> crossbar
             self.depacketizer.source.connect(crossbar.master.sink),
@@ -144,7 +115,7 @@ class LiteEthMACCoreCrossbar(Module):
                 hw_fifo.source.connect(hw_packetizer.sink),
                 hw_packetizer.source.connect(self.depacketizer.sink),
                 cpu_fifo.source.connect(cpu_packetizer.sink),
-                cpu_packetizer.source.connect(self.rx_pipe.sink),
+                cpu_packetizer.source.connect(interface.sink),
             ]
 
             # RX packetizer broadcast
@@ -162,19 +133,19 @@ class LiteEthMACCoreCrossbar(Module):
         else:
             # RX broadcast
             self.comb += [
-                rx_ready.eq(self.rx_pipe.sink.ready & self.depacketizer.sink.ready),
+                rx_ready.eq(interface.sink.ready & self.depacketizer.sink.ready),
                 rx_valid.eq(rx_ready & core.source.valid),
-                core.source.connect(self.rx_pipe.sink, omit={"ready", "valid"}),
+                core.source.connect(interface.sink, omit={"ready", "valid"}),
                 core.source.connect(self.depacketizer.sink, omit={"ready", "valid"}),
                 core.source.ready.eq(rx_ready),
-                self.rx_pipe.sink.valid.eq(rx_valid),
+                interface.sink.valid.eq(rx_valid),
                 self.depacketizer.sink.valid.eq(rx_valid),
             ]
 
         # TX arbiter
         self.submodules.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(self.tx_pipe.source.valid,
+            If(interface.source.valid,
                 NextState("WISHBONE")
             ).Else(
                 If(self.packetizer.source.valid,
@@ -183,7 +154,7 @@ class LiteEthMACCoreCrossbar(Module):
             ),
         )
         fsm.act("WISHBONE",
-            self.tx_pipe.source.connect(core.sink),
+            interface.source.connect(core.sink),
             If(core.sink.valid & core.sink.ready & core.sink.last,
                 NextState("IDLE")
             ),
