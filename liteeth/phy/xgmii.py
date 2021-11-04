@@ -310,9 +310,10 @@ class LiteEthPHYXGMII(Module, AutoCSR):
                  pads,
                  model=False,
                  dw=64,
-                 with_hw_init_reset=True):
+                 with_hw_init_reset=True,
+                 cd_eth_prefix="xgmii_"):
         self.dw = dw
-        self.cd_eth_tx, self.cd_eth_rx = "eth_tx", "eth_rx"
+        self.cd_eth_tx, self.cd_eth_rx = cd_eth_prefix + "eth_tx", cd_eth_prefix + "eth_rx"
         self.submodules.crg = LiteEthPHYXGMIICRG(clock_pads, model)
         self.submodules.tx = ClockDomainsRenamer(self.cd_eth_tx)(
             LiteEthPHYXGMIITX(pads, self.dw))
