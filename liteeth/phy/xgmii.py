@@ -311,7 +311,7 @@ class LiteEthPHYXGMII(Module, AutoCSR):
                  model=False,
                  dw=64,
                  with_hw_init_reset=True,
-                 cd_eth_prefix="xgmii_"):
+                 cd_eth_prefix=""):
         self.dw = dw
         self.cd_eth_tx, self.cd_eth_rx = cd_eth_prefix + "eth_tx", cd_eth_prefix + "eth_rx"
         self.submodules.crg = LiteEthPHYXGMIICRG(clock_pads, model)
