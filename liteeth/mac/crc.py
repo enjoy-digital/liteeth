@@ -360,7 +360,7 @@ class LiteEthMACCRCChecker(Module):
             # applies to the whole ethernet packet, all the bytes are marked as
             # containing an error. This way later reducing the data width
             # doesn't run into issues with missing the error
-            source.error.eq(sink.error | Replicate(crc.error, dw//8)),
+            source.error.eq(sink.error | Replicate(crc.error & sink.last, dw//8)),
             self.error.eq(sink.valid & sink.last & crc.error),
 
             If(sink.valid & sink.ready,
