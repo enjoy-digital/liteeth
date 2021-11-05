@@ -37,12 +37,13 @@ class LiteEthMACCore(Module, AutoCSR):
             cd_rx       = "sys"
             datapath_dw = core_dw
         else:
-            if type(phy.cd_eth_tx) is str:
-                cd_tx       = phy.cd_eth_tx
-                cd_rx       = phy.cd_eth_rx
-            elif type(phy.cd_eth_tx) is ClockDomain:
-                cd_tx       = phy.cd_eth_tx.name
-                cd_rx       = phy.cd_eth_rx.name
+            if hasattr(phy, cd_eth_tx):
+                if type(phy.cd_eth_tx) is str:
+                    cd_tx       = phy.cd_eth_tx
+                    cd_rx       = phy.cd_eth_rx
+                elif type(phy.cd_eth_tx) is ClockDomain:
+                    cd_tx       = phy.cd_eth_tx.name
+                    cd_rx       = phy.cd_eth_rx.name
             else:
                 cd_tx       = "eth_tx"
                 cd_rx       = "eth_rx"
