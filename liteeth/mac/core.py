@@ -40,9 +40,12 @@ class LiteEthMACCore(Module, AutoCSR):
             if type(phy.cd_eth_tx) is str:
                 cd_tx       = phy.cd_eth_tx
                 cd_rx       = phy.cd_eth_rx
-            else:
+            elif type(phy.cd_eth_tx) is ClockDomain:
                 cd_tx       = phy.cd_eth_tx.name
                 cd_rx       = phy.cd_eth_rx.name
+            else:
+                cd_tx       = "eth_tx"
+                cd_rx       = "eth_rx"
             datapath_dw = phy_dw
         if isinstance(phy, LiteEthPHYModel):
             with_preamble_crc = False # Disable Preamble/CRC with PHY Model for direct connection to the Ethernet tap.
