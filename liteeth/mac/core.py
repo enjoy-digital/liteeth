@@ -37,8 +37,12 @@ class LiteEthMACCore(Module, AutoCSR):
             cd_rx       = "sys"
             datapath_dw = core_dw
         else:
-            cd_tx       = phy.cd_eth_tx
-            cd_rx       = phy.cd_eth_rx
+            if type(phy.cd_eth_tx) is str:
+                cd_tx       = phy.cd_eth_tx
+                cd_rx       = phy.cd_eth_rx
+            else:
+                cd_tx       = phy.cd_eth_tx.name
+                cd_rx       = phy.cd_eth_rx.name
             datapath_dw = phy_dw
         if isinstance(phy, LiteEthPHYModel):
             with_preamble_crc = False # Disable Preamble/CRC with PHY Model for direct connection to the Ethernet tap.
