@@ -37,7 +37,7 @@ class LiteEthMACCore(Module, AutoCSR):
             cd_rx       = "sys"
             datapath_dw = core_dw
         else:
-            if hasattr(phy, cd_eth_tx):
+            if hasattr(phy, "cd_eth_tx") and hasattr(phy, "cd_eth_rx"):
                 if type(phy.cd_eth_tx) is str:
                     cd_tx       = phy.cd_eth_tx
                     cd_rx       = phy.cd_eth_rx
