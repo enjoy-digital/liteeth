@@ -182,52 +182,46 @@ class LiteEthEtherboneRecordDepacketizer(Depacketizer):
 
 
 class LiteEthEtherboneRecordReceiver(Module):
-    def __init__(self, buffer_depth=4):
+    def __init__(self):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_record_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
 
         # # #
 
-        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
-            payload_depth = buffer_depth,
-            param_depth   = 1,
-            buffered      = True
-        )
-        self.comb += sink.connect(fifo.sink)
 
         base_addr = Signal(32, reset_less=True)
         base_addr_update = Signal()
-        self.sync += If(base_addr_update, base_addr.eq(fifo.source.data))
+        self.sync += If(base_addr_update, base_addr.eq(sink.data))
 
         count = Signal(max=512, reset_less=True)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            fifo.source.ready.eq(1),
+            sink.ready.eq(1),
             NextValue(count, 0),
-            If(fifo.source.valid,
+            If(sink.valid,
                 base_addr_update.eq(1),
-                If(fifo.source.wcount,
+                If(sink.wcount,
                     NextState("RECEIVE_WRITES")
-                ).Elif(fifo.source.rcount,
+                ).Elif(sink.rcount,
                     NextState("RECEIVE_READS")
                 )
             )
         )
         fsm.act("RECEIVE_WRITES",
-            source.valid.eq(fifo.source.valid),
-            source.last.eq(count == fifo.source.wcount-1),
+            source.valid.eq(sink.valid),
+            source.last.eq(count == sink.wcount-1),
             source.last_be.eq(source.last << 3),
-            source.count.eq(fifo.source.wcount),
-            source.be.eq(fifo.source.byte_enable),
+            source.count.eq(sink.wcount),
+            source.be.eq(sink.byte_enable),
             source.addr.eq(base_addr[2:] + count),
             source.we.eq(1),
-            source.data.eq(fifo.source.data),
-            fifo.source.ready.eq(source.ready),
+            source.data.eq(sink.data),
+            sink.ready.eq(source.ready),
             If(source.valid & source.ready,
                 NextValue(count, count + 1),
                 If(source.last,
-                    If(fifo.source.rcount,
+                    If(sink.rcount,
                         NextState("RECEIVE_BASE_RET_ADDR")
                     ).Else(
                         NextState("IDLE")
@@ -237,19 +231,19 @@ class LiteEthEtherboneRecordReceiver(Module):
         )
         fsm.act("RECEIVE_BASE_RET_ADDR",
             NextValue(count, 0),
-            If(fifo.source.valid,
+            If(sink.valid,
                 base_addr_update.eq(1),
                 NextState("RECEIVE_READS")
             )
         )
         fsm.act("RECEIVE_READS",
-            source.valid.eq(fifo.source.valid),
-            source.last.eq(count == fifo.source.rcount-1),
+            source.valid.eq(sink.valid),
+            source.last.eq(count == sink.rcount-1),
             source.last_be.eq(source.last << 3),
-            source.count.eq(fifo.source.rcount),
+            source.count.eq(sink.rcount),
             source.base_addr.eq(base_addr),
-            source.addr.eq(fifo.source.data[2:]),
-            fifo.source.ready.eq(source.ready),
+            source.addr.eq(sink.data[2:]),
+            sink.ready.eq(source.ready),
             If(source.valid & source.ready,
                 NextValue(count, count + 1),
                 If(source.last,
@@ -318,7 +312,7 @@ class LiteEthEtherboneRecord(Module):
 
         # Receive record, decode it and generate mmap stream
         self.submodules.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
-        self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver(buffer_depth)
+        self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver()
         self.comb += [
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
@@ -485,7 +479,7 @@ class LiteEthEtherbone(Module):
 
         # Packets can be probe (etherbone discovering) or records with writes and reads
         self.submodules.probe  = probe = LiteEthEtherboneProbe()
-        self.submodules.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth)
+        self.submodules.record = record = LiteEthEtherboneRecord()
 
         # Arbitrate/dispatch probe/records packets
         dispatcher = Dispatcher(packet.source, [probe.sink, record.sink])
