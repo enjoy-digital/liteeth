@@ -75,11 +75,18 @@ class LiteEthEtherbonePacketDepacketizer(Depacketizer):
 
 
 class LiteEthEtherbonePacketRX(Module):
-    def __init__(self):
+    def __init__(self, buffer_depth=4):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(32))
-        self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
-
+        self.source = stream.Endpoint(eth_etherbone_packet_user_description(32))
+        source = stream.Endpoint(eth_etherbone_packet_user_description(32))
         # # #
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
+            payload_depth = 32 + buffer_depth, # Place for `Record` header and other user data
+            param_depth   = 1,
+            buffered      = True
+        )
+        self.comb += source.connect(fifo.sink)
+        self.comb += fifo.source.connect(self.source)
 
         self.submodules.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
         self.comb += sink.connect(depacketizer.sink)
@@ -119,9 +126,9 @@ class LiteEthEtherbonePacketRX(Module):
 
 
 class LiteEthEtherbonePacket(Module):
-    def __init__(self, udp, udp_port, cd="sys"):
+    def __init__(self, udp, udp_port, cd="sys", buffer_depth=4):
         self.submodules.tx = tx = LiteEthEtherbonePacketTX(udp_port)
-        self.submodules.rx = rx = LiteEthEtherbonePacketRX()
+        self.submodules.rx = rx = LiteEthEtherbonePacketRX(buffer_depth=buffer_depth)
         udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
         self.comb += [
             tx.source.connect(udp_port.sink),
@@ -474,7 +481,7 @@ class LiteEthEtherboneWishboneSlave(Module):
 class LiteEthEtherbone(Module):
     def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
         # Encode/encode etherbone packets
-        self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
+        self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd, buffer_depth=buffer_depth)
 
         # Packets can be probe (etherbone discovering) or records with writes and reads
         self.submodules.probe  = probe = LiteEthEtherboneProbe()
