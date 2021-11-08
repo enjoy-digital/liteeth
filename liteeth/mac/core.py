@@ -95,8 +95,8 @@ class LiteEthMACCore(Module, AutoCSR):
                 self.pipeline.append(tx_preamble)
 
             def add_gap(self):
-                tx_gap = gap.LiteEthMACGap(datapath_dw)
-                tx_gap = ClockDomainsRenamer(cd_tx)(tx_gap)
+                tx_gap = gap.LiteEthMACGap(phy_dw)
+                tx_gap = ClockDomainsRenamer("eth_tx")(tx_gap)
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
 
@@ -117,7 +117,6 @@ class LiteEthMACCore(Module, AutoCSR):
         if with_preamble_crc:
             tx_datapath.add_crc()
             tx_datapath.add_preamble()
-        tx_datapath.add_gap()
         if with_sys_datapath:
             # CHECKME: Verify converter/cdc order for the different cases.
             tx_datapath.add_cdc()
@@ -125,6 +124,8 @@ class LiteEthMACCore(Module, AutoCSR):
                 tx_datapath.add_converter()
             if core_dw != 8:
                 tx_datapath.add_last_be()
+        # Gap insertion has to occurr in phy tx domain to ensure gap is correctly maintained
+        tx_datapath.add_gap()
         tx_datapath.pipeline.append(phy)
         self.submodules.tx_datapath = tx_datapath
 
