@@ -139,14 +139,21 @@ class LiteEthEtherboneProbe(Module):
 
         # # #
 
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
+            payload_depth = 1,
+            param_depth   = 1,
+            buffered      = False
+        )
+        self.comb += sink.connect(fifo.sink)
+
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(sink.valid,
+            If(fifo.source.valid,
                 NextState("PROBE_RESPONSE")
             )
         )
         fsm.act("PROBE_RESPONSE",
-            sink.connect(source),
+            fifo.source.connect(source),
             source.pf.eq(0),
             source.pr.eq(1),
             If(source.valid & source.ready,
