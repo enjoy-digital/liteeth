@@ -105,9 +105,9 @@ class LiteEthPHYRGMIIRX(Module):
         self.comb += last.eq(~pads.rx_ctl & rx_ctl_d)
         self.sync += [
             source.valid.eq(rx_ctl_d),
-            source.data.eq(rx_data),
-            source.last.eq(last),
+            source.data.eq(rx_data)
         ]
+        self.comb += source.last.eq(last)
 
 class LiteEthPHYRGMIICRG(Module, AutoCSR):
     def __init__(self, platform, clock_pads, with_hw_init_reset, hw_reset_cycles=256):
