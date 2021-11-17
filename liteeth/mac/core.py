@@ -125,7 +125,8 @@ class LiteEthMACCore(Module, AutoCSR):
             if core_dw != 8:
                 tx_datapath.add_last_be()
         # Gap insertion has to occurr in phy tx domain to ensure gap is correctly maintained
-        tx_datapath.add_gap()
+        if not getattr(phy, "integrated_ifg_inserter", False):
+            tx_datapath.add_gap()
         tx_datapath.pipeline.append(phy)
         self.submodules.tx_datapath = tx_datapath
 
