@@ -248,7 +248,7 @@ class LiteEthPHYXGMIITX(Module):
                # Branch A: we've transmitted at least the full 12 bytes
                # IFG. This means that we can unconditionally start transmission
                # on the first octet. In addition to that, we may have inserted
-               # some extra XGMII, thus we can reduce the deficit.
+               # some extra IFG, thus we can reduce the deficit.
                *unshifted_idle_transmit,
                If(current_dic - last_packet_rem < 0,
                    NextValue(current_dic, 0),
