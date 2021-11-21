@@ -187,6 +187,7 @@ def stream_collector(
         source,
         dest=[],
         expect_npackets=None,
+        stop_cond=None,
         seed=42,
         ready_rand=50,
         debug_print=False):
@@ -194,6 +195,10 @@ def stream_collector(
     `source`. If `source` has a `last_be` signal, that is respected
     properly.
 
+    `stop_cond` can be passed a function which is invoked whenever the
+    collector has a chance to cease operations (when a packet has been
+    fully read). If when invoked it returns true, this function will
+    exit.
     """
 
     prng = random.Random(seed)
@@ -219,6 +224,10 @@ def stream_collector(
 
     # Loop for collecting individual packets, separated by source.last
     while expect_npackets == None or len(dest) < expect_npackets:
+        if stop_cond is not None:
+            if stop_cond():
+                break
+
         # Buffer for the current packet
         collected_bytes = []
         param_signal_states = {}
