@@ -546,7 +546,6 @@ class TestXGMIIPHY(unittest.TestCase):
                         and not xgmii_tx_collector.collecting,
                 ),
             ],
-            vcd_name="xgmii_fuuuuuck.vcd",
         )
 
         self.assertTrue(
