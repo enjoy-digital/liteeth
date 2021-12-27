@@ -37,8 +37,8 @@ class DUT(Module):
         self.submodules.ip = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000)
 
 
-def main_generator(dut):
-    packet = MACPacket(ping_request)
+def send_overwrite_addresses(dump, dut):
+    packet = MACPacket(dump)
     packet.decode_remove_header()
     packet = IPPacket(packet)
     packet.decode()
@@ -46,9 +46,17 @@ def main_generator(dut):
     packet.decode()
     dut.icmp_model.send(packet)
 
-    for i in range(256):
+
+def main_generator(dut):
+    # We expect no ping reply to this
+    send_overwrite_addresses(icmp_unreachable_reply, dut)
+    for i in range(512):
         yield
 
+    # We expect a ping reply to this
+    send_overwrite_addresses(ping_request, dut)
+    for i in range(512):
+        yield
 
 class TestICMP(unittest.TestCase):
     def test(self):
