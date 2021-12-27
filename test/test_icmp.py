@@ -28,7 +28,7 @@ mac_address = 0x12345678abcd
 
 class DUT(Module):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=True)
+        self.submodules.phy_model = phy.PHY(8, debug=True, pcap_file='dump.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=True, loopback=False)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=True)
         self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address, debug=True, loopback=False)
