@@ -86,7 +86,9 @@ class LiteEthICMPRX(Module):
             If(depacketizer.source.valid,
                 NextState("DROP"),
                 If(sink.protocol == icmp_protocol,
-                    NextState("RECEIVE")
+                    If(depacketizer.source.msgtype == icmp_type_ping_request,
+                        NextState("RECEIVE")
+                    )
                 )
             )
         )
@@ -137,7 +139,7 @@ class LiteEthICMPEcho(Module):
         self.comb += [
             sink.connect(self.buffer.sink),
             self.buffer.source.connect(source, omit={"checksum"}),
-            self.source.msgtype.eq(0x0),
+            self.source.msgtype.eq(icmp_type_ping_reply),
             self.source.checksum.eq(self.buffer.source.checksum + 0x800 + (self.buffer.source.checksum >= 0xf800))
         ]
 
