@@ -68,13 +68,16 @@ class LiteEthUDP2StreamRX(Module):
 
         # # #
 
-        ip_address = convert_ip(ip_address)
-
         valid = Signal()
-        self.comb += valid.eq(
-            (sink.ip_address == ip_address) &
-            (sink.dst_port   == udp_port)
-        )
+        if ip_address:
+            ip_address = convert_ip(ip_address)
+            self.comb += valid.eq(
+                (sink.ip_address == ip_address) &
+                (sink.dst_port   == udp_port)
+            )
+        else:
+            self.comb += valid.eq(sink.dst_port == udp_port)
+
         if fifo_depth is None:
             self.comb += [
                 sink.connect(source, keep={"last", "ready", "data"}),
@@ -91,12 +94,19 @@ class LiteEthUDP2StreamRX(Module):
 # UDP Streamer -------------------------------------------------------------------------------------
 
 class LiteEthUDPStreamer(Module):
-    def __init__(self, udp, ip_address, udp_port, rx_fifo_depth=64, tx_fifo_depth=64):
-        self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, tx_fifo_depth)
+    def __init__(self, udp, ip_address=None, udp_port=None, rx_fifo_depth=64, tx_fifo_depth=64):
+
+        if ip_address:
+            self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, tx_fifo_depth)
+            self.comb += tx.source.connect(udp_port.sink)
+            self.sink = self.tx.sink
+
+        # Create stream_rx clock domain and run it from sys clock domain.
+        self.clock_domains.cd_stream_rx = ClockDomain("stream_rx")
+        self.comb += self.cd_stream_rx.clk.eq(ClockSignal("sys"))
+        self.comb += self.cd_stream_rx.rst.eq(ResetSignal("sys"))
+
         self.submodules.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, rx_fifo_depth)
-        udp_port = udp.crossbar.get_port(udp_port, dw=8)
-        self.comb += [
-            tx.source.connect(udp_port.sink),
-            udp_port.source.connect(rx.sink)
-        ]
-        self.sink, self.source = self.tx.sink, self.rx.source
+        udp_port = udp.crossbar.get_port(udp_port, dw=8, cd="stream_rx")
+        self.comb += udp_port.source.connect(rx.sink)
+        self.source = self.rx.source
