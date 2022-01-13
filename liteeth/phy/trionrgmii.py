@@ -27,9 +27,10 @@ class LiteEthPHYRGMIITX(Module):
         tx_data_h = []
         tx_data_l = []
         for n in range(4):
-                name = platform.get_pin_name(pads.tx_data[n])
-                pad  = platform.get_pin_location(pads.tx_data[n])
-                name = f"auto_{name}"
+                name    = platform.get_pin_name(pads.tx_data[n])
+                pad     = platform.get_pin_location(pads.tx_data[n])
+                io_prop = platform.get_pin_properties(pads.tx_data[n])
+                name    = f"auto_{name}"
 
                 tx_data_h.append(platform.add_iface_io(name + "_HI"))
                 tx_data_l.append(platform.add_iface_io(name + "_LO"))
@@ -39,6 +40,7 @@ class LiteEthPHYRGMIITX(Module):
                     "mode"              : "OUTPUT",
                     "name"              : name,
                     "location"          : pad,
+                    "properties"        : io_prop,
                     "size"              : 1,
                     "out_reg"           : "DDIO_RESYNC",
                     "out_clk_pin"       : "auto_eth_tx_clk",
@@ -71,9 +73,10 @@ class LiteEthPHYRGMIIRX(Module):
         rx_data_h = []
         rx_data_l = []
         for n in range(4):
-            name = platform.get_pin_name(pads.rx_data[n])
-            pad  = platform.get_pin_location(pads.rx_data[n])
-            name = f"auto_{name}"
+            name    = platform.get_pin_name(pads.rx_data[n])
+            pad     = platform.get_pin_location(pads.rx_data[n])
+            io_prop = platform.get_pin_properties(pads.rx_data[n])
+            name    = f"auto_{name}"
 
             rx_data_h.append(platform.add_iface_io(name + "_HI"))
             rx_data_l.append(platform.add_iface_io(name + "_LO"))
@@ -83,6 +86,7 @@ class LiteEthPHYRGMIIRX(Module):
                 "mode"              : "INPUT",
                 "name"              : name,
                 "location"          : pad,
+                "properties"        : io_prop,
                 "size"              : 1,
                 "in_reg"            : "DDIO_RESYNC",
                 "in_clk_pin"        : "auto_eth_rx_clk",
@@ -124,11 +128,12 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # -------
         eth_rx_clk = platform.add_iface_io("auto_eth_rx_clk")
         block = {
-            "type"     : "GPIO",
-            "size"     : 1,
-            "location" : platform.get_pin_location(clock_pads.rx)[0],
-            "name"     : platform.get_pin_name(eth_rx_clk),
-            "mode"     : "INPUT_CLK"
+            "type"       : "GPIO",
+            "size"       : 1,
+            "location"   : platform.get_pin_location(clock_pads.rx)[0],
+            "properties" : platform.get_pin_properties(clock_pads.rx),
+            "name"       : platform.get_pin_name(eth_rx_clk),
+            "mode"       : "INPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
         self.comb += self.cd_eth_rx.clk.eq(eth_rx_clk)
@@ -139,11 +144,12 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # TX Clk.
         # -------
         block = {
-            "type"     : "GPIO",
-            "size"     : 1,
-            "location" : platform.get_pin_location(clock_pads.tx)[0],
-            "name"     : "auto_eth_tx_clk_delayed",
-            "mode"     : "OUTPUT_CLK"
+            "type"       : "GPIO",
+            "size"       : 1,
+            "location"   : platform.get_pin_location(clock_pads.tx)[0],
+            "properties" : platform.get_pin_properties(clock_pads.tx),
+            "name"       : "auto_eth_tx_clk_delayed",
+            "mode"       : "OUTPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
 
