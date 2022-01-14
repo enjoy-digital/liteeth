@@ -82,14 +82,16 @@ class LiteEthUDP2StreamRX(Module):
         # Data-Path / Buffering (Optional).
         if fifo_depth is None:
             self.comb += [
-                sink.connect(source, keep={"last", "ready", "data"}),
+                sink.connect(source, keep={"last", "data"}),
                 source.valid.eq(sink.valid & valid),
+                sink.ready.eq(source.ready | ~valid)
             ]
         else:
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", 8)], fifo_depth)
             self.comb += [
-                sink.connect(fifo.sink, keep={"last", "ready", "data"}),
+                sink.connect(fifo.sink, keep={"last", "data"}),
                 fifo.sink.valid.eq(sink.valid & valid),
+                sink.ready.eq(fifo.sink.ready | ~valid),
                 fifo.source.connect(source)
             ]
 
