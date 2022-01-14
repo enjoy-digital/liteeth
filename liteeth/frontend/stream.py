@@ -62,19 +62,24 @@ class LiteEthStream2UDPTX(Module):
 # UDP to Stream RX ---------------------------------------------------------------------------------
 
 class LiteEthUDP2StreamRX(Module):
-    def __init__(self, ip_address, udp_port, fifo_depth=None):
+    def __init__(self, ip_address=None, udp_port=None, fifo_depth=None):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(8))
         self.source = source = stream.Endpoint(eth_tty_description(8))
 
         # # #
 
-        ip_address = convert_ip(ip_address)
+        valid = Signal(reset=1)
 
-        valid = Signal()
-        self.comb += valid.eq(
-            (sink.ip_address == ip_address) &
-            (sink.dst_port   == udp_port)
-        )
+        # Check UDP Port.
+        assert udp_port is not None
+        self.comb += If(sink.dst_port != udp_port, valid.eq(0))
+
+        # Check IP Address (Optional).
+        if ip_address is not None:
+            ip_address = convert_ip(ip_address)
+            self.comb += If(sink.ip_address != ip_address, valid.eq(0))
+
+        # Data-Path / Buffering (Optional).
         if fifo_depth is None:
             self.comb += [
                 sink.connect(source, keep={"last", "ready", "data"}),
