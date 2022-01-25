@@ -98,10 +98,10 @@ class LiteEthUDP2StreamRX(Module):
 # UDP Streamer -------------------------------------------------------------------------------------
 
 class LiteEthUDPStreamer(Module):
-    def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64):
+    def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64, cd="sys"):
         self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth)
         self.submodules.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, data_width, rx_fifo_depth)
-        udp_port = udp.crossbar.get_port(udp_port, dw=data_width)
+        udp_port = udp.crossbar.get_port(udp_port, dw=data_width, cd=cd)
         self.comb += [
             tx.source.connect(udp_port.sink),
             udp_port.source.connect(rx.sink)
