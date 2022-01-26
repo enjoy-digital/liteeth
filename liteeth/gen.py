@@ -52,6 +52,10 @@ _io = [
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
 
+    # IP/MAC Address.
+    ("mac_address", 0, Pins(48)),
+    ("ip_address",  0, Pins(32)),
+
     # Interrupt
     ("interrupt", 0, Pins(1)),
 
@@ -126,29 +130,31 @@ _io = [
 
     # UDP
     ("udp_sink", 0,
+        # Control
         Subsignal("valid",      Pins(1)),
         Subsignal("last",       Pins(1)),
         Subsignal("ready",      Pins(1)),
-        # param
+        # Param
         Subsignal("src_port",   Pins(16)),
         Subsignal("dst_port",   Pins(16)),
         Subsignal("ip_address", Pins(32)),
         Subsignal("length",     Pins(16)),
-        # payload
+        # Payload
         Subsignal("data",       Pins(32)),
         Subsignal("error",      Pins(4))
     ),
 
     ("udp_source", 0,
+        # Control
         Subsignal("valid",      Pins(1)),
         Subsignal("last",       Pins(1)),
         Subsignal("ready",      Pins(1)),
-        # param
+        # Param
         Subsignal("src_port",   Pins(16)),
         Subsignal("dst_port",   Pins(16)),
         Subsignal("ip_address", Pins(32)),
         Subsignal("length",     Pins(16)),
-        # payload
+        # Payload
         Subsignal("data",       Pins(32)),
         Subsignal("error",      Pins(4))
     ),
@@ -258,10 +264,17 @@ class UDPCore(PHYCore):
         PHYCore.__init__(self, platform, core_config)
 
         # Core -------------------------------------------------------------------------------------
+        mac_address = core_config.get("mac_address", None)
+        if mac_address is None:
+            mac_address = platform.request("mac_address") # Get MAC Address from IOs when not specified.
+        ip_address = core_config.get("ip_address", None)
+        if ip_address is None:
+            ip_address = platform.request("ip_address")   # Get IP Address from IOs when not specified.
         self.submodules.core = LiteEthUDPIPCore(self.ethphy,
-            mac_address = core_config["mac_address"],
-            ip_address  = core_config["ip_address"],
-            clk_freq    = core_config["clk_freq"])
+            mac_address = mac_address,
+            ip_address  = ip_address,
+            clk_freq    = core_config["clk_freq"]
+        )
 
         # UDP --------------------------------------------------------------------------------------
         udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
