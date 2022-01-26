@@ -48,9 +48,11 @@ from liteeth.core import LiteEthUDPIPCore
 # IOs ----------------------------------------------------------------------------------------------
 
 _io = [
+    # Clk / Rst
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
 
+    # Interrupt
     ("interrupt", 0, Pins(1)),
 
     # MII PHY Pads
@@ -324,9 +326,11 @@ def main():
     if  "device" not in core_config:
         core_config["device"] = ""
     if core_config["vendor"] == "lattice":
-        platform = LatticePlatform(core_config["device"], io=[], toolchain="diamond")
+        toolchain = core_config.get("toolchain", "diamond")
+        platform  = LatticePlatform(core_config["device"], io=[], toolchain=toolchain)
     elif core_config["vendor"] == "xilinx":
-        platform = XilinxPlatform(core_config["device"], io=[], toolchain="vivado")
+        toolchain = core_config.get("toolchain", "vivado")
+        platform  = XilinxPlatform(core_config["device"], io=[], toolchain=toolchain)
     else:
         raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
     platform.add_extension(_io)
