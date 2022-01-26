@@ -129,35 +129,20 @@ _io = [
     ),
 
     # UDP
-    ("udp_port", 0, Pins(16)),
+    ("udp_port",       0, Pins(16)),
+    ("udp_ip_address", 0, Pins(32)),
     ("udp_sink", 0,
-        # Control
-        Subsignal("valid",      Pins(1)),
-        Subsignal("last",       Pins(1)),
-        Subsignal("ready",      Pins(1)),
-        # Param
-        Subsignal("src_port",   Pins(16)),
-        Subsignal("dst_port",   Pins(16)),
-        Subsignal("ip_address", Pins(32)),
-        Subsignal("length",     Pins(16)),
-        # Payload
-        Subsignal("data",       Pins(32)),
-        Subsignal("error",      Pins(4))
+        Subsignal("valid", Pins(1)),
+        Subsignal("last",  Pins(1)),
+        Subsignal("ready", Pins(1)),
+        Subsignal("data",  Pins(32))
     ),
 
     ("udp_source", 0,
-        # Control
-        Subsignal("valid",      Pins(1)),
-        Subsignal("last",       Pins(1)),
-        Subsignal("ready",      Pins(1)),
-        # Param
-        Subsignal("src_port",   Pins(16)),
-        Subsignal("dst_port",   Pins(16)),
-        Subsignal("ip_address", Pins(32)),
-        Subsignal("length",     Pins(16)),
-        # Payload
-        Subsignal("data",       Pins(32)),
-        Subsignal("error",      Pins(4))
+        Subsignal("valid", Pins(1)),
+        Subsignal("last",  Pins(1)),
+        Subsignal("ready", Pins(1)),
+        Subsignal("data",  Pins(32)),
     ),
 ]
 
@@ -261,6 +246,8 @@ class MACCore(PHYCore):
 
 class UDPCore(PHYCore):
     def __init__(self, platform, core_config):
+        from liteeth.frontend.stream import LiteEthUDPStreamer
+
         # Config -----------------------------------------------------------------------------------
 
         # MAC Address.
@@ -276,11 +263,10 @@ class UDPCore(PHYCore):
             ip_address = platform.request("ip_address")
 
         # UDP Port.
-        port = core_config.get("port", None)
+        udp_port = core_config.get("udp_port", None)
         # Get UDP Port from IOs when not specified.
-        if port is None:
-            port = Signal()
-            port = platform.request("udp_port")
+        if udp_port is None:
+            udp_port = platform.request("udp_port")
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -293,44 +279,29 @@ class UDPCore(PHYCore):
         )
 
         # UDP --------------------------------------------------------------------------------------
-        udp_port = self.core.udp.crossbar.get_port(port, 8)
+        udp_sink     = self.platform.request("udp_sink")
+        udp_source   = self.platform.request("udp_source")
+        udp_streamer = LiteEthUDPStreamer(self.core.udp,
+            ip_address = platform.request("udp_ip_address"),
+            udp_port   = udp_port,
+            data_width = 32
+        )
+        self.submodules += udp_streamer
 
-        # Connect UDP Sink IOs to UDP Port.
-        udp_sink = self.platform.request("udp_sink")
+        # Connect UDP Sink IOs to UDP Steamer.
         self.comb += [
-            # Control
-            udp_port.sink.valid.eq(udp_sink.valid),
-            udp_port.sink.last.eq(udp_sink.last),
-            udp_sink.ready.eq(udp_port.sink.ready),
-
-            # Param
-            udp_port.sink.src_port.eq(udp_sink.src_port),
-            udp_port.sink.dst_port.eq(udp_sink.dst_port),
-            udp_port.sink.ip_address.eq(udp_sink.ip_address),
-            udp_port.sink.length.eq(udp_sink.length),
-
-            # Payload
-            udp_port.sink.data.eq(udp_sink.data),
-            udp_port.sink.error.eq(udp_sink.error)
+            udp_streamer.sink.valid.eq(udp_sink.valid),
+            udp_streamer.sink.last.eq(udp_sink.last),
+            udp_sink.ready.eq(udp_streamer.sink.ready),
+            udp_streamer.sink.data.eq(udp_sink.data)
         ]
 
-        # Connect UDP Port to UDP Source IOs.
-        udp_source = self.platform.request("udp_source")
+        # Connect UDP Streamer to UDP Source IOs.
         self.comb += [
-            # Control
-            udp_source.valid.eq(udp_port.source.valid),
-            udp_source.last.eq(udp_port.source.last),
-            udp_port.source.ready.eq(udp_source.ready),
-
-            # Param
-            udp_source.src_port.eq(udp_port.source.src_port),
-            udp_source.dst_port.eq(udp_port.source.dst_port),
-            udp_source.ip_address.eq(udp_port.source.ip_address),
-            udp_source.length.eq(udp_port.source.length),
-
-            # Payload
-            udp_source.data.eq(udp_port.source.data),
-            udp_source.error.eq(udp_port.source.error)
+            udp_source.valid.eq(udp_streamer.source.valid),
+            udp_source.last.eq(udp_streamer.source.last),
+            udp_streamer.source.ready.eq(udp_source.ready),
+            udp_source.data.eq(udp_streamer.source.data)
         ]
 
 # Build --------------------------------------------------------------------------------------------
