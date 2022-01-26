@@ -129,6 +129,7 @@ _io = [
     ),
 
     # UDP
+    ("udp_port", 0, Pins(16)),
     ("udp_sink", 0,
         # Control
         Subsignal("valid",      Pins(1)),
@@ -260,16 +261,31 @@ class MACCore(PHYCore):
 
 class UDPCore(PHYCore):
     def __init__(self, platform, core_config):
+        # Config -----------------------------------------------------------------------------------
+
+        # MAC Address.
+        mac_address = core_config.get("mac_address", None)
+        # Get MAC Address from IOs when not specified.
+        if mac_address is None:
+            mac_address = platform.request("mac_address")
+
+        # IP Address.
+        ip_address = core_config.get("ip_address", None)
+        # Get IP Address from IOs when not specified.
+        if ip_address is None:
+            ip_address = platform.request("ip_address")
+
+        # UDP Port.
+        port = core_config.get("port", None)
+        # Get UDP Port from IOs when not specified.
+        if port is None:
+            port = Signal()
+            port = platform.request("udp_port")
+
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
 
         # Core -------------------------------------------------------------------------------------
-        mac_address = core_config.get("mac_address", None)
-        if mac_address is None:
-            mac_address = platform.request("mac_address") # Get MAC Address from IOs when not specified.
-        ip_address = core_config.get("ip_address", None)
-        if ip_address is None:
-            ip_address = platform.request("ip_address")   # Get IP Address from IOs when not specified.
         self.submodules.core = LiteEthUDPIPCore(self.ethphy,
             mac_address = mac_address,
             ip_address  = ip_address,
@@ -277,8 +293,9 @@ class UDPCore(PHYCore):
         )
 
         # UDP --------------------------------------------------------------------------------------
-        udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
-        # XXX avoid manual connect
+        udp_port = self.core.udp.crossbar.get_port(port, 8)
+
+        # Connect UDP Sink IOs to UDP Port.
         udp_sink = self.platform.request("udp_sink")
         self.comb += [
             # Control
@@ -296,6 +313,8 @@ class UDPCore(PHYCore):
             udp_port.sink.data.eq(udp_sink.data),
             udp_port.sink.error.eq(udp_sink.error)
         ]
+
+        # Connect UDP Port to UDP Source IOs.
         udp_source = self.platform.request("udp_source")
         self.comb += [
             # Control
