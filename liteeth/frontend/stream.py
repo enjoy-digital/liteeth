@@ -31,7 +31,7 @@ class LiteEthStream2UDPTX(Module):
             level   = Signal(max=fifo_depth+1)
             counter = Signal(max=fifo_depth+1)
 
-            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth)
+            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
             self.comb += sink.connect(fifo.sink)
 
             self.submodules.fsm = fsm = FSM(reset_state="IDLE")
@@ -87,7 +87,7 @@ class LiteEthUDP2StreamRX(Module):
                 sink.ready.eq(source.ready | ~valid)
             ]
         else:
-            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth)
+            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
             self.comb += [
                 sink.connect(fifo.sink, keep={"last", "data"}),
                 fifo.sink.valid.eq(sink.valid & valid),
