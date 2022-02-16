@@ -110,7 +110,8 @@ class LiteEthIPTX(Module):
                 "last",
                 "last_be",
                 "protocol",
-                "data"}),
+                "data",
+            }),
             packetizer.sink.valid.eq(sink.valid & checksum.done),
             sink.ready.eq(packetizer.sink.ready & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
@@ -130,9 +131,15 @@ class LiteEthIPTX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(packetizer.source.valid,
-                If(sink.ip_address[28:] == mcast_ip_mask,
+                # Broadcast.
+                If(sink.ip_address[0:8] == bcast_ip_mask,
+                    NextValue(target_mac, bcast_mac_address),
+                    NextState("SEND")
+                # Multicast.
+                ).Elif(sink.ip_address[28:] == mcast_ip_mask,
                     NextValue(target_mac, Cat(sink.ip_address[:23], 0, mcast_oui)),
                     NextState("SEND")
+                # Unicast.
                 ).Else(
                     NextState("SEND_MAC_ADDRESS_REQUEST")
                 )

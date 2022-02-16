@@ -68,7 +68,7 @@ class LiteEthARPTX(Module):
                 packetizer.sink.target_mac.eq(sink.mac_address),
             ).Elif(sink.request,
                 packetizer.sink.opcode.eq(arp_opcode_request),
-                packetizer.sink.target_mac.eq(0xffffffffffff),
+                packetizer.sink.target_mac.eq(bcast_mac_address),
             )
         ]
         self.comb += [
