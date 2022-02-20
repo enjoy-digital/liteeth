@@ -47,7 +47,7 @@ class A7_1000BASEX(Module):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, qpll_channel, data_pads, sys_clk_freq):
+    def __init__(self, qpll_channel, data_pads, sys_clk_freq, rx_polarity=0, tx_polarity=0):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -569,7 +569,7 @@ class A7_1000BASEX(Module):
             o_RXELECIDLE                     = Open(),
             i_RXELECIDLEMODE                 = 0b11,
             # Receive Ports - RX Polarity Control Ports
-            i_RXPOLARITY                     = 0,
+            i_RXPOLARITY                     = rx_polarity,
             # Receive Ports -RX Initialization and Reset Ports
             o_RXRESETDONE                    = rx_reset_done,
             # TX Buffer Bypass Ports
@@ -672,7 +672,7 @@ class A7_1000BASEX(Module):
             i_TXCOMWAKE                      = 0,
             i_TXPDELECIDLEMODE               = 0,
             # Transmit Ports - TX Polarity Control Ports
-            i_TXPOLARITY                     = 0,
+            i_TXPOLARITY                     = tx_polarity,
             # Transmit Ports - TX Receiver Detection Ports
             i_TXDETECTRX                     = 0,
             # Transmit Ports - pattern Generator Ports
