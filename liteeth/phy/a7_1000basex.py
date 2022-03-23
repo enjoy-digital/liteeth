@@ -9,6 +9,7 @@ from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
+from liteeth.common import *
 from liteeth.phy.a7_gtp import *
 from liteeth.phy.pcs_1000basex import *
 
@@ -43,7 +44,7 @@ class Gearbox(Module):
         ]
 
 
-class A7_1000BASEX(Module):
+class A7_1000BASEX(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
@@ -63,6 +64,8 @@ class A7_1000BASEX(Module):
         # for specifying clock constraints. 62.5MHz clocks.
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
+
+        self.crg_reset = CSRStorage()
 
         # # #
 
@@ -782,7 +785,7 @@ class A7_1000BASEX(Module):
         self.comb += [
             qpll_channel.reset.eq(tx_init.qpll_reset),
             tx_init.qpll_lock.eq(qpll_channel.lock),
-            tx_reset.eq(tx_init.tx_reset)
+            tx_reset.eq(tx_init.tx_reset | self.crg_reset.storage)
         ]
         self.sync += tx_mmcm_reset.eq(~qpll_channel.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -791,7 +794,7 @@ class A7_1000BASEX(Module):
         self.submodules += rx_init
         self.comb += [
             rx_init.enable.eq(tx_init.done),
-            rx_reset.eq(rx_init.rx_reset),
+            rx_reset.eq(rx_init.rx_reset | self.crg_reset.storage),
 
             rx_init.rx_pma_reset_done.eq(rx_pma_reset_done),
             drpaddr.eq(rx_init.drpaddr),
