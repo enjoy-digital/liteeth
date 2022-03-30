@@ -60,6 +60,11 @@ arp_header_fields = {
 }
 arp_header = Header(arp_header_fields, arp_header_length, swap_field_bytes=True)
 
+# Broadcast Constants ------------------------------------------------------------------------------
+
+bcast_ip_mask     = 0xff
+bcast_mac_address = 0xffffffffffff
+
 # Multicast Constants ------------------------------------------------------------------------------
 
 mcast_oui     = C(0x01005e, 24)

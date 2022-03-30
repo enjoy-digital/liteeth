@@ -11,6 +11,7 @@ from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
+from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
 
@@ -45,7 +46,7 @@ class Gearbox(Module):
 
 
 # Configured for 200MHz transceiver reference clock
-class USP_1000BASEX(Module):
+class USP_1000BASEX(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
@@ -65,6 +66,8 @@ class USP_1000BASEX(Module):
         # for specifying clock constraints. 125MHz clocks.
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
+
+        self.crg_reset = CSRStorage()
 
         # # #
 
@@ -966,8 +969,8 @@ class USP_1000BASEX(Module):
             )
         ]
         self.comb += [
-            tx_reset.eq(pll_reset | ~pll_locked),
-            rx_reset.eq(pll_reset | ~pll_locked | pcs.restart)
+            tx_reset.eq(pll_reset | ~pll_locked | self.crg_reset.storage),
+            rx_reset.eq(pll_reset | ~pll_locked | pcs.restart | self.crg_reset.storage)
         ]
 
         # Gearbox and PCS connection

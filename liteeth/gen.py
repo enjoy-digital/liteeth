@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2022 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
 # SPDX-License-Identifier: BSD-2-Clause
@@ -48,9 +48,15 @@ from liteeth.core import LiteEthUDPIPCore
 # IOs ----------------------------------------------------------------------------------------------
 
 _io = [
+    # Clk / Rst
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
 
+    # IP/MAC Address.
+    ("mac_address", 0, Pins(48)),
+    ("ip_address",  0, Pins(32)),
+
+    # Interrupt
     ("interrupt", 0, Pins(1)),
 
     # MII PHY Pads
@@ -121,36 +127,30 @@ _io = [
         Subsignal("tx_ctl",  Pins(1)),
         Subsignal("tx_data", Pins(4))
     ),
-
-    # UDP
-    ("udp_sink", 0,
-        Subsignal("valid",      Pins(1)),
-        Subsignal("last",       Pins(1)),
-        Subsignal("ready",      Pins(1)),
-        # param
-        Subsignal("src_port",   Pins(16)),
-        Subsignal("dst_port",   Pins(16)),
-        Subsignal("ip_address", Pins(32)),
-        Subsignal("length",     Pins(16)),
-        # payload
-        Subsignal("data",       Pins(32)),
-        Subsignal("error",      Pins(4))
-    ),
-
-    ("udp_source", 0,
-        Subsignal("valid",      Pins(1)),
-        Subsignal("last",       Pins(1)),
-        Subsignal("ready",      Pins(1)),
-        # param
-        Subsignal("src_port",   Pins(16)),
-        Subsignal("dst_port",   Pins(16)),
-        Subsignal("ip_address", Pins(32)),
-        Subsignal("length",     Pins(16)),
-        # payload
-        Subsignal("data",       Pins(32)),
-        Subsignal("error",      Pins(4))
-    ),
 ]
+
+def get_udp_port_ios(name, data_width, dynamic_params=False):
+    return [
+        (f"{name}", 0,
+            # Parameters.
+            *([
+                Subsignal("udp_port",   Pins(16)),
+                Subsignal("ip_address", Pins(32)),
+            ] if dynamic_params else []),
+
+            # Sink.
+            Subsignal("sink_valid", Pins(1)),
+            Subsignal("sink_last",  Pins(1)),
+            Subsignal("sink_ready", Pins(1)),
+            Subsignal("sink_data",  Pins(data_width)),
+
+            # Source.
+            Subsignal("source_valid", Pins(1)),
+            Subsignal("source_last",  Pins(1)),
+            Subsignal("source_ready", Pins(1)),
+            Subsignal("source_data",  Pins(data_width)),
+        ),
+    ]
 
 # PHY Core -----------------------------------------------------------------------------------------
 
@@ -252,52 +252,89 @@ class MACCore(PHYCore):
 
 class UDPCore(PHYCore):
     def __init__(self, platform, core_config):
+        from liteeth.frontend.stream import LiteEthUDPStreamer
+
+        # Config -----------------------------------------------------------------------------------
+
+        # MAC Address.
+        mac_address = core_config.get("mac_address", None)
+        # Get MAC Address from IOs when not specified.
+        if mac_address is None:
+            mac_address = platform.request("mac_address")
+
+        # IP Address.
+        ip_address = core_config.get("ip_address", None)
+        # Get IP Address from IOs when not specified.
+        if ip_address is None:
+            ip_address = platform.request("ip_address")
+
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
 
         # Core -------------------------------------------------------------------------------------
         self.submodules.core = LiteEthUDPIPCore(self.ethphy,
-            mac_address = core_config["mac_address"],
-            ip_address  = core_config["ip_address"],
-            clk_freq    = core_config["clk_freq"])
+            mac_address = mac_address,
+            ip_address  = ip_address,
+            clk_freq    = core_config["clk_freq"]
+        )
 
-        # UDP --------------------------------------------------------------------------------------
-        udp_port = self.core.udp.crossbar.get_port(core_config["port"], 8)
-        # XXX avoid manual connect
-        udp_sink = self.platform.request("udp_sink")
-        self.comb += [
-            # Control
-            udp_port.sink.valid.eq(udp_sink.valid),
-            udp_port.sink.last.eq(udp_sink.last),
-            udp_sink.ready.eq(udp_port.sink.ready),
+        # UDP Ports --------------------------------------------------------------------------------
+        for name, port in core_config["udp_ports"].items():
+            # Parameters.
+            # -----------
 
-            # Param
-            udp_port.sink.src_port.eq(udp_sink.src_port),
-            udp_port.sink.dst_port.eq(udp_sink.dst_port),
-            udp_port.sink.ip_address.eq(udp_sink.ip_address),
-            udp_port.sink.length.eq(udp_sink.length),
+            # Use default Data-Width of 8-bit when not specified.
+            data_width = port.get("data_width", 8)
 
-            # Payload
-            udp_port.sink.data.eq(udp_sink.data),
-            udp_port.sink.error.eq(udp_sink.error)
-        ]
-        udp_source = self.platform.request("udp_source")
-        self.comb += [
-            # Control
-            udp_source.valid.eq(udp_port.source.valid),
-            udp_source.last.eq(udp_port.source.last),
-            udp_port.source.ready.eq(udp_source.ready),
+            # Used dynamic UDP-Port/IP-Address when not specified.
+            dynamic_params = port.get("ip_address", None) is None
 
-            # Param
-            udp_source.src_port.eq(udp_port.source.src_port),
-            udp_source.dst_port.eq(udp_port.source.dst_port),
-            udp_source.ip_address.eq(udp_port.source.ip_address),
-            udp_source.length.eq(udp_port.source.length),
+            # FIFO Depth.
+            tx_fifo_depth = port.get("tx_fifo_depth", 64)
+            rx_fifo_depth = port.get("rx_fifo_depth", 64)
 
-            # Payload
-            udp_source.data.eq(udp_port.source.data),
-            udp_source.error.eq(udp_port.source.error)
-        ]
+            # Create/Add IOs.
+            # ---------------
+            platform.add_extension(get_udp_port_ios(name,
+                data_width     = data_width,
+                dynamic_params = dynamic_params
+            ))
+            port_ios = platform.request(name)
+
+            # Create UDPStreamer.
+            # -------------------
+            if dynamic_params:
+                ip_address = port_ios.ip_address
+                udp_port   = port_ios.udp_port
+            else:
+                ip_address = port.get("ip_address")
+                udp_port   = port.get("udp_port")
+            udp_streamer = LiteEthUDPStreamer(self.core.udp,
+                ip_address    = ip_address,
+                udp_port      = udp_port,
+                data_width    = data_width,
+                tx_fifo_depth = tx_fifo_depth,
+                rx_fifo_depth = rx_fifo_depth
+            )
+            self.submodules += udp_streamer
+
+            # Connect IOs.
+            # ------------
+             # Connect UDP Sink IOs to UDP Steamer.
+            self.comb += [
+                udp_streamer.sink.valid.eq(port_ios.sink_valid),
+                udp_streamer.sink.last.eq(port_ios.sink_last),
+                port_ios.sink_ready.eq(udp_streamer.sink.ready),
+                udp_streamer.sink.data.eq(port_ios.sink_data)
+            ]
+
+            # Connect UDP Streamer to UDP Source IOs.
+            self.comb += [
+                port_ios.source_valid.eq(udp_streamer.source.valid),
+                port_ios.source_last.eq(udp_streamer.source.last),
+                udp_streamer.source.ready.eq(port_ios.source_ready),
+                port_ios.source_data.eq(udp_streamer.source.data)
+            ]
 
 # Build --------------------------------------------------------------------------------------------
 
@@ -324,9 +361,11 @@ def main():
     if  "device" not in core_config:
         core_config["device"] = ""
     if core_config["vendor"] == "lattice":
-        platform = LatticePlatform(core_config["device"], io=[], toolchain="diamond")
+        toolchain = core_config.get("toolchain", "diamond")
+        platform  = LatticePlatform(core_config["device"], io=[], toolchain=toolchain)
     elif core_config["vendor"] == "xilinx":
-        platform = XilinxPlatform(core_config["device"], io=[], toolchain="vivado")
+        toolchain = core_config.get("toolchain", "vivado")
+        platform  = XilinxPlatform(core_config["device"], io=[], toolchain=toolchain)
     else:
         raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
     platform.add_extension(_io)

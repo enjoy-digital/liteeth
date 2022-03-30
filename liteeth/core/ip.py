@@ -110,7 +110,8 @@ class LiteEthIPTX(Module):
                 "last",
                 "last_be",
                 "protocol",
-                "data"}),
+                "data",
+            }),
             packetizer.sink.valid.eq(sink.valid & checksum.done),
             sink.ready.eq(packetizer.sink.ready & checksum.done),
             packetizer.sink.target_ip.eq(sink.ip_address),
@@ -130,9 +131,15 @@ class LiteEthIPTX(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(packetizer.source.valid,
-                If(sink.ip_address[28:] == mcast_ip_mask,
+                # Broadcast.
+                If(sink.ip_address[0:8] == bcast_ip_mask,
+                    NextValue(target_mac, bcast_mac_address),
+                    NextState("SEND")
+                # Multicast.
+                ).Elif(sink.ip_address[28:] == mcast_ip_mask,
                     NextValue(target_mac, Cat(sink.ip_address[:23], 0, mcast_oui)),
                     NextState("SEND")
+                # Unicast.
                 ).Else(
                     NextState("SEND_MAC_ADDRESS_REQUEST")
                 )
@@ -186,7 +193,7 @@ class LiteEthIPV4Depacketizer(Depacketizer):
 
 
 class LiteEthIPRX(Module):
-    def __init__(self, mac_address, ip_address, dw=8):
+    def __init__(self, mac_address, ip_address, with_broadcast=True, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
 
@@ -209,7 +216,7 @@ class LiteEthIPRX(Module):
         fsm.act("IDLE",
             If(depacketizer.source.valid & checksum.done,
                 NextState("DROP"),
-                If((depacketizer.source.target_ip == ip_address) &
+                If(((depacketizer.source.target_ip == ip_address) | with_broadcast) &
                    (depacketizer.source.version == 0x4) &
                    (depacketizer.source.ihl == 0x5) &
                    (checksum.value == 0),
@@ -247,9 +254,9 @@ class LiteEthIPRX(Module):
 # IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(Module):
-    def __init__(self, mac, mac_address, ip_address, arp_table, dw=8):
+    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8):
         self.submodules.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
-        self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address, dw=dw)
+        self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [
             tx.source.connect(mac_port.sink),
