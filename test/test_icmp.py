@@ -28,6 +28,10 @@ mac_address = 0x12345678abcd
 
 class DUT(Module):
     def __init__(self):
+        self.clock_domains.cd_sys = ClockDomain()
+        self.clock_domains.eth_tx = ClockDomain()
+        self.clock_domains.eth_rx = ClockDomain()
+
         self.submodules.phy_model = phy.PHY(8, debug=True, pcap_file='dump.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=True, loopback=False)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=True)
