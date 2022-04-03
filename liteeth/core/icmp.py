@@ -35,7 +35,8 @@ class LiteEthICMPTX(Module):
             "msgtype",
             "code",
             "checksum",
-            "quench",
+            "ident",
+            "sequence",
             "data",
             "last_be"})
 
@@ -98,7 +99,8 @@ class LiteEthICMPRX(Module):
                 "msgtype",
                 "code",
                 "checksum",
-                "quench",
+                "ident",
+                "sequence",
                 "data",
                 "error",
                 "last_be"}),
