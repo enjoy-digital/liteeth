@@ -15,6 +15,14 @@ def print_phy(s):
     print_with_prefix(s, "[PHY]")
 
 
+def bytes_to_words(bs, width):
+    ws = []
+    n_words = len(bs) // width
+    for i in range(n_words):
+        tmp = bs[i * width: (i + 1) * width]
+        ws.append(merge_bytes(tmp[::-1]))
+    return ws
+
 # PHY Source ---------------------------------------------------------------------------------------
 
 class PHYSource(PacketStreamer):
@@ -31,6 +39,7 @@ class PHYSink(PacketLogger):
 
 LINKTYPE_ETHERNET = 1
 LINKTYPE_RAW = 101
+LINKTYPE_ETHERNET_MPACKET = 274
 
 class PHY(Module):
     def __init__(self, dw, debug=False, pcap_file=None):
@@ -48,7 +57,16 @@ class PHY(Module):
         self.cc = 0
         self.pcap_file = pcap_file
         if pcap_file is not None:
-            file_header = pack('IHHiIII', 0xa1b2c3d4, 2, 4, 0, 0, 65535, LINKTYPE_ETHERNET)
+            file_header = pack(
+                'IHHiIII',
+                0xa1b2c3d4,
+                2,
+                4,
+                0,
+                0,
+                65535,
+                LINKTYPE_ETHERNET_MPACKET
+            )
             with open(pcap_file, 'wb') as f:
                 f.write(file_header)
 
@@ -56,7 +74,6 @@ class PHY(Module):
         self.mac_callback = callback
 
     def send(self, datas):
-        packet = Packet(datas)
         if self.debug:
             r = ">>>>>>>>\n"
             r += "length " + str(len(datas)) + "\n"
@@ -65,31 +82,35 @@ class PHY(Module):
             print_phy(r)
 
         if self.pcap_file is not None:
-            ll = len(datas) - 8
+            ll = len(datas)  # - 8
             if ll > 0:
                 with open(self.pcap_file, 'ab') as f:
                     f.write(pack('IIII', self.cc, 0, ll, ll))
-                    f.write(bytes(datas)[8:])
+                    f.write(bytes(datas))
 
+        packet = Packet(bytes_to_words(datas, self.dw // 8))
         self.phy_source.send(packet)
 
     def receive(self):
         yield from self.phy_sink.receive()
+        p = self.phy_sink.packet  # Each item is a word of width self.dw
         if self.debug:
             r = "<<<<<<<<\n"
-            r += "length " + str(len(self.phy_sink.packet)) + "\n"
-            for d in self.phy_sink.packet:
-                r += "{:02x}".format(d)
+            r += "length " + str(len(p)) + "\n"
+            for d in p:
+                r += f'{d:0{self.dw // 4}x} '
             print_phy(r)
 
+        # Each item is a byte
+        self.packet = [b for w in p for b in split_bytes(w, self.dw // 8, "little")]
+
         if self.pcap_file is not None:
-            ll = len(self.phy_sink.packet) - 8
+            ll = len(self.packet)  # - 8
             if ll > 0:
                 with open(self.pcap_file, 'ab') as f:
                     f.write(pack('IIII', self.cc, 0, ll, ll))
-                    f.write(bytes(self.phy_sink.packet)[8:])
+                    f.write(bytes(self.packet))
 
-        self.packet = self.phy_sink.packet
 
     @passive
     def generator(self):

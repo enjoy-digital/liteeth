@@ -24,10 +24,17 @@ def carry_around_add(a, b):
 
 
 def checksum(msg):
+    '''
+    http://www.faqs.org/rfcs/rfc1071.html
+    '''
     s = 0
-    for i in range(0, len(msg), 2):
-        w = msg[i] + (msg[i+1] << 8)
+    for i in range(len(msg) // 2):
+        w = msg[2 * i] + (msg[2 * i + 1] << 8)
         s = carry_around_add(s, w)
+        # print(hex(w), hex(s))
+    if len(msg) % 2:  # Add the single remaining byte
+        s = carry_around_add(s, msg[-1])
+        # print(hex(msg[-1]), hex(s))
     return ~s & 0xffff
 
 

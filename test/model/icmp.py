@@ -32,6 +32,9 @@ class ICMPPacket(Packet):
             setattr(self, k, get_field_data(v, header))
 
     def encode(self):
+        '''
+        insert header bytes in front of the payload bytes
+        '''
         header = 0
         for k, v in sorted(icmp_header.fields.items()):
             value = merge_bytes(split_bytes(getattr(self, k),
@@ -40,6 +43,13 @@ class ICMPPacket(Packet):
             header += (value << v.offset+(v.byte*8))
         for d in split_bytes(header, icmp_header.length):
             self.insert(0, d)
+
+    def insert_checksum(self):
+        self[2] = 0
+        self[3] = 0
+        c = ip.checksum(self)
+        self[2] = c & 0xff
+        self[3] = (c >> 8) & 0xff
 
     def __repr__(self):
         r = "--------\n"
@@ -63,21 +73,22 @@ class ICMP(Module):
 
         self.ip.set_icmp_callback(self.callback)
 
-    def send(self, packet):
+    def send(self, packet, target_ip=0xFFFFFFFF):
         packet.encode()
+        packet.insert_checksum()
         if self.debug:
             print_icmp(">>>>>>>>")
             print_icmp(packet)
         ip_packet = ip.IPPacket(packet)
         ip_packet.version         = 0x4
         ip_packet.ihl             = 0x5
-        ip_packet.total_length    = len(packet) + ip_packet.ihl
+        ip_packet.total_length    = len(packet) + 20
         ip_packet.identification  = 0
         ip_packet.flags           = 0
         ip_packet.fragment_offset = 0
         ip_packet.ttl             = 0x80
         ip_packet.sender_ip       = self.ip_address
-        ip_packet.target_ip       = 0x12345678  # XXX
+        ip_packet.target_ip       = target_ip
         ip_packet.checksum        = 0
         ip_packet.protocol        = icmp_protocol
         self.ip.send(ip_packet)
