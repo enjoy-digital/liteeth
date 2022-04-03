@@ -47,13 +47,13 @@ class DUT(Module):
         self.clock_domains.eth_rx = ClockDomain()
         self.dw = dw
 
-        self.submodules.phy_model = phy.PHY(self.dw, debug=False, pcap_file='dump.pcap')
+        self.submodules.phy_model = phy.PHY(self.dw, debug=True, pcap_file='dump.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
         self.submodules.arp_model = arp.ARP(self.mac_model, model_mac, model_ip, debug=True)
         self.submodules.ip_model = ip.IP(self.mac_model, model_mac, model_ip, debug=False, loopback=False)
         self.submodules.icmp_model = ICMP(self.ip_model, model_ip, debug=True)
 
-        self.submodules.ip = LiteEthIPCore(self.phy_model, dut_mac, dut_ip, 100000)
+        self.submodules.ip = LiteEthIPCore(self.phy_model, dut_mac, dut_ip, 100000, dw=dw)
 
 
 def send_icmp(dut, msgtype=icmp_type_ping_request, code=0):
@@ -92,7 +92,7 @@ def main_generator(dut):
 
 class TestICMP(unittest.TestCase):
     def test(self):
-        dut = DUT()
+        dut = DUT(32)
         generators = {
             "sys" :   [main_generator(dut)],
             "eth_tx": [dut.phy_model.phy_sink.generator(),

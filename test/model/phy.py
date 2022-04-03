@@ -74,22 +74,21 @@ class PHY(Module):
         self.mac_callback = callback
 
     def send(self, datas):
+        n_bytes = len(datas)
         if self.debug:
             r = ">>>>>>>>\n"
-            r += "length " + str(len(datas)) + "\n"
+            r += "length " + str(n_bytes) + "\n"
             for d in datas:
                 r += "{:02x}".format(d)
             print_phy(r)
 
-        if self.pcap_file is not None:
-            ll = len(datas)  # - 8
-            if ll > 0:
-                with open(self.pcap_file, 'ab') as f:
-                    f.write(pack('IIII', self.cc, 0, ll, ll))
-                    f.write(bytes(datas))
+        if self.pcap_file is not None and n_bytes > 0:
+            with open(self.pcap_file, 'ab') as f:
+                f.write(pack('IIII', self.cc, 0, n_bytes, n_bytes))
+                f.write(bytes(datas))
 
         packet = Packet(bytes_to_words(datas, self.dw // 8))
-        self.phy_source.send(packet)
+        self.phy_source.send(packet, n_bytes)
 
     def receive(self):
         yield from self.phy_sink.receive()
