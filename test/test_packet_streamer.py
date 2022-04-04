@@ -16,9 +16,7 @@ class DUT(Module):
 
         self.dw = dw
         self.submodules.phy_source = PacketStreamer(
-            eth_phy_description(dw),
-            last_be=True,
-            dw=dw
+            eth_phy_description(dw), dw=dw
         )
         self.comb += [
             self.phy_source.source.connect(self.source)
@@ -27,19 +25,17 @@ class DUT(Module):
 
 def main_generator(dut):
     print()
-    p = Packet(range(8))
+    p = Packet(range(10))
     dut.phy_source.send(p)
-    # yield
-    # yield
-    # yield
-    yield (dut.source.ready.eq(1))
+    # dut.phy_source.send(p)
     for i in range(64):
+        yield (dut.source.ready.eq(i % 2))
         yield
 
 
 class TestPacketStreamer(unittest.TestCase):
     def test(self):
-        dut = DUT(24)
+        dut = DUT(64)
         generators = {
             "sys": [
                 main_generator(dut),
