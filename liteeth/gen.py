@@ -199,6 +199,10 @@ class PHYCore(SoCMini):
                 clock_pads         = platform.request("rgmii_eth_clocks"),
                 pads               = platform.request("rgmii_eth"),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
+        elif phy in [liteeth_phys.LiteEthPHYETHERNET]:
+            assert self.clk_freq >= 40e6
+            ethphy = phy(
+                pads               = platform.request("raw_eth"))
         else:
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
