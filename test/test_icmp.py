@@ -30,6 +30,7 @@ dut_mac = 0x12345678ffff
 
 got_ping_reply = False
 
+
 class ICMP(icmp.ICMP):
     def process(self, p):
         global got_ping_reply
@@ -49,9 +50,9 @@ class DUT(Module):
 
         self.submodules.phy_model = phy.PHY(self.dw, debug=True, pcap_file='dump.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
-        self.submodules.arp_model = arp.ARP(self.mac_model, model_mac, model_ip, debug=True)
+        self.submodules.arp_model = arp.ARP(self.mac_model, model_mac, model_ip, debug=False)
         self.submodules.ip_model = ip.IP(self.mac_model, model_mac, model_ip, debug=False, loopback=False)
-        self.submodules.icmp_model = ICMP(self.ip_model, model_ip, debug=True)
+        self.submodules.icmp_model = ICMP(self.ip_model, model_ip, debug=False)
 
         self.submodules.ip = LiteEthIPCore(self.phy_model, dut_mac, dut_ip, 100000, dw=dw)
 

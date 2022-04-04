@@ -14,26 +14,17 @@ from liteeth.common import *
 def print_phy(s):
     print_with_prefix(s, "[PHY]")
 
-
-def bytes_to_words(bs, width):
-    ws = []
-    n_words = len(bs) // width
-    for i in range(n_words):
-        tmp = bs[i * width: (i + 1) * width]
-        ws.append(merge_bytes(tmp[::-1]))
-    return ws
-
 # PHY Source ---------------------------------------------------------------------------------------
 
 class PHYSource(PacketStreamer):
     def __init__(self, dw):
-        PacketStreamer.__init__(self, eth_phy_description(dw))
+        PacketStreamer.__init__(self, eth_phy_description(dw), dw=dw)
 
 # PHY Sink -----------------------------------------------------------------------------------------
 
 class PHYSink(PacketLogger):
     def __init__(self, dw):
-        PacketLogger.__init__(self, eth_phy_description(dw))
+        PacketLogger.__init__(self, eth_phy_description(dw), dw=dw)
 
 # PHY ----------------------------------------------------------------------------------------------
 
@@ -79,7 +70,7 @@ class PHY(Module):
             r = ">>>>>>>>\n"
             r += "length " + str(n_bytes) + "\n"
             for d in datas:
-                r += "{:02x}".format(d)
+                r += f'{d:02x} '
             print_phy(r)
 
         if self.pcap_file is not None and n_bytes > 0:
@@ -87,21 +78,17 @@ class PHY(Module):
                 f.write(pack('IIII', self.cc, 0, n_bytes, n_bytes))
                 f.write(bytes(datas))
 
-        packet = Packet(bytes_to_words(datas, self.dw // 8))
-        self.phy_source.send(packet, n_bytes)
+        self.phy_source.send(Packet(datas))
 
     def receive(self):
         yield from self.phy_sink.receive()
-        p = self.phy_sink.packet  # Each item is a word of width self.dw
+        self.packet = p = self.phy_sink.packet  # Each item is a byte
         if self.debug:
             r = "<<<<<<<<\n"
             r += "length " + str(len(p)) + "\n"
             for d in p:
-                r += f'{d:0{self.dw // 4}x} '
+                r += f'{d:02x} '
             print_phy(r)
-
-        # Each item is a byte
-        self.packet = [b for w in p for b in split_bytes(w, self.dw // 8, "little")]
 
         if self.pcap_file is not None:
             ll = len(self.packet)  # - 8
