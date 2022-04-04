@@ -2,7 +2,7 @@
 # This file is part of LiteEth.
 #
 # Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
-# Copyright (c) 2021 Charles-Henri Mousset <ch.mousset@gmail.com>
+# Copyright (c) 2021-2022 Charles-Henri Mousset <ch.mousset@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -44,7 +44,7 @@ class LiteEthPHYETHERNETTX(Module):
         tx_bit = Signal()
         tx_cnt = Signal(2)
         tx_bit_strb = Signal()
-        tx = Signal(reset_less=True)
+        self.tx = tx = Signal(reset_less=True)
         txe = Signal(reset_less=True)
         self.comb += tx_bit_strb.eq(tx_cnt == 0b11)
         self.sync += [tx_cnt.eq(tx_cnt+1)]
@@ -100,7 +100,7 @@ class LiteEthPHYETHERNETTX(Module):
             )
         )
         fsm.act("TX",
-            tx.eq(tx_bit ^ tx_cnt[1]),
+            tx.eq((~tx_bit) ^ tx_cnt[1]),
             txe.eq(converter.sink.valid), # should stay at 1
             If(tx_bit_strb,
                 converter.sink.ready.eq(1),
@@ -119,58 +119,119 @@ class LiteEthPHYETHERNETRX(Module):
         # # #
 
         # Single Ended / Differential input
-        rx = Signal()
+        self.rx = rx = Signal()
+        self.rx_i = rx_i = Signal()
         if hasattr(pads, "rx"):
             self.comb += rx.eq(pads.rx)
         else:
             self.specials += DifferentialInput(pads.rd_p, pads.rd_n, rx)
+        self.specials += MultiReg(rx, rx_i)
 
-        # Manchester input, start of frame sync
-        mc_in_data = Signal(4)
-        mc_cnt = Signal(2)
-        bit_valid = Signal(reset_less=True)
-        bit_value = Signal(reset_less=True)
-        # Receive timeout / NLP and noise filter
-        timeout_cnt = Signal(3)
-        timeout = Signal(reset_less=True)
-        self.comb += [
-            bit_valid.eq((mc_in_data[-1] ^ mc_in_data[-2]) & (mc_cnt == 0b00) & (~timeout | bit_value)),
-            bit_value.eq(mc_in_data[-2]),
-            timeout.eq(timeout_cnt == 0),
-        ]
+        # Timing edge logic
+        edge = Signal()
+        timeout = Signal()
+        bit_period = Signal()
+        rx_i_old = Signal()
+        timeout_cnt_max = 5
+        bit_period_cnt_max = 2
+        timeout_cnt = Signal(max=timeout_cnt_max + 1)
+        bit_period_cnt = Signal(max=bit_period_cnt_max + 1)
+
         self.sync += [
-            mc_in_data.eq(Cat(rx, mc_in_data)),
-            If(bit_valid,
-                mc_cnt.eq(3),
-            ).Elif(mc_cnt,
-                mc_cnt.eq(mc_cnt-1),
+            rx_i_old.eq(rx_i),
+            If(edge,
+                bit_period_cnt.eq(0),
+                timeout_cnt.eq(0),
+            ).Else(
+                If(~timeout,
+                    timeout_cnt.eq(timeout_cnt + 1),
+                ),
+                If(~bit_period,
+                    bit_period_cnt.eq(bit_period_cnt + 1),
+                ),
             ),
-            If(bit_valid,
-                timeout_cnt.eq(0b111),
-            ).Elif(timeout_cnt,
-                timeout_cnt.eq(timeout_cnt - 1),
-            )
+        ]
+        self.comb += [
+            edge.eq(rx_i ^ rx_i_old),
+            bit_period.eq(bit_period_cnt == bit_period_cnt_max),
+            timeout.eq(timeout_cnt == timeout_cnt_max),
         ]
 
-        # bit to byte conversion
-        bit_cnt = Signal(3)
-        byte = Signal(8)
+        # noise detection
+        noise = Signal()
+        self.comb += noise.eq(edge & (bit_period_cnt == 0))
 
-        self.sync += [
-            self.source.valid.eq(0),
+        # Byte logic
+        bitcnt = Signal(max=8)
+        rx_inverted = Signal()
+        half_bit = Signal()
+        data_r = Signal(8)
+        self.comb += [
+            If(rx_inverted,
+                source.data.eq(~data_r),
+            ).Else(
+                source.data.eq(data_r),
+            ),
+            source.last_be.eq(1),
+        ]
+
+        self.submodules.fsm = fsm = FSM("SYNC")
+        fsm.act("IDLE",
+            # Wait for activity
+            If(edge,
+                NextState("SYNC"),
+            ),
+        )
+
+        fsm.act("SYNC",
+            NextValue(bitcnt, 0),
+            # Wait for the preamble to sync on byte-boundaries
+            If(edge,
+                NextValue(half_bit, ~half_bit),
+                If(~half_bit | bit_period,
+                    # shift data in
+                    NextValue(data_r, Cat(data_r[1:], rx_i)),
+                    NextValue(half_bit, 1),
+
+                    # detect preamble
+                    If(data_r == (eth_preamble >> 56),
+                        NextValue(rx_inverted, 0),
+                        NextState("RX"),
+                        source.valid.eq(1),
+                    ).Elif(data_r == ~(eth_preamble >> 56),
+                        NextValue(rx_inverted, 1),
+                        NextState("RX"),
+                        source.valid.eq(1),
+                    ),
+                ),
+            ),
+            If(timeout | noise,
+                NextValue(data_r, 0),
+            ),
+        )
+
+        fsm.act("RX",
+            If(edge,
+                NextValue(half_bit, ~half_bit),
+                If(~half_bit | bit_period,
+                    # shift data in
+                    NextValue(data_r, Cat(data_r[1:], rx_i)),
+                    NextValue(bitcnt, bitcnt + 1),
+                    NextValue(half_bit, 1),
+                    If(bitcnt == 7,
+                        source.valid.eq(1),
+                        NextValue(bitcnt, 0),
+                    ),
+                ),
+            ),
+            # Wait for a timeout to go into idle
             If(timeout,
-                bit_cnt.eq(1),
-            ).Elif(bit_valid,
-                bit_cnt.eq(bit_cnt+1),
-                byte.eq(Cat(byte[1:], bit_value)),
-                If(bit_cnt == 7,
-                    self.source.valid.eq(1),
-                )
+                source.valid.eq(1),
+                source.last.eq(1),
+                NextState("SYNC"),
             ),
-        ]
-        self.comb += [
-            self.source.data.eq(byte),
-        ]
+        )
+
 
 
 class LiteEthPHYETHERNETCRG(Module, AutoCSR):
