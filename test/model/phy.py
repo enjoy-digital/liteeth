@@ -18,7 +18,7 @@ def print_phy(s):
 
 class PHYSource(PacketStreamer):
     def __init__(self, dw):
-        PacketStreamer.__init__(self, eth_phy_description(dw), dw=dw)
+        PacketStreamer.__init__(self, eth_phy_description(dw), dw=dw, last_be=True)
 
 # PHY Sink -----------------------------------------------------------------------------------------
 
