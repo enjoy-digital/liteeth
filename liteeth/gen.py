@@ -293,6 +293,9 @@ class UDPCore(PHYCore):
             tx_fifo_depth = port.get("tx_fifo_depth", 64)
             rx_fifo_depth = port.get("rx_fifo_depth", 64)
 
+            # UDP payloads are data_width * send_level long.
+            send_level = port.get("send_level", 1)
+
             # Create/Add IOs.
             # ---------------
             platform.add_extension(get_udp_port_ios(name,
@@ -314,7 +317,8 @@ class UDPCore(PHYCore):
                 udp_port      = udp_port,
                 data_width    = data_width,
                 tx_fifo_depth = tx_fifo_depth,
-                rx_fifo_depth = rx_fifo_depth
+                rx_fifo_depth = rx_fifo_depth,
+                send_level    = send_level
             )
             self.submodules += udp_streamer
 

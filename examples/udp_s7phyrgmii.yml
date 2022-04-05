@@ -23,6 +23,7 @@ udp_ports:   {
     "data_width"    : 32,
     "tx_fifo_depth" : 64,
     "rx_fifo_depth" : 64,
+    "send_level"    : 32,
   },
   "udp1": {
     #"udp_port"      : , # Dynamic Params.

@@ -28,6 +28,7 @@ class LiteEthStream2UDPTX(Module):
                 source.length.eq(data_width//8)
             ]
         else:
+            assert send_level >= 1 and send_level <= fifo_depth//2
             level   = Signal(max=fifo_depth+1)
             counter = Signal(max=fifo_depth+1)
 
@@ -98,8 +99,8 @@ class LiteEthUDP2StreamRX(Module):
 # UDP Streamer -------------------------------------------------------------------------------------
 
 class LiteEthUDPStreamer(Module):
-    def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64, with_broadcast=True, cd="sys"):
-        self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth)
+    def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64, with_broadcast=True, cd="sys", send_level=1):
+        self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth, send_level)
         self.submodules.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, data_width, rx_fifo_depth, with_broadcast)
         udp_port = udp.crossbar.get_port(udp_port, dw=data_width, cd=cd)
         self.comb += [
