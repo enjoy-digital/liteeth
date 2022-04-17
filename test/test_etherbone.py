@@ -21,21 +21,22 @@ from litex.gen.sim import *
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
+DW = 32
 
 tc = unittest.TestCase()
 
 
 class DUT(Module):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=False, pcap_file='dump_wishbone.pcap')
+        self.submodules.phy_model = phy.PHY(DW, debug=False, pcap_file='dump_wishbone.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
         self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
         self.submodules.udp_model = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
         self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=True)
 
-        self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address + 1, ip_address + 1, 100000)
-        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 0x1234, buffer_depth=6)
+        self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address + 1, ip_address + 1, 100000, dw=DW)
+        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 0x1234, buffer_depth=8)
 
         self.submodules.sram = wishbone.SRAM(1024)
         self.submodules.interconnect = wishbone.InterconnectPointToPoint(self.etherbone.wishbone.bus, self.sram.bus)
