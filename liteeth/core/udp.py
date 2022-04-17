@@ -180,7 +180,7 @@ class LiteEthUDPRX(Module):
         count = Signal(16)
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            NextValue(count, 0),
+            NextValue(count, dw//8),
             If(depacketizer.source.valid,
                 NextState("DROP"),
                 If(sink.protocol == udp_protocol,
@@ -189,8 +189,23 @@ class LiteEthUDPRX(Module):
             )
         )
         fsm.act("RECEIVE",
-            depacketizer.source.connect(source, keep={"valid", "ready", "last_be"}),
-            source.last.eq(depacketizer.source.last | (count == (source.length - dw//8))),
+            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            source.last.eq(depacketizer.source.last | (count >= source.length)),
+            If(depacketizer.source.last_be,
+               source.last_be.eq(depacketizer.source.last_be),
+            ).Elif(
+              source.last,
+              Case(source.length & (dw//8 - 1), {
+                  1         : source.last_be.eq(0b00000001),
+                  2         : source.last_be.eq(0b00000010),
+                  3         : source.last_be.eq(0b00000100),
+                  4         : source.last_be.eq(0b00001000),
+                  5         : source.last_be.eq(0b00010000),
+                  6         : source.last_be.eq(0b00100000),
+                  7         : source.last_be.eq(0b01000000),
+                  "default" : source.last_be.eq(2**(dw//8 - 1)),
+              })
+            ),
             If(source.valid & source.ready,
                 NextValue(count, count + dw//8),
                 If(depacketizer.source.last,
