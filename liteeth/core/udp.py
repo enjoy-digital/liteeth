@@ -189,7 +189,7 @@ class LiteEthUDPRX(Module):
             )
         )
         fsm.act("RECEIVE",
-            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            depacketizer.source.connect(source, keep={"valid", "ready", "last_be"}),
             source.last.eq(depacketizer.source.last | (count == (source.length - dw//8))),
             If(source.valid & source.ready,
                 NextValue(count, count + dw//8),
