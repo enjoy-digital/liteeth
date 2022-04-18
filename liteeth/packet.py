@@ -97,7 +97,7 @@ class Packetizer(Module):
         )
         if not aligned:
             header_offset_multiplier = 1 if header_words == 1 else 2
-            self.sync += If(source.ready, sink_d.eq(sink))
+            self.sync += If(source.valid & source.ready, sink_d.eq(sink))
             fsm.act("UNALIGNED-DATA-COPY",
                 source.valid.eq(sink.valid | sink_d.last),
                 source_last_a.eq(sink.last | sink_d.last),
