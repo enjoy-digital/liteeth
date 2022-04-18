@@ -188,6 +188,7 @@ class LiteEthEtherboneRecordReceiver(Module):
 
         # # #
 
+        assert buffer_depth <= 256
         self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
             payload_depth = buffer_depth,
             param_depth   = 1,
@@ -266,6 +267,7 @@ class LiteEthEtherboneRecordSender(Module):
 
         # # #
 
+        assert buffer_depth <= 256
         self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_mmap_description(32),
             payload_depth = buffer_depth,
             param_depth   = 1,
