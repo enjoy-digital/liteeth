@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import unittest
+tc = unittest.TestCase()
 
 from migen import *
 
@@ -14,28 +15,24 @@ from litex.soc.interconnect.stream_sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
-
 from test.model import phy, mac, arp, ip, udp, etherbone
-
 from litex.gen.sim import *
+
 
 ip_address = 0x12345678
 mac_address = 0x12345678abcd
-DW = 64
-
-tc = unittest.TestCase()
 
 
 class DUT(Module):
-    def __init__(self):
-        self.submodules.phy_model = phy.PHY(DW, debug=False, pcap_file='dump_wishbone.pcap')
+    def __init__(self, dw):
+        self.submodules.phy_model = phy.PHY(dw, debug=False, pcap_file='dump_wishbone.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
         self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
         self.submodules.udp_model = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
         self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=True)
 
-        self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address + 1, ip_address + 1, 100000, dw=DW)
+        self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address + 1, ip_address + 1, 100000, dw=dw)
         self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 0x1234, buffer_depth=16)
 
         self.submodules.sram = wishbone.SRAM(1024)
@@ -129,8 +126,7 @@ def main_generator(dut):
 
 
 class TestEtherbone(unittest.TestCase):
-    def test_etherbone(self):
-        dut = DUT()
+    def do_test(self, dut):
         generators = {
             "sys" :   [main_generator(dut)],
             "eth_tx": [dut.phy_model.phy_sink.generator(),
@@ -141,3 +137,12 @@ class TestEtherbone(unittest.TestCase):
                   "eth_rx": 10,
                   "eth_tx": 10}
         run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+
+    def test_etherbone_dw_8(self):
+        self.do_test(DUT(8))
+
+    def test_etherbone_dw_32(self):
+        self.do_test(DUT(32))
+
+    def test_etherbone_dw_64(self):
+        self.do_test(DUT(64))
