@@ -46,7 +46,10 @@ def test_probe(dut):
     packet = etherbone.EtherbonePacket()
     packet.pf = 1
     packet.encode()
-    packet.bytes += bytes([0x00, 0x00, 0x00, 0x00])  # Add padding of 1 record
+    # TODO changing the number of padding bytes can break things with DW=64
+    # this is because there is no proper last_be support in
+    # stream.StrideConverter, which is needed by LiteEthUDPCrossbar.get_port()
+    packet.bytes += bytes([0x00] * 8)  # Add padding
 
     dut.etherbone_model.send(packet, ip_address + 1)
     yield from dut.etherbone_model.receive(400)
@@ -120,9 +123,9 @@ def test_reads(dut, writes_datas):
 
 def main_generator(dut):
     writes_datas = [((0xA + j) << 28) + j for j in range(6)]
-    # yield from test_probe(dut)
+    yield from test_probe(dut)
     yield from test_writes(dut, writes_datas)
-    # yield from test_reads(dut, writes_datas)
+    yield from test_reads(dut, writes_datas)
 
 
 class TestEtherbone(unittest.TestCase):
