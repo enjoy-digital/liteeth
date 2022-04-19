@@ -49,11 +49,11 @@ class DUT(Module):
         self.clock_domains.eth_rx = ClockDomain()
         self.dw = dw
 
-        self.submodules.phy_model = phy.PHY(self.dw, debug=True, pcap_file='dump.pcap')
-        self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
-        self.submodules.arp_model = arp.ARP(self.mac_model, model_mac, model_ip, debug=False)
-        self.submodules.ip_model = ip.IP(self.mac_model, model_mac, model_ip, debug=False, loopback=False)
-        self.submodules.icmp_model = ICMP(self.ip_model, model_ip, debug=False)
+        self.submodules.phy_model = phy.PHY(self.dw, pcap_file='dump_icmp.pcap', assertStall=True)
+        self.submodules.mac_model = mac.MAC(self.phy_model)
+        self.submodules.arp_model = arp.ARP(self.mac_model, model_mac, model_ip)
+        self.submodules.ip_model = ip.IP(self.mac_model, model_mac, model_ip)
+        self.submodules.icmp_model = ICMP(self.ip_model, model_ip, debug=True)
 
         self.submodules.ip = LiteEthIPCore(self.phy_model, dut_mac, dut_ip, 100000, dw=dw)
 
@@ -71,6 +71,11 @@ def send_icmp(dut, msgtype=icmp_type_ping_request, code=0):
 def main_generator(dut):
     global got_ping_reply
     tc = unittest.TestCase()
+
+    # push IP address into ARP table to speed up sim.
+    yield dut.ip.arp.table.cached_valid.eq(1)
+    yield dut.ip.arp.table.cached_ip_address.eq(model_ip)
+    yield dut.ip.arp.table.cached_mac_address.eq(model_mac)
 
     # We expect a ping reply to this (after ARP query)
     send_icmp(dut)
@@ -90,6 +95,8 @@ def main_generator(dut):
 
 class TestICMP(unittest.TestCase):
     def work(self, dw):
+        global got_ping_reply
+        got_ping_reply = False
         dut = DUT(dw)
         generators = {
             "sys" :   [main_generator(dut)],
@@ -97,9 +104,10 @@ class TestICMP(unittest.TestCase):
                        dut.phy_model.generator()],
             "eth_rx":  dut.phy_model.phy_source.generator()
         }
-        clocks = {"sys":    10,
-                  "eth_rx": 9,
-                  "eth_tx": 9}
+        # f_sys must be >= f_eth_*
+        clocks = {"sys":    9,
+                  "eth_rx": 10,
+                  "eth_tx": 10}
         run_simulation(dut, generators, clocks, vcd_name=f'test_icmp_{dw}.vcd')
 
     def test_8(self):

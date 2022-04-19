@@ -17,14 +17,14 @@ def print_phy(s):
 # PHY Source ---------------------------------------------------------------------------------------
 
 class PHYSource(PacketStreamer):
-    def __init__(self, dw):
-        PacketStreamer.__init__(self, eth_phy_description(dw), dw=dw)
+    def __init__(self, dw, assertStall):
+        PacketStreamer.__init__(self, eth_phy_description(dw), dw=dw, assertStall=assertStall)
 
 # PHY Sink -----------------------------------------------------------------------------------------
 
 class PHYSink(PacketLogger):
-    def __init__(self, dw):
-        PacketLogger.__init__(self, eth_phy_description(dw), dw=dw)
+    def __init__(self, dw, assertStall):
+        PacketLogger.__init__(self, eth_phy_description(dw), dw=dw, assertStall=assertStall)
 
 # PHY ----------------------------------------------------------------------------------------------
 
@@ -33,12 +33,12 @@ LINKTYPE_RAW = 101
 LINKTYPE_ETHERNET_MPACKET = 274
 
 class PHY(Module):
-    def __init__(self, dw, debug=False, pcap_file=None):
+    def __init__(self, dw, debug=False, pcap_file=None, assertStall=False):
         self.dw    = dw
         self.debug = debug
 
-        self.submodules.phy_source = PHYSource(dw)
-        self.submodules.phy_sink   = PHYSink(dw)
+        self.submodules.phy_source = PHYSource(dw, assertStall)
+        self.submodules.phy_sink   = PHYSink(dw, assertStall)
 
         self.source = self.phy_source.source
         self.sink   = self.phy_sink.sink
