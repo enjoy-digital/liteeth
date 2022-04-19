@@ -24,15 +24,22 @@ mac_address = 0x12345678abcd
 
 class DUT(Module):
     def __init__(self, dw):
-        assertStall = dw != 64
-        self.submodules.phy_model = phy.PHY(dw, assertStall=assertStall, pcap_file='dump_wishbone.pcap')
+        self.submodules.phy_model = phy.PHY(dw, assertStall=True, pcap_file='dump_wishbone.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address)
         self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address)
         self.submodules.udp_model = udp.UDP(self.ip_model, ip_address)
         self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
 
-        self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address + 1, ip_address + 1, 100000, with_icmp=False, dw=dw)
+        self.submodules.core = LiteEthUDPIPCore(
+            self.phy_model,
+            mac_address + 1,
+            ip_address + 1,
+            100000,
+            with_icmp=False,
+            dw=dw,
+            anti_underflow=4
+        )
         self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 0x1234, buffer_depth=8)
 
         self.submodules.sram = wishbone.SRAM(1024)
@@ -117,7 +124,7 @@ class TestEtherbone(unittest.TestCase):
         self.assertEqual(writes_datas, reads_datas)
 
     def main_generator(self, dut):
-        writes_datas = [((0xA + j) << 28) + j for j in range(6)]
+        writes_datas = [((0xA + j) << 24) + j for j in range(8)]
 
         # push IP address into ARP table to speed up sim.
         yield dut.core.arp.table.cached_valid.eq(1)
