@@ -24,7 +24,8 @@ mac_address = 0x12345678abcd
 
 class DUT(Module):
     def __init__(self, dw):
-        self.submodules.phy_model = phy.PHY(dw)  #, pcap_file='dump_wishbone.pcap')
+        assertStall = dw != 64
+        self.submodules.phy_model = phy.PHY(dw, assertStall=assertStall, pcap_file='dump_wishbone.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address)
         self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address)
@@ -140,7 +141,7 @@ class TestEtherbone(unittest.TestCase):
         clocks = {"sys":    10,
                   "eth_rx": 10,
                   "eth_tx": 10}
-        run_simulation(dut, generators, clocks)  #, vcd_name="sim.vcd")
+        run_simulation(dut, generators, clocks, vcd_name=f'test_etherbone.vcd')
 
     def test_etherbone_dw_8(self):
         self.do_test(DUT(8))
