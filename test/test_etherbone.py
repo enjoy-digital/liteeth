@@ -54,7 +54,7 @@ class TestEtherbone(unittest.TestCase):
         # TODO changing the number of padding bytes can break things with DW=64
         # this is because there is no proper last_be support in
         # stream.StrideConverter, which is needed by LiteEthUDPCrossbar.get_port()
-        packet.bytes += bytes([0x00] * 8)  # Add padding
+        packet.bytes += bytes([0x00] * 4)  # Add padding
 
         dut.etherbone_model.send(packet, ip_address + 1)
         yield from dut.etherbone_model.receive(400)
@@ -93,6 +93,9 @@ class TestEtherbone(unittest.TestCase):
             val = (yield dut.sram.mem[i])
             self.assertEqual(val, wd)
 
+        # Check for infinite packet send loop (crossbar bug)
+        self.assertEqual((yield dut.etherbone.record.receiver.fsm.state), 0)
+
     def do_reads(self, dut, writes_datas):
         reads_addrs = []
         for i, wd in enumerate(writes_datas):
@@ -118,13 +121,16 @@ class TestEtherbone(unittest.TestCase):
         dut.etherbone_model.send(packet)
         yield from dut.etherbone_model.receive(400)
 
+        # Check for infinite packet send loop (crossbar bug)
+        self.assertEqual((yield dut.etherbone.record.receiver.fsm.state), 0)
+
         reads_datas = dut.etherbone_model.rx_packet.records.pop().writes.get_datas()
 
         # check results
         self.assertEqual(writes_datas, reads_datas)
 
     def main_generator(self, dut):
-        writes_datas = [((0xA + j) << 24) + j for j in range(8)]
+        writes_datas = [((0xA + j) << 24) + j for j in range(4)]
 
         # push IP address into ARP table to speed up sim.
         yield dut.core.arp.table.cached_valid.eq(1)
@@ -134,8 +140,10 @@ class TestEtherbone(unittest.TestCase):
         with self.subTest("do_probe"):
             yield from self.do_probe(dut)
         with self.subTest("do_writes"):
+            yield from self.do_writes(dut, [writes_datas[0]])
             yield from self.do_writes(dut, writes_datas)
         with self.subTest("do_reads"):
+            yield from self.do_reads(dut, [writes_datas[0]])
             yield from self.do_reads(dut, writes_datas)
 
     def do_test(self, dut):
