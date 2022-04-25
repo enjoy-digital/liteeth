@@ -131,10 +131,10 @@ class LiteEthICMPEcho(Module):
 
         # # #
 
-        self.submodules.buffer = stream.SyncFIFO(
-            eth_icmp_user_description(dw),
-            128 // (dw // 8),
-            buffered=True
+        self.submodules.buffer = PacketFIFO(eth_icmp_user_description(dw),
+            payload_depth = 128//(dw//8),
+            param_depth   = 1,
+            buffered      = True
         )
         self.comb += [
             sink.connect(self.buffer.sink),
