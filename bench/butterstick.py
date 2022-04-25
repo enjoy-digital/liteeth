@@ -55,6 +55,50 @@ class BenchSoC(SoCCore):
             sys_clk_freq = sys_clk_freq
         )
 
+        # JTAGBone ---------------------------------------------------------------------------------
+        self.add_jtagbone()
+
+        # Analyzer ---------------------------------------------------------------------------------
+        from litescope import LiteScopeAnalyzer
+        ethcore   = self.ethcore_etherbone
+        etherbone = self.etherbone
+        self.submodules.analyzer = LiteScopeAnalyzer([
+            # MAC.
+            ethcore.mac.core.sink.valid,
+            ethcore.mac.core.sink.ready,
+            ethcore.mac.core.source.valid,
+            ethcore.mac.core.source.ready,
+
+            # ARP.
+            ethcore.arp.rx.sink.valid,
+            ethcore.arp.rx.sink.ready,
+            ethcore.arp.tx.source.valid,
+            ethcore.arp.tx.source.ready,
+
+            # IP.
+            ethcore.ip.rx.sink.valid,
+            ethcore.ip.rx.sink.ready,
+            ethcore.ip.tx.source.valid,
+            ethcore.ip.tx.source.ready,
+
+            # UDP.
+            ethcore.udp.rx.sink.valid,
+            ethcore.udp.rx.sink.ready,
+            ethcore.udp.tx.source.valid,
+            ethcore.udp.tx.source.ready,
+
+            # Etherbone.
+            etherbone.packet.rx.sink.valid,
+            etherbone.packet.rx.sink.ready,
+            etherbone.packet.rx.fsm,
+            etherbone.packet.tx.source.valid,
+            etherbone.packet.tx.source.ready,
+            etherbone.packet.tx.fsm,
+            etherbone.record.receiver.fsm,
+            etherbone.record.sender.fsm
+        ],
+        depth=512)
+
 # Main ---------------------------------------------------------------------------------------------
 
 def main():
