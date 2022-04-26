@@ -140,7 +140,7 @@ class LiteEthEtherboneProbe(Module):
         # # #
 
         self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
-            payload_depth = 2,  # Needed for DW=64 + 8 bytes padding in probe packet
+            payload_depth = 1,
             param_depth   = 1,
             buffered      = False
         )
