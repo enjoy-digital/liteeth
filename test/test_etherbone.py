@@ -24,7 +24,7 @@ mac_address = 0x12345678abcd
 
 class DUT(Module):
     def __init__(self, dw):
-        self.submodules.phy_model = phy.PHY(dw, assertStall=True, pcap_file='dump_wishbone.pcap')
+        self.submodules.phy_model = phy.PHY(dw, assertStall=dw < 64, pcap_file='dump_wishbone.pcap')
         self.submodules.mac_model = mac.MAC(self.phy_model)
         self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address)
         self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address)
@@ -37,8 +37,7 @@ class DUT(Module):
             ip_address + 1,
             100000,
             with_icmp=False,
-            dw=dw,
-            anti_underflow=4
+            dw=dw
         )
         self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 0x1234, buffer_depth=8)
 
@@ -51,9 +50,6 @@ class TestEtherbone(unittest.TestCase):
         packet = etherbone.EtherbonePacket()
         packet.pf = 1
         packet.encode()
-        # TODO changing the number of padding bytes can break things with DW=64
-        # this is because there is no proper last_be support in
-        # stream.StrideConverter, which is needed by LiteEthUDPCrossbar.get_port()
         packet.bytes += bytes([0x00] * 4)  # Add padding
 
         dut.etherbone_model.send(packet, ip_address + 1)
@@ -93,7 +89,7 @@ class TestEtherbone(unittest.TestCase):
             val = (yield dut.sram.mem[i])
             self.assertEqual(val, wd)
 
-        # Check for infinite packet send loop (crossbar bug)
+        # Check for infinite packet send loop (last_be bug in StrideConverter)
         self.assertEqual((yield dut.etherbone.record.receiver.fsm.state), 0)
 
     def do_reads(self, dut, writes_datas):
