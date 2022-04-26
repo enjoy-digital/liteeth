@@ -9,7 +9,6 @@
 
 from liteeth.common import *
 from liteeth.mac import gap, preamble, crc, padding, last_be
-from liteeth.mac.anti_underflow import LiteEthAntiUnderflow
 from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
@@ -22,8 +21,7 @@ class LiteEthMACCore(Module, AutoCSR):
     def __init__(self, phy, dw,
                  with_sys_datapath = False,
                  with_preamble_crc = True,
-                 with_padding      = True,
-                 anti_underflow    = 0):
+                 with_padding      = True):
 
         # Endpoints.
         self.sink   = stream.Endpoint(eth_phy_description(dw))
@@ -102,12 +100,6 @@ class LiteEthMACCore(Module, AutoCSR):
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
 
-            def add_anti_underflow(self, depth):
-                au = LiteEthAntiUnderflow(phy_dw, depth)
-                au = ClockDomainsRenamer("eth_tx")(au)
-                self.submodules += au
-                self.pipeline.append(au)
-
             def do_finalize(self):
                 self.submodules += stream.Pipeline(*self.pipeline)
 
@@ -135,12 +127,10 @@ class LiteEthMACCore(Module, AutoCSR):
         # Gap insertion has to occurr in phy tx domain to ensure gap is correctly maintained
         if not getattr(phy, "integrated_ifg_inserter", False):
             tx_datapath.add_gap()
-        if anti_underflow > 0:
-            tx_datapath.add_anti_underflow(anti_underflow)
         tx_datapath.pipeline.append(phy)
-        print("tx_datapath.pipeline:")
-        for p in tx_datapath.pipeline:
-            print(p)
+        # print("tx_datapath.pipeline:")
+        # for p in tx_datapath.pipeline:
+        #     print(p)
         self.submodules.tx_datapath = tx_datapath
 
         # RX Data-Path (PHY --> Core).
