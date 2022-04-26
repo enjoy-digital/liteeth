@@ -128,9 +128,6 @@ class LiteEthMACCore(Module, AutoCSR):
         if not getattr(phy, "integrated_ifg_inserter", False):
             tx_datapath.add_gap()
         tx_datapath.pipeline.append(phy)
-        # print("tx_datapath.pipeline:")
-        # for p in tx_datapath.pipeline:
-        #     print(p)
         self.submodules.tx_datapath = tx_datapath
 
         # RX Data-Path (PHY --> Core).
