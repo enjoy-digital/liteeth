@@ -13,8 +13,8 @@ from migen import *
 from migen.genlib.cdc import MultiReg
 from migen.genlib.misc import WaitTimer
 
-from litex_boards.platforms import arty
-from litex_boards.targets.arty import _CRG
+from litex_boards.platforms import digilent_arty
+from litex_boards.targets.digilent_arty import _CRG
 
 from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
@@ -28,7 +28,7 @@ from liteeth.phy.mii import LiteEthPHYMII
 
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(50e6)):
-        platform = arty.Platform()
+        platform = digilent_arty.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,

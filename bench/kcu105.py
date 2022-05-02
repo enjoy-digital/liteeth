@@ -12,7 +12,7 @@ import argparse
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
-from litex_boards.platforms import kcu105
+from litex_boards.platforms import xilinx_kcu105
 
 from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
@@ -41,7 +41,7 @@ class _CRG(Module, AutoCSR):
 
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(125e6)):
-        platform = kcu105.Platform()
+        platform = xilinx_kcu105.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,

@@ -11,8 +11,8 @@ import argparse
 
 from migen import *
 
-from litex_boards.platforms import genesys2
-from litex_boards.targets.genesys2 import _CRG
+from litex_boards.platforms import digilent_genesys2
+from litex_boards.targets.digilent_genesys2 import _CRG
 
 from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
@@ -25,7 +25,7 @@ from liteeth.phy.s7rgmii import LiteEthPHYRGMII
 
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(50e6)):
-        platform = genesys2.Platform()
+        platform = digilent_genesys2.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,

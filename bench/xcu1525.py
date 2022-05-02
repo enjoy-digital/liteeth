@@ -13,7 +13,7 @@ from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.build.generic_platform import *
-from litex_boards.platforms import xcu1525
+from litex_boards.platforms import sqrl_xcu1525
 
 from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
@@ -54,7 +54,7 @@ class _CRG(Module, AutoCSR):
 
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(125e6)):
-        platform = xcu1525.Platform()
+        platform = sqrl_xcu1525.Platform()
         platform.add_extension(_qsfp_io)
 
         # SoCMini ----------------------------------------------------------------------------------
