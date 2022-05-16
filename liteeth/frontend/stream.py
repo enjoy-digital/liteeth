@@ -50,6 +50,7 @@ class LiteEthStream2UDPTX(Module):
                 source.ip_address.eq(ip_address),
                 source.length.eq(level * (data_width//8)),
                 source.data.eq(fifo.source.data),
+                source.last_be.eq({32:0b1000, 8:0b1}[data_width]),
                 If(source.ready,
                     fifo.source.ready.eq(1),
                     NextValue(counter, counter + 1),

@@ -14,6 +14,7 @@ clk_freq:    125e6
 core:        udp
 mac_address: 0x10e2d5000000
 ip_address:  192.168.1.50
+data_width:  8
 
 # UDP Ports --------------------------------------------------------------------
 udp_ports:   {

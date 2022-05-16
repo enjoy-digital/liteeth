@@ -272,10 +272,13 @@ class UDPCore(PHYCore):
         PHYCore.__init__(self, platform, core_config)
 
         # Core -------------------------------------------------------------------------------------
+        data_width = core_config.get("data_width", 8)
         self.submodules.core = LiteEthUDPIPCore(self.ethphy,
             mac_address = mac_address,
             ip_address  = ip_address,
-            clk_freq    = core_config["clk_freq"]
+            clk_freq    = core_config["clk_freq"],
+            dw          = data_width,
+            with_sys_datapath = (data_width == 32),
         )
 
         # UDP Ports --------------------------------------------------------------------------------
