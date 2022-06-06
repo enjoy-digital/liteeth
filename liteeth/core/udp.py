@@ -8,7 +8,8 @@ from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
 from litex.soc.interconnect import stream
-from litex.soc.interconnect.packet import Depacketizer, Packetizer
+
+from liteeth.packet import Depacketizer, Packetizer
 
 # UDP Crossbar -------------------------------------------------------------------------------------
 
@@ -43,40 +44,49 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         user_port     = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(self.dw)
 
-        # tx
-        tx_stream = user_port.sink
-        if cd != "sys":
-            tx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
-            tx_cdc = ClockDomainsRenamer({"write": cd, "read": "sys"})(tx_cdc)
-            self.submodules += tx_cdc
-            self.comb += tx_stream.connect(tx_cdc.sink)
-            tx_stream = tx_cdc.source
-        if dw != self.dw:
-            tx_converter = stream.StrideConverter(
-                eth_udp_user_description(user_port.dw),
-                eth_udp_user_description(self.dw))
-            self.submodules += tx_converter
-            self.comb += tx_stream.connect(tx_converter.sink)
-            tx_stream = tx_converter.source
-        self.comb += tx_stream.connect(internal_port.sink)
+        # TX
+        # ---
 
-        # rx
-        rx_stream = internal_port.source
-        if dw != self.dw:
-            rx_converter = stream.StrideConverter(
-                eth_udp_user_description(self.dw),
-                eth_udp_user_description(user_port.dw))
-            self.submodules += rx_converter
-            self.comb += rx_stream.connect(rx_converter.sink)
-            rx_stream = rx_converter.source
-        if cd != "sys":
-            rx_cdc = stream.AsyncFIFO(eth_udp_user_description(user_port.dw), 4)
-            rx_cdc = ClockDomainsRenamer({"write": "sys", "read": cd})(rx_cdc)
-            self.submodules += rx_cdc
-            self.comb += rx_stream.connect(rx_cdc.sink)
-            rx_stream = rx_cdc.source
-        self.comb += rx_stream.connect(user_port.source)
+        # CDC.
+        self.submodules.tx_cdc = tx_cdc = stream.ClockDomainCrossing(
+            layout  = eth_udp_user_description(user_port.dw),
+            cd_from = cd,
+            cd_to   ="sys"
+        )
+        self.comb += user_port.sink.connect(tx_cdc.sink)
 
+        # Data-Width Conversion.
+        self.submodules.tx_converter = tx_converter = stream.StrideConverter(
+            description_from = eth_udp_user_description(user_port.dw),
+            description_to   = eth_udp_user_description(self.dw)
+        )
+        self.comb += tx_cdc.source.connect(tx_converter.sink)
+
+        # Interface.
+        self.comb += tx_converter.source.connect(internal_port.sink)
+
+        # RX
+        # --
+        # Data-Width Conversion.
+        self.submodules.rx_converter = rx_converter = stream.StrideConverter(
+            description_from = eth_udp_user_description(self.dw),
+            description_to   = eth_udp_user_description(user_port.dw)
+        )
+        self.comb += internal_port.source.connect(rx_converter.sink)
+
+        # CDC.
+        self.submodules.rx_cdc = rx_cdc = stream.ClockDomainCrossing(
+            layout  = eth_udp_user_description(user_port.dw),
+            cd_from = "sys",
+            cd_to   = cd
+        )
+        self.comb += rx_converter.source.connect(rx_cdc.sink)
+
+        # Interface.
+        self.comb += rx_cdc.source.connect(user_port.source)
+
+        # Expose/Return User Port.
+        # ------------------------
         self.users[udp_port] = internal_port
 
         return user_port
@@ -98,24 +108,27 @@ class LiteEthUDPTX(Module):
 
         # # #
 
+        # Packetizer.
         self.submodules.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
+
+        # Data-Path.
         self.comb += [
-            packetizer.sink.valid.eq(sink.valid),
-            packetizer.sink.last.eq(sink.last),
-            packetizer.sink.last_be.eq(sink.last_be),
-            sink.ready.eq(packetizer.sink.ready),
-            packetizer.sink.src_port.eq(sink.src_port),
-            packetizer.sink.dst_port.eq(sink.dst_port),
+            sink.connect(packetizer.sink, keep={
+                "valid",
+                "ready",
+                "last",
+                "last_be",
+                "src_port",
+                "dst_port",
+                "data"}),
             packetizer.sink.length.eq(sink.length + udp_header.length),
-            packetizer.sink.checksum.eq(0),  # Disabled (MAC CRC is enough)
-            packetizer.sink.data.eq(sink.data)
+            packetizer.sink.checksum.eq(0), # UDP Checksum is not used, we only rely on MAC CRC.
         ]
 
+        # Control-Path (FSM).
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
                 NextState("SEND")
             )
         )
@@ -124,8 +137,10 @@ class LiteEthUDPTX(Module):
             source.length.eq(packetizer.sink.length),
             source.protocol.eq(udp_protocol),
             source.ip_address.eq(sink.ip_address),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
 
@@ -146,46 +161,61 @@ class LiteEthUDPRX(Module):
 
         # # #
 
+        # Depacketizer.
         self.submodules.depacketizer = depacketizer = LiteEthUDPDepacketizer(dw)
-        self.comb += sink.connect(depacketizer.sink)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            depacketizer.source.ready.eq(1),
-            If(depacketizer.source.valid,
-                depacketizer.source.ready.eq(0),
-                NextState("CHECK")
-            )
-        )
-        valid = Signal(reset_less=True)
-        self.sync += valid.eq(
-            depacketizer.source.valid &
-            (sink.protocol == udp_protocol)
-        )
-
-        fsm.act("CHECK",
-            If(valid,
-                NextState("PRESENT")
-            ).Else(
-                NextState("DROP")
-            )
-        )
+        # Data-Path.
         self.comb += [
-            source.last.eq(depacketizer.source.last),
-            source.src_port.eq(depacketizer.source.src_port),
-            source.dst_port.eq(depacketizer.source.dst_port),
+            sink.connect(depacketizer.sink),
+            depacketizer.source.connect(source, keep={
+                "src_port",
+                "dst_port",
+                "data",
+                "error"}),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(depacketizer.source.length - udp_header.length),
-            source.data.eq(depacketizer.source.data),
-            source.error.eq(depacketizer.source.error)
         ]
-        fsm.act("PRESENT",
-            source.valid.eq(depacketizer.source.valid),
-            depacketizer.source.ready.eq(source.ready),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+
+        # Control-Path (FSM).
+        count = Signal(16)
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            NextValue(count, dw//8),
+            If(depacketizer.source.valid,
+                NextState("DROP"),
+                If(sink.protocol == udp_protocol,
+                    NextState("RECEIVE")
+                )
             )
         )
+        fsm.act("RECEIVE",
+            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            source.last.eq(depacketizer.source.last | (count >= source.length)),
+            If(depacketizer.source.last_be,
+               source.last_be.eq(depacketizer.source.last_be),
+            ).Elif(
+              source.last,
+              Case(source.length & (dw//8 - 1), {
+                  1         : source.last_be.eq(0b00000001),
+                  2         : source.last_be.eq(0b00000010),
+                  3         : source.last_be.eq(0b00000100),
+                  4         : source.last_be.eq(0b00001000),
+                  5         : source.last_be.eq(0b00010000),
+                  6         : source.last_be.eq(0b00100000),
+                  7         : source.last_be.eq(0b01000000),
+                  "default" : source.last_be.eq(2**(dw//8 - 1)),
+              })
+            ),
+            If(source.valid & source.ready,
+                NextValue(count, count + dw//8),
+                If(depacketizer.source.last,
+                    NextState("IDLE")
+                ).Elif(source.last,
+                    NextState("DROP")
+                )
+            )
+        )
+
         fsm.act("DROP",
             depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid &

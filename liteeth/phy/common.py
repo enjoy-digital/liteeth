@@ -11,17 +11,17 @@ from migen.fhdl.specials import Tristate
 
 
 class LiteEthPHYHWReset(Module):
-    def __init__(self):
+    def __init__(self, cycles=256):
         self.reset = Signal()
 
         # # #
 
-        counter      = Signal(max=512)
+        counter      = Signal(max=cycles + 1)
         counter_done = Signal()
         counter_ce   = Signal()
         self.sync += If(counter_ce, counter.eq(counter + 1))
         self.comb += [
-            counter_done.eq(counter == 256),
+            counter_done.eq(counter == cycles),
             counter_ce.eq(~counter_done),
             self.reset.eq(~counter_done)
         ]

@@ -10,6 +10,7 @@ from migen.genlib.cdc import PulseSynchronizer
 
 from liteiclink.transceiver.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
 
+from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
 
@@ -44,7 +45,7 @@ class Gearbox(Module):
 
 
 # Configured for 200MHz transceiver reference clock
-class K7_1000BASEX(Module):
+class K7_1000BASEX(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
@@ -64,6 +65,8 @@ class K7_1000BASEX(Module):
         # for specifying clock constraints. 62.5MHz clocks.
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
+
+        self.crg_reset = CSRStorage()
 
         # # #
 
@@ -810,7 +813,7 @@ class K7_1000BASEX(Module):
         self.comb += [
             pll.reset.eq(tx_init.pllreset),
             tx_init.plllock.eq(pll.lock),
-            tx_reset.eq(tx_init.gtXxreset)
+            tx_reset.eq(tx_init.gtXxreset | self.crg_reset.storage)
         ]
         self.sync += tx_mmcm_reset.eq(~pll.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -820,7 +823,7 @@ class K7_1000BASEX(Module):
         self.submodules += rx_init
         self.comb += [
             rx_init.reset.eq(~tx_init.done),
-            rx_reset.eq(rx_init.gtXxreset)
+            rx_reset.eq(rx_init.gtXxreset | self.crg_reset.storage)
         ]
         ps_restart = PulseSynchronizer("eth_tx", "sys")
         self.submodules += ps_restart

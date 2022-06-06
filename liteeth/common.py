@@ -18,14 +18,15 @@ from litex.soc.interconnect.packet import Header, HeaderField
 
 # Ethernet Constants -------------------------------------------------------------------------------
 
-eth_mtu             = 1530
-eth_min_len         = 46
-eth_interpacket_gap = 12
-eth_preamble        = 0xd555555555555555
-buffer_depth        = 2**log2_int(eth_mtu, need_pow2=False)
+eth_mtu              = 1530
+eth_min_frame_length = 64
+eth_fcs_length       = 4
+eth_interpacket_gap  = 12
+eth_preamble         = 0xd555555555555555
+buffer_depth         = 2**log2_int(eth_mtu, need_pow2=False)
 
-ethernet_type_ip    = 0x800
-ethernet_type_arp   = 0x806
+ethernet_type_ip     = 0x800
+ethernet_type_arp    = 0x806
 
 # MAC Constants/Header -----------------------------------------------------------------------------
 
@@ -43,6 +44,7 @@ arp_hwtype_ethernet = 0x0001
 arp_proto_ip        = 0x0800
 arp_opcode_request  = 0x0001
 arp_opcode_reply    = 0x0002
+arp_min_length      = eth_min_frame_length - eth_fcs_length - mac_header_length
 
 arp_header_length   = 28
 arp_header_fields = {
@@ -57,6 +59,11 @@ arp_header_fields = {
     "target_ip":  HeaderField(24, 0, 32)
 }
 arp_header = Header(arp_header_fields, arp_header_length, swap_field_bytes=True)
+
+# Broadcast Constants ------------------------------------------------------------------------------
+
+bcast_ip_mask     = 0xff
+bcast_mac_address = 0xffffffffffff
 
 # Multicast Constants ------------------------------------------------------------------------------
 
@@ -82,6 +89,8 @@ ipv4_header = Header(ipv4_header_fields, ipv4_header_length, swap_field_bytes=Tr
 # ICMP Constants/Header ----------------------------------------------------------------------------
 
 icmp_protocol      = 0x01
+icmp_type_ping_reply = 0
+icmp_type_ping_request = 8
 icmp_header_length = 8
 icmp_header_fields = {
     "msgtype":  HeaderField(0, 0,  8),
@@ -146,11 +155,14 @@ def _remove_from_layout(layout, *args):
     return r
 
 def convert_ip(s):
-    ip = 0
-    for e in s.split("."):
-        ip = ip << 8
-        ip += int(e)
-    return ip
+    if isinstance(s, str):
+        ip = 0
+        for e in s.split("."):
+            ip = ip << 8
+            ip += int(e)
+        return ip
+    else:
+        return s
 
 # Stream Layouts -----------------------------------------------------------------------------------
 

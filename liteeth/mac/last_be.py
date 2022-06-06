@@ -17,22 +17,24 @@ class LiteEthMACTXLastBE(Module):
 
         # # #
 
-        ongoing = Signal(reset=1)
-        self.sync += [
+        self.submodules.fsm = fsm = FSM(reset_state="COPY")
+        fsm.act("COPY",
+            sink.connect(source),
+            source.last.eq(sink.last_be != 0),
             If(sink.valid & sink.ready,
-                If(sink.last,
-                    ongoing.eq(1)
-                ).Elif(sink.last_be,
-                    ongoing.eq(0)
+                # If last Byte but not last packet token.
+                If(source.last & ~sink.last,
+                    NextState("WAIT-LAST")
                 )
             )
-        ]
-        self.comb += [
-            source.valid.eq(sink.valid & ongoing),
-            source.last.eq(sink.last_be),
-            source.data.eq(sink.data),
-            sink.ready.eq(source.ready)
-        ]
+        )
+        fsm.act("WAIT-LAST",
+            # Accept incoming stream until we receive last packet token.
+            sink.ready.eq(1),
+            If(sink.valid & sink.last,
+                NextState("COPY")
+            )
+        )
 
 # MAC RX Last BE -----------------------------------------------------------------------------------
 
@@ -45,5 +47,10 @@ class LiteEthMACRXLastBE(Module):
 
         self.comb += [
             sink.connect(source),
-            source.last_be.eq(sink.last)
+            If(dw == 8,
+                # 8bit PHYs will only drive last, thus `last_be` must be
+                # controlled accordingly. PHYs > 8bit must drive `last_be`
+                # themselves.
+                source.last_be.eq(sink.last)
+            )
         ]

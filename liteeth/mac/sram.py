@@ -1,10 +1,13 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2015-2018 Sebastien Bourdeauducq <sb@m-labs.hk>
+# Copyright (c) 2021 Leon Schuermann <leon@is.currently.online>
 # Copyright (c) 2017 whitequark <whitequark@whitequark.org>
 # SPDX-License-Identifier: BSD-2-Clause
+
+import math
 
 from liteeth.common import *
 
@@ -14,236 +17,282 @@ from litex.soc.interconnect.csr_eventmanager import *
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMWriter(Module, AutoCSR):
-    def __init__(self, dw, depth, nslots=2, endianness="big"):
+    def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
+        # Endpoint / Signals.
         self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
-        slotbits   = max(log2_int(nslots), 1)
-        lengthbits = 32
+        # Parameters Check / Compute.
+        assert dw in [8, 16, 32, 64]
+        slotbits   = max(int(math.log2(nslots)), 1)
+        lengthbits = bits_for(depth * dw//8)
 
+        # CSRs.
         self._slot   = CSRStatus(slotbits)
         self._length = CSRStatus(lengthbits)
+        self._errors = CSRStatus(32)
 
-        self.errors  = CSRStatus(32)
+        # Optional Timestamp of the incoming packets and expose value to software.
+        if timestamp is not None:
+            timestampbits   = len(timestamp)
+            self._timestamp = CSRStatus(timestampbits)
 
+        # Event Manager.
         self.submodules.ev = EventManager()
         self.ev.available  = EventSourceLevel()
         self.ev.finalize()
 
         # # #
 
-        # Packet dropped if no slot available
+        write   = Signal()
+        errors  = self._errors.status
+
+        slot       = Signal(slotbits)
+        length     = Signal(lengthbits)
+        length_inc = Signal(4)
+
+        # Sink is already ready: packets are dropped when no slot is available.
         sink.ready.reset = 1
 
-        # Length computation
-        inc = Signal(3)
-        if endianness == "big":
-            self.comb += Case(sink.last_be, {
-                0b1000    : inc.eq(1),
-                0b0100    : inc.eq(2),
-                0b0010    : inc.eq(3),
-                "default" : inc.eq(4)
-            })
-        else:
-            self.comb += Case(sink.last_be, {
-                0b0001    : inc.eq(1),
-                0b0010    : inc.eq(2),
-                0b0100    : inc.eq(3),
-                "default" : inc.eq(4)
-            })
+        # Decode Length increment from from last_be.
+        self.comb += Case(sink.last_be, {
+            0b00000001 : length_inc.eq(1),
+            0b00000010 : length_inc.eq(2),
+            0b00000100 : length_inc.eq(3),
+            0b00001000 : length_inc.eq(4),
+            0b00010000 : length_inc.eq(5),
+            0b00100000 : length_inc.eq(6),
+            0b01000000 : length_inc.eq(7),
+            "default"  : length_inc.eq(dw//8)
+        })
 
-        counter = Signal(lengthbits)
+        # Status FIFO.
+        stat_fifo_layout = [("slot", slotbits), ("length", lengthbits)]
+        if timestamp is not None:
+            stat_fifo_layout += [("timestamp", timestampbits)]
+        self.submodules.stat_fifo = stat_fifo = stream.SyncFIFO(stat_fifo_layout, nslots)
 
-        # Slot computation
-        slot    = Signal(slotbits)
-        slot_ce = Signal()
-        self.sync += If(slot_ce, slot.eq(slot + 1))
-
-        ongoing = Signal()
-
-        # Status FIFO
-        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
-        self.submodules += fifo
-
-        # FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
+        # FSM.
+        self.submodules.fsm = fsm = FSM(reset_state="WRITE")
+        fsm.act("WRITE",
             If(sink.valid,
-                If(fifo.sink.ready,
-                    ongoing.eq(1),
-                    NextValue(counter, counter + inc),
-                    NextState("WRITE")
+                If(stat_fifo.sink.ready,
+                    write.eq(1),
+                    NextValue(length, length + length_inc),
+                    If(length >= eth_mtu,
+                         NextState("DISCARD-REMAINING")
+                    ),
+                    If(sink.last,
+                        If((sink.error & sink.last_be) != 0,
+                            NextState("DISCARD")
+                        ).Else(
+                            NextState("TERMINATE")
+                        )
+                    )
                 ).Else(
-                    NextValue(self.errors.status, self.errors.status + 1),
-                    NextState("DISCARD_REMAINING")
+                    NextValue(errors, errors + 1),
+                    NextState("DISCARD-REMAINING")
                 )
             )
         )
-        fsm.act("WRITE",
-            If(sink.valid,
-                If(counter == eth_mtu,
-                    NextState("DISCARD_REMAINING")
+        fsm.act("DISCARD-REMAINING",
+            If(sink.valid & sink.last,
+                If((sink.error & sink.last_be) != 0,
+                    NextState("DISCARD")
                 ).Else(
-                    NextValue(counter, counter + inc),
-                    ongoing.eq(1)
-                ),
-                If(sink.last,
-                    If((sink.error & sink.last_be) != 0,
-                        NextState("DISCARD")
-                    ).Else(
-                        NextState("TERMINATE")
-                    )
+                    NextState("TERMINATE")
                 )
             )
         )
         fsm.act("DISCARD",
-            NextValue(counter, 0),
-            NextState("IDLE")
+            NextValue(length, 0),
+            NextState("WRITE")
         )
-        fsm.act("DISCARD_REMAINING",
-            If(sink.valid & sink.last,
-                NextState("TERMINATE")
-            )
-        )
-        self.comb += [
-            fifo.sink.slot.eq(slot),
-            fifo.sink.length.eq(counter)
-        ]
         fsm.act("TERMINATE",
-            NextValue(counter, 0),
-            slot_ce.eq(1),
-            fifo.sink.valid.eq(1),
-            NextState("IDLE")
+            stat_fifo.sink.valid.eq(1),
+            stat_fifo.sink.slot.eq(slot),
+            stat_fifo.sink.length.eq(length),
+            NextValue(length, 0),
+            NextValue(slot, slot + 1),
+            NextState("WRITE")
         )
-        self.comb += [
-            fifo.source.ready.eq(self.ev.available.clear),
-            self.ev.available.trigger.eq(fifo.source.valid),
-            self._slot.status.eq(fifo.source.slot),
-            self._length.status.eq(fifo.source.length),
-        ]
 
-        # Memory
-        mems  = [None]*nslots
-        ports = [None]*nslots
+        self.comb += [
+            stat_fifo.source.ready.eq(self.ev.available.clear),
+            self.ev.available.trigger.eq(stat_fifo.source.valid),
+            self._slot.status.eq(stat_fifo.source.slot),
+            self._length.status.eq(stat_fifo.source.length),
+        ]
+        if timestamp is not None:
+            # Latch Timestamp on start of packet.
+            self.sync += If(length == 0, stat_fifo.sink.timestamp.eq(timestamp))
+            self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
+
+        # Memory.
+        wr_slot = slot
+        wr_addr = length[int(math.log2(dw//8)):]
+        wr_data = Signal(len(sink.data))
+
+        # Create a Memory per Slot.
+        mems  = [None] * nslots
+        ports = [None] * nslots
         for n in range(nslots):
-            mems[n] = Memory(dw, depth)
+            mems[n]  = Memory(dw, depth)
             ports[n] = mems[n].get_port(write_capable=True)
             self.specials += ports[n]
         self.mems = mems
 
+        # Endianness Handling.
+        self.comb += wr_data.eq({"big": reverse_bytes(sink.data), "little": sink.data}[endianness])
+
+        # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
             cases[n] = [
-                ports[n].adr.eq(counter[2:]),
-                ports[n].dat_w.eq(sink.data),
-                If(sink.valid & ongoing,
-                    ports[n].we.eq(0xf)
+                ports[n].adr.eq(wr_addr),
+                ports[n].dat_w.eq(wr_data),
+                If(sink.valid & write,
+                    ports[n].we.eq(2**len(ports[n].we) - 1)
                 )
             ]
-        self.comb += Case(slot, cases)
+        self.comb += Case(wr_slot, cases)
 
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(Module, AutoCSR):
-    def __init__(self, dw, depth, nslots=2, endianness="big"):
+    def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
+        # Endpoint / Signals.
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
-        slotbits        = max(log2_int(nslots), 1)
-        lengthbits      = bits_for(depth*4)  # length in bytes
-        self.lengthbits = lengthbits
+        # Parameters Check / Compute.
+        assert dw in [8, 16, 32, 64]
+        slotbits   = max(int(math.log2(nslots)), 1)
+        lengthbits = bits_for(depth * dw//8)
 
+        # CSRs.
         self._start  = CSR()
         self._ready  = CSRStatus()
-        self._level  = CSRStatus(log2_int(nslots) + 1)
+        self._level  = CSRStatus(int(math.log2(nslots)) + 1)
         self._slot   = CSRStorage(slotbits,   reset_less=True)
         self._length = CSRStorage(lengthbits, reset_less=True)
 
+        # Optional Timestamp of the outgoing packets and expose value to software.
+        if timestamp is not None:
+            timestampbits        = len(timestamp)
+            self._timestamp_slot = CSRStatus(slotbits)
+            self._timestamp      = CSRStatus(timestampbits)
+
+        # Event Manager.
         self.submodules.ev = EventManager()
-        self.ev.done       = EventSourcePulse()
+        self.ev.done       = EventSourcePulse() if timestamp is None else EventSourceLevel()
         self.ev.finalize()
 
         # # #
 
-        # Command FIFO
-        fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
-        self.submodules += fifo
+        read   = Signal()
+        length = Signal(lengthbits)
+
+        # Command FIFO.
+        cmd_fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
+        self.submodules += cmd_fifo
         self.comb += [
-            fifo.sink.valid.eq(self._start.re),
-            fifo.sink.slot.eq(self._slot.storage),
-            fifo.sink.length.eq(self._length.storage),
-            self._ready.status.eq(fifo.sink.ready),
-            self._level.status.eq(fifo.level)
+            cmd_fifo.sink.valid.eq(self._start.re),
+            cmd_fifo.sink.slot.eq(self._slot.storage),
+            cmd_fifo.sink.length.eq(self._length.storage),
+            self._ready.status.eq(cmd_fifo.sink.ready),
+            self._level.status.eq(cmd_fifo.level)
         ]
 
-        # Length computation
-        read_address = Signal(lengthbits)
-        counter      = Signal(lengthbits)
+        # Status FIFO (Only added when Timestamping).
+        if timestamp is not None:
+            stat_fifo_layout = [("slot", slotbits), ("timestamp", timestampbits)]
+            stat_fifo = stream.SyncFIFO(stat_fifo_layout, nslots)
+            self.submodules += stat_fifo
+            self.comb += stat_fifo.source.ready.eq(self.ev.done.clear)
+            self.comb += self._timestamp_slot.status.eq(stat_fifo.source.slot)
+            self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
 
-        # FSM
+        # Encode Length to last_be.
+        length_lsb = cmd_fifo.source.length[:int(math.log2(dw/8))] if (dw != 8) else 0
+        self.comb += If(source.last,
+            Case(length_lsb, {
+                1         : source.last_be.eq(0b00000001),
+                2         : source.last_be.eq(0b00000010),
+                3         : source.last_be.eq(0b00000100),
+                4         : source.last_be.eq(0b00001000),
+                5         : source.last_be.eq(0b00010000),
+                6         : source.last_be.eq(0b00100000),
+                7         : source.last_be.eq(0b01000000),
+                "default" : source.last_be.eq(2**(dw//8 - 1)),
+            })
+        )
+
+        # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            NextValue(counter, 0),
-            If(fifo.source.valid,
-                read_address.eq(0),
-                NextState("SEND")
+            If(cmd_fifo.source.valid,
+                read.eq(1),
+                NextValue(length, dw//8),
+                NextState("READ")
             )
         )
-        length_lsb = fifo.source.length[0:2]
-        if endianness == "big":
-            self.comb += If(source.last,
-                Case(length_lsb, {
-                    0 : source.last_be.eq(0b0001),
-                    1 : source.last_be.eq(0b1000),
-                    2 : source.last_be.eq(0b0100),
-                    3 : source.last_be.eq(0b0010)
-                }))
-        else:
-            self.comb += If(source.last,
-                Case(length_lsb, {
-                    0 : source.last_be.eq(0b1000),
-                    1 : source.last_be.eq(0b0001),
-                    2 : source.last_be.eq(0b0010),
-                    3 : source.last_be.eq(0b0100)
-                }))
-        fsm.act("SEND",
+        fsm.act("READ",
             source.valid.eq(1),
-            source.last.eq(counter >= (fifo.source.length - 4)),
-            read_address.eq(counter),
+            source.last.eq(length >= cmd_fifo.source.length),
             If(source.ready,
-                read_address.eq(counter + 4),
-                NextValue(counter, counter + 4),
+                read.eq(1),
+                NextValue(length, length + dw//8),
                 If(source.last,
-                    NextState("END")
+                    NextState("TERMINATE")
                 )
             )
         )
-        fsm.act("END",
-            fifo.source.ready.eq(1),
+        fsm.act("TERMINATE",
+            NextValue(length, 0),
             self.ev.done.trigger.eq(1),
+            cmd_fifo.source.ready.eq(1),
             NextState("IDLE")
         )
 
-        # Memory
-        rd_slot = fifo.source.slot
+        if timestamp is not None:
+            # Latch Timestamp on start of outgoing packet.
+            self.sync += If(length == 0, stat_fifo.sink.timestamp.eq(timestamp))
+            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("END"))
+            self.comb += stat_fifo.sink.slot.eq(cmd_fifo.source.slot)
+            # Trigger event when Status FIFO has contents (Override FSM assignment).
+            self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid)
+
+        # Memory.
+        rd_slot = cmd_fifo.source.slot
+        rd_addr = Signal(lengthbits)
+        rd_data = Signal(len(source.data))
+
+        # Create a Memory per Slot.
         mems    = [None]*nslots
         ports   = [None]*nslots
         for n in range(nslots):
             mems[n]  = Memory(dw, depth)
-            ports[n] = mems[n].get_port()
+            ports[n] = mems[n].get_port(has_re=True)
             self.specials += ports[n]
         self.mems = mems
 
+        # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
-            self.comb += ports[n].adr.eq(read_address[2:])
-            cases[n] = [source.data.eq(port.dat_r)]
+            self.comb += ports[n].re.eq(read)
+            self.comb += ports[n].adr.eq(length[int(math.log2(dw//8)):])
+            cases[n] = [rd_data.eq(port.dat_r)]
+
         self.comb += Case(rd_slot, cases)
+
+        # Endianness Handling.
+        self.comb += source.data.eq({"big" : reverse_bytes(rd_data), "little": rd_data}[endianness])
 
 # MAC SRAM -----------------------------------------------------------------------------------------
 
 class LiteEthMACSRAM(Module, AutoCSR):
-    def __init__(self, dw, depth, nrxslots, ntxslots, endianness):
-        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness)
-        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness)
+    def __init__(self, dw, depth, nrxslots, ntxslots, endianness, timestamp=None):
+        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness, timestamp)
+        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness, timestamp)
         self.submodules.ev     = SharedIRQ(self.writer.ev, self.reader.ev)
         self.sink, self.source = self.writer.sink, self.reader.source

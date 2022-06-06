@@ -195,12 +195,8 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         self.clock_domains.cd_eth_rx = ClockDomain()
         eth_rx_clk_ibuf = Signal()
         self.specials += [
-            Instance("IBUF",
-                i_I = clock_pads.rx,
-                o_O = eth_rx_clk_ibuf,
-            ),
             Instance("BUFG",
-                i_I = eth_rx_clk_ibuf,
+                i_I = clock_pads.rx,
                 o_O = self.cd_eth_rx.clk,
             ),
         ]

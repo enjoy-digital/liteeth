@@ -1,13 +1,13 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
-from litex.soc.interconnect.packet import Depacketizer, Packetizer
+from liteeth.packet import Depacketizer, Packetizer
 
 # MAC Packetizer/Depacketizer ----------------------------------------------------------------------
 

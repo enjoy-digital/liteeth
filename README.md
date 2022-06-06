@@ -4,7 +4,7 @@
                                     / /__/ / __/ -_) _// __/ _ \
                                    /____/_/\__/\__/___/\__/_//_/
 
-                                 Copyright 2012-2020 / EnjoyDigital
+                                 Copyright 2012-2022 / EnjoyDigital
 
                              A small footprint and configurable Ethernet core
                                       powered by Migen & LiteX

@@ -8,7 +8,7 @@ from liteeth.common import *
 
 from migen.genlib.misc import WaitTimer
 
-from litex.soc.interconnect.packet import Depacketizer, Packetizer
+from liteeth.packet import Depacketizer, Packetizer
 
 # ARP Layouts --------------------------------------------------------------------------------------
 
@@ -36,7 +36,7 @@ class LiteEthARPTX(Module):
 
         # # #
 
-        packet_length = max(arp_header.length, eth_min_len)
+        packet_length = max(arp_header.length, arp_min_length)
         packet_words  = packet_length//(dw//8)
         counter       = Signal(max=packet_words, reset_less=True)
 
@@ -44,38 +44,42 @@ class LiteEthARPTX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
             NextValue(counter, 0),
             If(sink.valid,
-                sink.ready.eq(0),
                 NextState("SEND")
             )
         )
         self.comb += [
             packetizer.sink.last.eq(counter == (packet_words - 1)),
-            packetizer.sink.last_be.eq(1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length%(dw//8)-1)),
+            If(packetizer.sink.last,
+                packetizer.sink.last_be.eq(
+                    1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length % (dw // 8) - 1)
+                ),
+            ),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
             packetizer.sink.hwsize.eq(6),
             packetizer.sink.protosize.eq(4),
             packetizer.sink.sender_mac.eq(mac_address),
             packetizer.sink.sender_ip.eq(ip_address),
+            packetizer.sink.target_ip.eq(sink.ip_address),
             If(sink.reply,
                 packetizer.sink.opcode.eq(arp_opcode_reply),
                 packetizer.sink.target_mac.eq(sink.mac_address),
-                packetizer.sink.target_ip.eq(sink.ip_address)
             ).Elif(sink.request,
                 packetizer.sink.opcode.eq(arp_opcode_request),
-                packetizer.sink.target_mac.eq(0xffffffffffff),
-                packetizer.sink.target_ip.eq(sink.ip_address)
+                packetizer.sink.target_mac.eq(bcast_mac_address),
             )
         ]
-        fsm.act("SEND",
-            packetizer.sink.valid.eq(1),
-            packetizer.source.connect(source),
+        self.comb += [
+            packetizer.source.connect(source, omit={"valid", "ready"}),
             source.target_mac.eq(packetizer.sink.target_mac),
             source.sender_mac.eq(mac_address),
             source.ethernet_type.eq(ethernet_type_arp),
+        ]
+        fsm.act("SEND",
+            packetizer.sink.valid.eq(1),
+            packetizer.source.connect(source, keep={"valid", "ready"}),
             If(source.valid & source.ready,
                 NextValue(counter, counter + 1),
                 If(source.last,

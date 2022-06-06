@@ -20,6 +20,8 @@ from liteeth.common import *
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.packet import *
 
+from liteeth.packet import Depacketizer, Packetizer
+
 # Etherbone Packet ---------------------------------------------------------------------------------
 
 class LiteEthEtherbonePacketPacketizer(Packetizer):
@@ -39,25 +41,16 @@ class LiteEthEtherbonePacketTX(Module):
 
         self.submodules.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
         self.comb += [
-            packetizer.sink.valid.eq(sink.valid),
-            packetizer.sink.last.eq(sink.last),
-            sink.ready.eq(packetizer.sink.ready),
-
+            sink.connect(packetizer.sink, keep={"valid", "last", "last_be", "ready", "data"}),
+            sink.connect(packetizer.sink, keep={"pf", "pr", "nr"}),
+            packetizer.sink.version.eq(etherbone_version),
             packetizer.sink.magic.eq(etherbone_magic),
             packetizer.sink.port_size.eq(32//8),
             packetizer.sink.addr_size.eq(32//8),
-            packetizer.sink.pf.eq(sink.pf),
-            packetizer.sink.pr.eq(sink.pr),
-            packetizer.sink.nr.eq(sink.nr),
-            packetizer.sink.version.eq(etherbone_version),
-
-            packetizer.sink.data.eq(sink.data)
         ]
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid,
-                packetizer.source.ready.eq(0),
                 NextState("SEND")
             )
         )
@@ -93,43 +86,26 @@ class LiteEthEtherbonePacketRX(Module):
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid,
-                depacketizer.source.ready.eq(0),
-                NextState("CHECK")
-            )
-        )
-        valid = Signal(reset_less=True)
-        self.sync += valid.eq(
-            depacketizer.source.valid &
-            (depacketizer.source.magic == etherbone_magic)
-        )
-        fsm.act("CHECK",
-            If(valid,
-                NextState("PRESENT")
-            ).Else(
-                NextState("DROP")
+                NextState("DROP"),
+                If(depacketizer.source.magic == etherbone_magic,
+                    NextState("RECEIVE")
+                )
             )
         )
         self.comb += [
-            source.last.eq(depacketizer.source.last),
-
-            source.pf.eq(depacketizer.source.pf),
-            source.pr.eq(depacketizer.source.pr),
-            source.nr.eq(depacketizer.source.nr),
-
-            source.data.eq(depacketizer.source.data),
-
+            depacketizer.source.connect(source, keep={"last", "last_be", "pf", "pr", "nr", "data"}),
             source.src_port.eq(sink.src_port),
             source.dst_port.eq(sink.dst_port),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length - etherbone_packet_header.length)
         ]
-        fsm.act("PRESENT",
-            source.valid.eq(depacketizer.source.valid),
-            depacketizer.source.ready.eq(source.ready),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+        fsm.act("RECEIVE",
+            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
         fsm.act("DROP",
@@ -163,20 +139,27 @@ class LiteEthEtherboneProbe(Module):
 
         # # #
 
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
+            payload_depth = 1,
+            param_depth   = 1,
+            buffered      = False
+        )
+        self.comb += sink.connect(fifo.sink)
+
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            sink.ready.eq(1),
-            If(sink.valid,
-                sink.ready.eq(0),
+            If(fifo.source.valid,
                 NextState("PROBE_RESPONSE")
             )
         )
         fsm.act("PROBE_RESPONSE",
-            sink.connect(source),
+            fifo.source.connect(source),
             source.pf.eq(0),
             source.pr.eq(1),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
+            If(source.valid & source.ready,
+                If(source.last,
+                    NextState("IDLE")
+                )
             )
         )
 
@@ -205,9 +188,12 @@ class LiteEthEtherboneRecordReceiver(Module):
 
         # # #
 
-        # TODO: optimize ressources (no need to store parameters as datas)
-        fifo = stream.SyncFIFO(eth_etherbone_record_description(32), buffer_depth, buffered=True)
-        self.submodules += fifo
+        assert buffer_depth <= 256
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
+            payload_depth = buffer_depth,
+            param_depth   = 1,
+            buffered      = True
+        )
         self.comb += sink.connect(fifo.sink)
 
         base_addr = Signal(32, reset_less=True)
@@ -232,6 +218,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         fsm.act("RECEIVE_WRITES",
             source.valid.eq(fifo.source.valid),
             source.last.eq(count == fifo.source.wcount-1),
+            source.last_be.eq(source.last << 3),
             source.count.eq(fifo.source.wcount),
             source.be.eq(fifo.source.byte_enable),
             source.addr.eq(base_addr[2:] + count),
@@ -259,6 +246,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         fsm.act("RECEIVE_READS",
             source.valid.eq(fifo.source.valid),
             source.last.eq(count == fifo.source.rcount-1),
+            source.last_be.eq(source.last << 3),
             source.count.eq(fifo.source.rcount),
             source.base_addr.eq(base_addr),
             source.addr.eq(fifo.source.data[2:]),
@@ -279,16 +267,17 @@ class LiteEthEtherboneRecordSender(Module):
 
         # # #
 
-        # TODO: optimize ressources (no need to store parameters as datas)
-        fifo = PacketFIFO(eth_etherbone_mmap_description(32), buffer_depth, buffered=True)
-        self.submodules += fifo
+        assert buffer_depth <= 256
+        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_mmap_description(32),
+            payload_depth = buffer_depth,
+            param_depth   = 1,
+            buffered      = True
+        )
         self.comb += sink.connect(fifo.sink)
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            fifo.source.ready.eq(1),
             If(fifo.source.valid,
-                fifo.source.ready.eq(0),
                 NextState("SEND_BASE_ADDRESS")
             )
         )
@@ -311,6 +300,7 @@ class LiteEthEtherboneRecordSender(Module):
         fsm.act("SEND_DATA",
             source.valid.eq(1),
             source.last.eq(fifo.source.last),
+            source.last_be.eq(fifo.source.last_be),
             source.data.eq(fifo.source.data),
             If(source.valid & source.ready,
                 fifo.source.ready.eq(1),
@@ -335,7 +325,7 @@ class LiteEthEtherboneRecord(Module):
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
         ]
-        if endianness is "big":
+        if endianness == "big":
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
         # Save last ip address
@@ -343,9 +333,7 @@ class LiteEthEtherboneRecord(Module):
         last_ip_address = Signal(32, reset_less=True)
         self.sync += [
             If(sink.valid & sink.ready,
-                If(first,
-                    last_ip_address.eq(sink.ip_address),
-                ),
+                If(first, last_ip_address.eq(sink.ip_address)),
                 first.eq(sink.last)
             )
         ]
@@ -357,11 +345,11 @@ class LiteEthEtherboneRecord(Module):
             sender.source.connect(packetizer.sink),
             packetizer.source.connect(source),
             source.length.eq(etherbone_record_header.length +
-                             (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
-                             (sender.source.rcount != 0)*4 + sender.source.rcount*4),
+                (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
+                (sender.source.rcount != 0)*4 + sender.source.rcount*4),
             source.ip_address.eq(last_ip_address)
         ]
-        if endianness is "big":
+        if endianness == "big":
             self.comb += packetizer.sink.data.eq(reverse_bytes(sender.source.data))
 
 # Etherbone Wishbone Master ------------------------------------------------------------------------
@@ -413,20 +401,17 @@ class LiteEthEtherboneWishboneMaster(Module):
             )
         )
         self.sync += [
-            source.base_addr.eq(sink.base_addr),
-            source.addr.eq(sink.addr),
-            source.count.eq(sink.count),
-            source.be.eq(sink.be),
+            sink.connect(source, keep={
+                "base_addr",
+                "addr",
+                "count",
+                "be"}),
             source.we.eq(1),
-            If(data_update,
-                source.data.eq(bus.dat_r)
-            )
+            If(data_update, source.data.eq(bus.dat_r))
         ]
         fsm.act("SEND_DATA",
-            source.valid.eq(sink.valid),
-            source.last.eq(sink.last),
+            sink.connect(source, keep={"valid", "last", "last_be", "ready"}),
             If(source.valid & source.ready,
-                sink.ready.eq(1),
                 If(source.last,
                     NextState("IDLE")
                 ).Else(
@@ -459,6 +444,7 @@ class LiteEthEtherboneWishboneSlave(Module):
         fsm.act("SEND_WRITE",
             source.valid.eq(1),
             source.last.eq(1),
+            source.last_be.eq(1 << 3),
             source.base_addr[2:].eq(bus.adr),
             source.count.eq(1),
             source.be.eq(bus.sel),
@@ -472,6 +458,7 @@ class LiteEthEtherboneWishboneSlave(Module):
         fsm.act("SEND_READ",
             source.valid.eq(1),
             source.last.eq(1),
+            source.last_be.eq(1 << 3),
             source.base_addr.eq(0),
             source.count.eq(1),
             source.be.eq(bus.sel),

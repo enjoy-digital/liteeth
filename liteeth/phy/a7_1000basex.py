@@ -9,6 +9,7 @@ from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
+from liteeth.common import *
 from liteeth.phy.a7_gtp import *
 from liteeth.phy.pcs_1000basex import *
 
@@ -43,11 +44,11 @@ class Gearbox(Module):
         ]
 
 
-class A7_1000BASEX(Module):
+class A7_1000BASEX(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, qpll_channel, data_pads, sys_clk_freq):
+    def __init__(self, qpll_channel, data_pads, sys_clk_freq, rx_polarity=0, tx_polarity=0):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -63,6 +64,8 @@ class A7_1000BASEX(Module):
         # for specifying clock constraints. 62.5MHz clocks.
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
+
+        self.crg_reset = CSRStorage()
 
         # # #
 
@@ -569,7 +572,7 @@ class A7_1000BASEX(Module):
             o_RXELECIDLE                     = Open(),
             i_RXELECIDLEMODE                 = 0b11,
             # Receive Ports - RX Polarity Control Ports
-            i_RXPOLARITY                     = 0,
+            i_RXPOLARITY                     = rx_polarity,
             # Receive Ports -RX Initialization and Reset Ports
             o_RXRESETDONE                    = rx_reset_done,
             # TX Buffer Bypass Ports
@@ -672,7 +675,7 @@ class A7_1000BASEX(Module):
             i_TXCOMWAKE                      = 0,
             i_TXPDELECIDLEMODE               = 0,
             # Transmit Ports - TX Polarity Control Ports
-            i_TXPOLARITY                     = 0,
+            i_TXPOLARITY                     = tx_polarity,
             # Transmit Ports - TX Receiver Detection Ports
             i_TXDETECTRX                     = 0,
             # Transmit Ports - pattern Generator Ports
@@ -782,7 +785,7 @@ class A7_1000BASEX(Module):
         self.comb += [
             qpll_channel.reset.eq(tx_init.qpll_reset),
             tx_init.qpll_lock.eq(qpll_channel.lock),
-            tx_reset.eq(tx_init.tx_reset)
+            tx_reset.eq(tx_init.tx_reset | self.crg_reset.storage)
         ]
         self.sync += tx_mmcm_reset.eq(~qpll_channel.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -791,7 +794,7 @@ class A7_1000BASEX(Module):
         self.submodules += rx_init
         self.comb += [
             rx_init.enable.eq(tx_init.done),
-            rx_reset.eq(rx_init.rx_reset),
+            rx_reset.eq(rx_init.rx_reset | self.crg_reset.storage),
 
             rx_init.rx_pma_reset_done.eq(rx_pma_reset_done),
             drpaddr.eq(rx_init.drpaddr),
