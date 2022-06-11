@@ -162,7 +162,7 @@ class LiteEthPHYETHERNETRX(Module):
         self.comb += noise.eq(edge & (bit_period_cnt == 0))
 
         # Byte logic
-        bitcnt = Signal(max=8)
+        bitcnt = Signal(max=8 + 1)
         rx_inverted = Signal()
         half_bit = Signal()
         data_r = Signal(8)
@@ -172,7 +172,7 @@ class LiteEthPHYETHERNETRX(Module):
             ).Else(
                 source.data.eq(data_r),
             ),
-            source.last_be.eq(1),
+            source.last_be.eq(source.last),
         ]
 
         self.submodules.fsm = fsm = FSM("SYNC")
@@ -184,7 +184,7 @@ class LiteEthPHYETHERNETRX(Module):
         )
 
         fsm.act("SYNC",
-            NextValue(bitcnt, 0),
+            NextValue(bitcnt, 1),
             # Wait for the preamble to sync on byte-boundaries
             If(edge,
                 NextValue(half_bit, ~half_bit),
@@ -218,9 +218,9 @@ class LiteEthPHYETHERNETRX(Module):
                     NextValue(data_r, Cat(data_r[1:], rx_i)),
                     NextValue(bitcnt, bitcnt + 1),
                     NextValue(half_bit, 1),
-                    If(bitcnt == 7,
+                    If(bitcnt == 8,
                         source.valid.eq(1),
-                        NextValue(bitcnt, 0),
+                        NextValue(bitcnt, 1),
                     ),
                 ),
             ),
