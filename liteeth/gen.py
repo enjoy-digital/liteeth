@@ -185,6 +185,7 @@ class PHYCore(SoCMini):
                 pads       = platform.request("mii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
             ethphy = phy(
+                refclk_cd  = None,
                 clock_pads = platform.request("rmii_eth_clocks"),
                 pads       = platform.request("rmii_eth"))
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
