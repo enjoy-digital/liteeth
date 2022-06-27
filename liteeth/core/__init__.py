@@ -14,7 +14,10 @@ from liteeth.core.icmp import LiteEthICMP
 # IP Core ------------------------------------------------------------------------------------------
 
 class LiteEthIPCore(Module, AutoCSR):
-    def __init__(self, phy, mac_address, ip_address, clk_freq, with_icmp=True, dw=8, with_sys_datapath=False):
+    def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
+        with_icmp         = True,
+        with_ip_broadcast = True,
+        with_sys_datapath = False):
         # Parameters.
         # -----------
         ip_address = convert_ip(ip_address)
@@ -42,11 +45,12 @@ class LiteEthIPCore(Module, AutoCSR):
         # IP.
         # ---
         self.submodules.ip  = LiteEthIP(
-            mac         = self.mac,
-            mac_address = mac_address,
-            ip_address  = ip_address,
-            arp_table   = self.arp.table,
-            dw          = dw,
+            mac            = self.mac,
+            mac_address    = mac_address,
+            ip_address     = ip_address,
+            arp_table      = self.arp.table,
+            with_broadcast = with_ip_broadcast,
+            dw             = dw,
         )
         # ICMP (Optional).
         # ----------------
@@ -60,7 +64,10 @@ class LiteEthIPCore(Module, AutoCSR):
 # UDP IP Core --------------------------------------------------------------------------------------
 
 class LiteEthUDPIPCore(LiteEthIPCore):
-    def __init__(self, phy, mac_address, ip_address, clk_freq, with_icmp=True, dw=8, with_sys_datapath=False):
+    def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
+        with_icmp         = True,
+        with_ip_broadcast = True,
+        with_sys_datapath = False):
         # Parameters.
         # -----------
         ip_address = convert_ip(ip_address)
@@ -74,6 +81,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             clk_freq    = clk_freq,
             with_icmp   = with_icmp,
             dw          = dw,
+            with_ip_broadcast = with_ip_broadcast,
             with_sys_datapath = with_sys_datapath,
         )
         # UDP.
