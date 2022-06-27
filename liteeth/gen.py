@@ -242,6 +242,11 @@ class MACCore(PHYCore):
             full_memory_we = core_config.get("full_memory_we", False))
 
         # Wishbone Interface -----------------------------------------------------------------------
+        wb_bus = wishbone.Interface()
+        platform.add_extension(wb_bus.get_ios("wishbone"))
+        self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
+        self.add_wb_master(wb_bus)
+
         ethmac_region_size = (nrxslots + ntxslots)*buffer_depth
         ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
         self.bus.add_slave(name="ethmac", slave=ethmac.bus, region=ethmac_region)
