@@ -84,7 +84,6 @@ class LiteEthMAC(Module, AutoCSR):
 class LiteEthMACCoreCrossbar(Module):
     def __init__(self, core, crossbar, interface, dw, hw_mac=None):
         rx_ready = Signal()
-        rx_valid = Signal()
 
         # IP core packet processing
         self.submodules.packetizer   = LiteEthMACPacketizer(dw)
@@ -123,23 +122,21 @@ class LiteEthMACCoreCrossbar(Module):
             self.comb += [
                 mac_match.eq(hw_mac == depacketizer.source.payload.target_mac),
                 rx_ready.eq(hw_fifo.sink.ready & (cpu_fifo.sink.ready | mac_match)),
-                rx_valid.eq(rx_ready & depacketizer.source.valid),
                 depacketizer.source.connect(hw_fifo.sink, omit={"ready", "valid"}),
                 depacketizer.source.connect(cpu_fifo.sink, omit={"ready", "valid"}),
                 depacketizer.source.ready.eq(rx_ready),
-                hw_fifo.sink.valid.eq(rx_valid),
-                cpu_fifo.sink.valid.eq(rx_valid & ~mac_match),
+                hw_fifo.sink.valid.eq(depacketizer.source.valid & (cpu_fifo.sink_ready | mac_match)),
+                cpu_fifo.sink.valid.eq(depacketizer.source.valid & hw_fifo.sink.ready & ~mac_match),
             ]
         else:
             # RX broadcast
             self.comb += [
                 rx_ready.eq(interface.sink.ready & self.depacketizer.sink.ready),
-                rx_valid.eq(rx_ready & core.source.valid),
                 core.source.connect(interface.sink, omit={"ready", "valid"}),
                 core.source.connect(self.depacketizer.sink, omit={"ready", "valid"}),
                 core.source.ready.eq(rx_ready),
-                interface.sink.valid.eq(rx_valid),
-                self.depacketizer.sink.valid.eq(rx_valid),
+                interface.sink.valid.eq(core.source.valid & self.depacketizer.sink.ready),
+                self.depacketizer.sink.valid.eq(core.source.valid & interface.sink.ready),
             ]
 
         # TX arbiter
