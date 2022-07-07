@@ -363,8 +363,10 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
-        if k in ["clk_freq", "phy_tx_delay", "phy_rx_delay"]:
+        if k in ["clk_freq"]:
             core_config[k] = int(float(core_config[k]))
+        if k in ["phy_tx_delay", "phy_rx_delay"]:
+            core_config[k] = float(core_config[k])
 
     # Generate core --------------------------------------------------------------------------------
     if  "device" not in core_config:
