@@ -2,10 +2,10 @@
 # This file is part of LiteEth.
 #
 # Copyright (c) 2021 Franck Jullien <franck.jullien@collshade.fr>
-# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2022 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-# RGMII PHY for Trion Efinix FPGA
+# RGMII PHY for Titanium Efinix FPGA
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
@@ -51,11 +51,35 @@ class LiteEthPHYRGMIITX(Module):
 
         # TX Ctl IOs.
         # -----------
-        self.sync.eth_tx += pads.tx_ctl.eq(sink.valid)
+        name    = platform.get_pin_name(pads.tx_ctl)
+        pad     = platform.get_pin_location(pads.tx_ctl)
+        io_prop = platform.get_pin_properties(pads.tx_ctl)
+        name    = f"auto_{name}"
+
+        tx_ctl_h = platform.add_iface_io(name + "_HI")
+        tx_ctl_l = platform.add_iface_io(name + "_LO")
+
+        block = {
+            "type"              : "GPIO",
+            "mode"              : "OUTPUT",
+            "name"              : name,
+            "location"          : pad,
+            "properties"        : io_prop,
+            "size"              : 1,
+            "out_reg"           : "DDIO_RESYNC",
+            "out_clk_pin"       : "auto_eth_tx_clk",
+            "is_inclk_inverted" : False,
+            "drive_strength"    : 4 # FIXME: Get it from constraints.
+        }
+        platform.toolchain.ifacewriter.blocks.append(block)
 
         # Logic.
         # ------
         self.comb += sink.ready.eq(1)
+        self.sync += [
+            tx_ctl_h.eq(sink.valid),
+            tx_ctl_l.eq(sink.valid),
+        ]
         for n in range(4):
             self.sync += [
                 tx_data_h[n].eq(sink.data[n + 0]),
@@ -156,9 +180,9 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # TX PLL.
         # -------
         self.submodules.pll = pll = TITANIUMPLL(platform, n=1) # FIXME: Add Auto-Numbering.
-        pll.register_clkin(None,          freq=125e6,           name="auto_eth_rx_clk")
-        pll.create_clkout(None,           freq=125e6,           name="auto_eth_tx_clk")
-        pll.create_clkout(self.cd_eth_tx, freq=125e6,  phase=0, name="auto_eth_tx_clk_delayed")
+        pll.register_clkin(None,          freq=125e6,            name="auto_eth_rx_clk")
+        pll.create_clkout(None,           freq=125e6,            name="auto_eth_tx_clk")
+        pll.create_clkout(self.cd_eth_tx, freq=125e6,  phase=0, name="auto_eth_tx_clk_delayed", with_reset=False)
 
         cmd = "create_clock -period {} eth_tx_clk".format(1e9/125e6)
         platform.toolchain.additional_sdc_commands.append(cmd)
@@ -174,7 +198,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         if hasattr(clock_pads, "rst_n"):
             self.comb += clock_pads.rst_n.eq(~reset)
         self.specials += [
-            #AsyncResetSynchronizer(self.cd_eth_tx, reset), # FIXME?
+            AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
         ]
 
