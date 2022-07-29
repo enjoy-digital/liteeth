@@ -9,8 +9,8 @@ from liteeth.common import *
 # Stream to UDP TX -----------------------------------------------------------------------------------
 
 class LiteEthStream2UDPTX(Module):
-    def __init__(self, ip_address, udp_port, data_width=8, fifo_depth=None, send_level=1):
-        self.sink   = sink   = stream.Endpoint(eth_tty_description(data_width))
+    def __init__(self, ip_address, udp_port, data_width=8, fifo_depth=None):
+        self.sink   = sink   = stream.Endpoint(eth_tty_tx_description(data_width))
         self.source = source = stream.Endpoint(eth_udp_user_description(data_width))
 
         # # #
@@ -18,7 +18,6 @@ class LiteEthStream2UDPTX(Module):
         ip_address = convert_ip(ip_address)
 
         if fifo_depth is None:
-            assert send_level == 1
             self.comb += [
                 sink.connect(source, keep={"valid", "ready", "data"}),
                 source.last.eq(1),
@@ -36,7 +35,8 @@ class LiteEthStream2UDPTX(Module):
 
             self.submodules.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
-                If(fifo.level >= send_level,
+                # Send FIFO contents when we have a full-packet or when FIFO is full.
+                If((fifo.source.valid & fifo.source.last) | ~fifo.sink.ready,
                     NextValue(level, fifo.level),
                     NextValue(counter, 0),
                     NextState("SEND")
@@ -65,7 +65,7 @@ class LiteEthStream2UDPTX(Module):
 class LiteEthUDP2StreamRX(Module):
     def __init__(self, ip_address=None, udp_port=None, data_width=8, fifo_depth=None, with_broadcast=True):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(data_width))
-        self.source = source = stream.Endpoint(eth_tty_description(data_width))
+        self.source = source = stream.Endpoint(eth_tty_rx_description(data_width))
 
         # # #
 
@@ -83,14 +83,18 @@ class LiteEthUDP2StreamRX(Module):
         # Data-Path / Buffering (Optional).
         if fifo_depth is None:
             self.comb += [
-                sink.connect(source, keep={"last", "data"}),
+                sink.connect(source, keep={"last", "data", "error"}),
                 source.valid.eq(sink.valid & valid),
                 sink.ready.eq(source.ready | ~valid)
             ]
         else:
-            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
+            self.submodules.fifo = fifo = stream.SyncFIFO(
+                layout   = [("data", data_width), ("error", 1)],
+                depth    = fifo_depth,
+                buffered = True,
+            )
             self.comb += [
-                sink.connect(fifo.sink, keep={"last", "data"}),
+                sink.connect(fifo.sink, keep={"last", "data", "error"}),
                 fifo.sink.valid.eq(sink.valid & valid),
                 sink.ready.eq(fifo.sink.ready | ~valid),
                 fifo.source.connect(source)

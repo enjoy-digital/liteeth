@@ -149,6 +149,7 @@ def get_udp_port_ios(name, data_width, dynamic_params=False):
             Subsignal("source_last",  Pins(1)),
             Subsignal("source_ready", Pins(1)),
             Subsignal("source_data",  Pins(data_width)),
+            Subsignal("source_error", Pins(1)),
         ),
     ]
 
@@ -342,7 +343,8 @@ class UDPCore(PHYCore):
                 port_ios.source_valid.eq(udp_streamer.source.valid),
                 port_ios.source_last.eq(udp_streamer.source.last),
                 udp_streamer.source.ready.eq(port_ios.source_ready),
-                port_ios.source_data.eq(udp_streamer.source.data)
+                port_ios.source_data.eq(udp_streamer.source.data),
+                port_ios.source_error.eq(udp_streamer.source.error),
             ]
 
 # Build --------------------------------------------------------------------------------------------
