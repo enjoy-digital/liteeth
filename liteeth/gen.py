@@ -385,6 +385,10 @@ def main():
 
     if core_config["core"] == "wishbone":
         soc = MACCore(platform, core_config)
+        # Ensure consistent bank addresses, keep this order
+        soc.add_csr("ctrl")
+        soc.add_csr("ethphy")
+        soc.add_csr("ethmac")
     elif core_config["core"] == "udp":
         soc = UDPCore(platform, core_config)
     else:
