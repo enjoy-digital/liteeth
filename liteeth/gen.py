@@ -156,6 +156,11 @@ def get_udp_port_ios(name, data_width, dynamic_params=False):
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
+    SoCMini.csr_map = {
+        "ctrl"   : 0,
+        "ethphy" : 1,
+        "ethmac" : 2,
+    }
     def __init__(self, platform, core_config):
         for deprecated in ("csr_map", "mem_map"):
             if deprecated in core_config:
