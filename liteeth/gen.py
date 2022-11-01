@@ -235,6 +235,8 @@ class MACCore(PHYCore):
         # Parameters -------------------------------------------------------------------------------
         nrxslots = core_config.get("nrxslots", 2)
         ntxslots = core_config.get("ntxslots", 2)
+        eth_bus_standard = core_config["core"]
+        assert eth_bus_standard in ["wishbone", "axi-lite"]
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -249,8 +251,6 @@ class MACCore(PHYCore):
             ntxslots       = ntxslots,
             full_memory_we = core_config.get("full_memory_we", False))
 
-        eth_bus_standard = core_config["core"]
-        assert eth_bus_standard in ["wishbone", "axi-lite"]
         if eth_bus_standard == "wishbone":
           # Wishbone Interface -----------------------------------------------------------------------
           wb_bus = wishbone.Interface()
