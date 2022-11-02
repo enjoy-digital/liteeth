@@ -6,6 +6,7 @@
 # Copyright (c) 2015-2022 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
+# Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 """
@@ -35,6 +36,7 @@ from litex.build.xilinx.platform import XilinxPlatform
 from litex.build.lattice.platform import LatticePlatform
 
 from litex.soc.interconnect import wishbone
+from litex.soc.interconnect import axi
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 from litex.soc.integration.soc import SoCRegion
@@ -233,6 +235,8 @@ class MACCore(PHYCore):
         # Parameters -------------------------------------------------------------------------------
         nrxslots = core_config.get("nrxslots", 2)
         ntxslots = core_config.get("ntxslots", 2)
+        eth_bus_standard = core_config["core"]
+        assert eth_bus_standard in ["wishbone", "axi-lite"]
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -247,11 +251,20 @@ class MACCore(PHYCore):
             ntxslots       = ntxslots,
             full_memory_we = core_config.get("full_memory_we", False))
 
-        # Wishbone Interface -----------------------------------------------------------------------
-        wb_bus = wishbone.Interface()
-        platform.add_extension(wb_bus.get_ios("wishbone"))
-        self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
-        self.add_wb_master(wb_bus)
+        if eth_bus_standard == "wishbone":
+          # Wishbone Interface -----------------------------------------------------------------------
+          wb_bus = wishbone.Interface()
+          platform.add_extension(wb_bus.get_ios("wishbone"))
+          self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
+          self.add_wb_master(wb_bus)
+
+        if eth_bus_standard == "axi-lite":
+          # AXI-Lite Interface -----------------------------------------------------------------------
+          axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
+          platform.add_extension(axil_bus.get_ios("bus"))
+          self.submodules += axi.Wishbone2AXILite(ethmac.bus, axil_bus)
+          self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
+          self.bus.add_master(master=axil_bus)
 
         ethmac_region_size = (nrxslots + ntxslots)*buffer_depth
         ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
@@ -388,7 +401,7 @@ def main():
         raise ValueError("Unsupported vendor: {}".format(core_config["vendor"]))
     platform.add_extension(_io)
 
-    if core_config["core"] == "wishbone":
+    if core_config["core"] in ["wishbone", "axi-lite"]:
         soc = MACCore(platform, core_config)
     elif core_config["core"] == "udp":
         soc = UDPCore(platform, core_config)
