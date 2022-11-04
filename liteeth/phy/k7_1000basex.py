@@ -49,7 +49,7 @@ class K7_1000BASEX(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -66,7 +66,9 @@ class K7_1000BASEX(Module, AutoCSR):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.crg_reset = CSRStorage()
+        self.crg_reset = Signal()
+        if with_csr:
+            self.add_csr()
 
         # # #
 
@@ -813,7 +815,7 @@ class K7_1000BASEX(Module, AutoCSR):
         self.comb += [
             pll.reset.eq(tx_init.pllreset),
             tx_init.plllock.eq(pll.lock),
-            tx_reset.eq(tx_init.gtXxreset | self.crg_reset.storage)
+            tx_reset.eq(tx_init.gtXxreset | self.crg_reset)
         ]
         self.sync += tx_mmcm_reset.eq(~pll.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -823,7 +825,7 @@ class K7_1000BASEX(Module, AutoCSR):
         self.submodules += rx_init
         self.comb += [
             rx_init.reset.eq(~tx_init.done),
-            rx_reset.eq(rx_init.gtXxreset | self.crg_reset.storage)
+            rx_reset.eq(rx_init.gtXxreset | self.crg_reset)
         ]
         ps_restart = PulseSynchronizer("eth_tx", "sys")
         self.submodules += ps_restart
@@ -860,3 +862,7 @@ class K7_1000BASEX(Module, AutoCSR):
             gearbox.tx_data.eq(pcs.tbi_tx),
             pcs.tbi_rx.eq(gearbox.rx_data)
         ]
+
+    def add_csr(self):
+        self._crg_reset = CSRStorage()
+        self.comb += self.crg_reset.eq(self._crg_reset.storage)
