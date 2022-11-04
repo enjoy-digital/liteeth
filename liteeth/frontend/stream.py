@@ -28,58 +28,46 @@ class LiteEthStream2UDPTX(Module):
             ]
         else:
             level   = Signal(max=fifo_depth+1)
-            counter = Signal(max=fifo_depth+1)
-
-            # intermediate buffer used to scan for fifo.source.last tags
-            self.submodules.fifo_buffer = fifo_buffer = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
+            counter = Signal(max=fifo_depth+1, reset=1)
 
             # sink FIFO
-            self.submodules.fifo        = fifo        = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
-            self.comb += sink.connect(fifo.sink)
+            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
 
-            self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-            fsm.act("IDLE",
-                #  wail until the FIFO is full
-                ##If((fifo.source.valid & fifo.source.last) | ~fifo.sink.ready,
-                If(~fifo.sink.ready,
-                    NextValue(level, fifo.level),
-                    NextValue(counter, 1),
-                    NextState("SCAN")
-                )
-            )
-            fsm.act("SCAN",
-                # copy into fifo_buffer until either a tag is received or there is no data left in the fifo
-                fifo_buffer.sink.data.eq(fifo.source.data),
-                If( fifo_buffer.sink.ready & fifo.source.valid,
-                    fifo.source.ready.eq(1),
-                    fifo_buffer.sink.valid.eq(1),
-                    fifo_buffer.sink.last.eq((counter == level) | fifo.source.last),
+            # avoid assering FIFO we when the FIFO is full
+            fifo_almost_full = Signal()
+            self.comb += fifo_almost_full.eq(fifo.level >= fifo_depth - 1)
+
+            # FSM
+            self.submodules.fsm = fsm = FSM(reset_state="READ")
+            fsm.act("READ",
+                If(sink.valid,
+                    sink.ready.eq(1),
+                    fifo.sink.data.eq(sink.data),
+                    fifo.sink.valid.eq(1), # _we
+                    fifo.sink.last.eq(fifo_almost_full | sink.last),
                     NextValue(counter, counter + 1),
-                    If(fifo_buffer.sink.last,
-                       # now we know the length of the packet
-                       source.length.eq(counter * (data_width//8)),
+                    If(fifo.sink.last,
                        NextValue(level, counter),
                        NextValue(counter, 1),
-                       NextState("SEND")
+                       NextState("WRITE")
                     )
                 )
             )
-            fsm.act("SEND",
-                # send the data in fifo_buffer
+            fsm.act("WRITE",
                 source.valid.eq(1),
                 source.last.eq(counter == level),
                 source.src_port.eq(udp_port),
                 source.dst_port.eq(udp_port),
                 source.ip_address.eq(ip_address),
                 source.length.eq(level * (data_width//8)),
-                source.data.eq(fifo_buffer.source.data),
-                ##source.last_be.eq({32:0b1000, 8:0b1}[data_width]),
+                source.data.eq(fifo.source.data),
                 source.last_be.eq(2**(data_width//8 - 1)),
-                If(source.ready & fifo_buffer.source.valid,
-                    fifo_buffer.source.ready.eq(1),
+                If(source.ready & fifo.source.valid,
+                    fifo.source.ready.eq(1),
                     NextValue(counter, counter + 1),
                     If(source.last,
-                       NextState("IDLE")
+                       NextValue(counter, 1),
+                       NextState("READ")
                     )
                 )
             )
