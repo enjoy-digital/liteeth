@@ -228,15 +228,34 @@ class PHYCore(SoCMini):
             self.platform.add_period_constraint(eth_tx_clk, 1e9/phy.tx_clk_freq)
             self.platform.add_false_path_constraints(self.crg.cd_sys.clk, eth_rx_clk, eth_tx_clk)
 
-# MAC Core -----------------------------------------------------------------------------------------
 
+    #generic function to add wishbone cores (possibly adapted to axi-lite)
+    def add_adapted_wb_master(self, wb_core, bus_standard):
+        assert bus_standard in ["wishbone", "axi-lite"]
+
+        if bus_standard == "wishbone":
+          # Wishbone Interface -----------------------------------------------------------------------
+          wb_bus = wishbone.Interface()
+          self.platform.add_extension(wb_bus.get_ios("wishbone"))
+          self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
+          self.add_wb_master(wb_bus)
+
+        if bus_standard == "axi-lite":
+          # AXI-Lite Interface -----------------------------------------------------------------------
+          axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
+          self.platform.add_extension(axil_bus.get_ios("bus"))
+
+          self.submodules += axi.Wishbone2AXILite(wb_core, axil_bus)
+          self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
+          self.bus.add_master(master=axil_bus)
+
+# MAC Core -----------------------------------------------------------------------------------------
 class MACCore(PHYCore):
     def __init__(self, platform, core_config):
         # Parameters -------------------------------------------------------------------------------
         nrxslots = core_config.get("nrxslots", 2)
         ntxslots = core_config.get("ntxslots", 2)
         eth_bus_standard = core_config["core"]
-        assert eth_bus_standard in ["wishbone", "axi-lite"]
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -251,20 +270,7 @@ class MACCore(PHYCore):
             ntxslots       = ntxslots,
             full_memory_we = core_config.get("full_memory_we", False))
 
-        if eth_bus_standard == "wishbone":
-          # Wishbone Interface -----------------------------------------------------------------------
-          wb_bus = wishbone.Interface()
-          platform.add_extension(wb_bus.get_ios("wishbone"))
-          self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
-          self.add_wb_master(wb_bus)
-
-        if eth_bus_standard == "axi-lite":
-          # AXI-Lite Interface -----------------------------------------------------------------------
-          axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
-          platform.add_extension(axil_bus.get_ios("bus"))
-          self.submodules += axi.Wishbone2AXILite(ethmac.bus, axil_bus)
-          self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
-          self.bus.add_master(master=axil_bus)
+        self.add_adapted_wb_master(ethmac.bus, eth_bus_standard)
 
         ethmac_region_size = (nrxslots + ntxslots)*buffer_depth
         ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
@@ -298,7 +304,7 @@ class UDPCore(PHYCore):
 
         # Core -------------------------------------------------------------------------------------
         data_width = core_config.get("data_width", 8)
-        self.submodules.core = LiteEthUDPIPCore(self.ethphy,
+        self.submodules.core = eth_core = LiteEthUDPIPCore(self.ethphy,
             mac_address = mac_address,
             ip_address  = ip_address,
             clk_freq    = core_config["clk_freq"],
@@ -365,6 +371,51 @@ class UDPCore(PHYCore):
                 port_ios.source_error.eq(udp_streamer.source.error),
             ]
 
+        eth_bus_standard = core_config["core"]
+        self.add_adapted_wb_master(eth_core.bus, eth_bus_standard)
+
+
+class EtherboneCore(PHYCore):
+    def __init__(self, platform, core_config):
+
+        # Config -----------------------------------------------------------------------------------
+
+        # MAC Address.
+        mac_address = core_config.get("mac_address", None)
+        # Get MAC Address from IOs when not specified.
+        if mac_address is None:
+            mac_address = platform.request("mac_address")
+
+        # IP Address.
+        ip_address = core_config.get("ip_address", None)
+        # Get IP Address from IOs when not specified.
+        if ip_address is None:
+            ip_address = platform.request("ip_address")
+
+        # PHY --------------------------------------------------------------------------------------
+        PHYCore.__init__(self, platform, core_config)
+
+        if True:        
+                from liteeth.core import LiteEthUDPIPCore
+
+                ethcore = LiteEthUDPIPCore(
+                    phy         = self.ethphy,
+                    mac_address = mac_address,
+                    ip_address  = ip_address,
+                    clk_freq    = self.clk_freq,
+                    dw          = 32,
+                    with_ip_broadcast = True,
+                    with_sys_datapath = True,
+                )
+                self.submodules.ethcore_etherbone = ethcore
+
+                # Etherbone
+                from liteeth.frontend.etherbone import LiteEthEtherbone
+                etherbone = LiteEthEtherbone(ethcore.udp, 1234, buffer_depth=16, cd="sys")
+        
+        self.add_adapted_wb_master(etherbone.wishbone.bus, "wishbone")
+        #self.add_adapted_wb_master(etherbone.wishbone.bus, "axi-lite")
+
 # Build --------------------------------------------------------------------------------------------
 
 def main():
@@ -405,6 +456,8 @@ def main():
         soc = MACCore(platform, core_config)
     elif core_config["core"] == "udp":
         soc = UDPCore(platform, core_config)
+    elif core_config["core"] == "etherbone":
+        soc = EtherboneCore(platform, core_config)
     else:
         raise ValueError("Unknown core: {}".format(core_config["core"]))
 
