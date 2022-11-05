@@ -254,7 +254,7 @@ class PHYCore(SoCMini):
           # Wishbone Interface -----------------------------------------------------------------------
           wb_bus = wishbone.Interface()
           self.platform.add_extension(wb_bus.get_ios("wishbone"))
-          self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
+          self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="master")
           self.add_wb_master(wb_bus)
 
         if bus_standard == "axi-lite":
@@ -264,8 +264,25 @@ class PHYCore(SoCMini):
 
           #use AXILite2Wishbone for slaves
           self.submodules += axi.Wishbone2AXILite(wb_core, axil_bus)
-          self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
+          self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="master")
           self.bus.add_master(master=axil_bus)
+
+    def add_adapted_wb_slave(self, wb_core, bus_standard): #TODO: to be tested
+        # Wishbone.
+        if bus_standard == "wishbone":
+            platform.add_extension(wb_core.get_ios("bus"))
+            platform_bus = self.platform.request("bus")
+            self.comb += wb_core.connect_to_pads(platform_bus, mode="slave")
+
+        # AXI-Lite.
+        if bus_standard == "axi-lite":
+            # core is in Wishbone, converter to AXI-Lite and expose the AXI-Lite Bus.
+            axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
+            platform.add_extension(axil_bus.get_ios("bus"))
+
+            #adapter should be Wishbone2AXILite the opposite for masters
+            self.submodules += axi.AXILite2Wishbone(axil_bus, wb_core)
+            self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
 
 # MAC Core -----------------------------------------------------------------------------------------
 class MACCore(PHYCore):
