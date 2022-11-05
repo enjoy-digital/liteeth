@@ -430,26 +430,23 @@ class EtherboneCore(PHYCore):
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
 
-        if True:        
-                from liteeth.core import LiteEthUDPIPCore
+        from liteeth.core import LiteEthUDPIPCore
+        self.submodules.ethcore_etherbone = ethcore = LiteEthUDPIPCore(
+            phy         = self.ethphy,
+            mac_address = mac_address,
+            ip_address  = ip_address,
+            clk_freq    = self.clk_freq,
+            dw          = 32,
+            with_ip_broadcast = True,
+            with_sys_datapath = True,
+          )
 
-                ethcore = LiteEthUDPIPCore(
-                    phy         = self.ethphy,
-                    mac_address = mac_address,
-                    ip_address  = ip_address,
-                    clk_freq    = self.clk_freq,
-                    dw          = 32,
-                    with_ip_broadcast = True,
-                    with_sys_datapath = True,
-                )
-                self.submodules.ethcore_etherbone = ethcore
-
-                # Etherbone
-                from liteeth.frontend.etherbone import LiteEthEtherbone
-                etherbone = LiteEthEtherbone(ethcore.udp, 1234, buffer_depth=16, cd="sys")
+        # Etherbone
+        from liteeth.frontend.etherbone import LiteEthEtherbone
+        etherbone = LiteEthEtherbone(ethcore.udp, 1234, buffer_depth=16, cd="sys")
+        self.submodules.etherbone_etherbone = etherbone
         
-        #self.add_adapted_wb_master(etherbone.wishbone.bus, "wishbone")
-        self.add_adapted_wb_master(etherbone.wishbone.bus, "axi-lite")
+        self.add_adapted_wb_master(etherbone.wishbone.bus, "axi-lite") # or "wishbone"
 
 # Build --------------------------------------------------------------------------------------------
 
