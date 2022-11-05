@@ -129,6 +129,21 @@ _io = [
         Subsignal("tx_ctl",  Pins(1)),
         Subsignal("tx_data", Pins(4))
     ),
+
+    # Simulation model (Stream Endpoint)
+    ("sim_eth_clocks", 0,
+        Subsignal("tx", Pins(1)),
+        Subsignal("rx", Pins(1))
+    ),
+    ("sim_eth", 0,
+        Subsignal("source_valid", Pins(1)),
+        Subsignal("source_ready", Pins(1)),
+        Subsignal("source_data",  Pins(8)),
+
+        Subsignal("sink_valid",   Pins(1)),
+        Subsignal("sink_ready",   Pins(1)),
+        Subsignal("sink_data",    Pins(8)),
+    ),
 ]
 
 def get_udp_port_ios(name, data_width, dynamic_params=False):
@@ -212,6 +227,8 @@ class PHYCore(SoCMini):
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
+        elif phy in [liteeth_phys.LiteEthPHYModel]:
+            ethphy = phy(self.platform.request("sim_eth", 0))
         else:
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
@@ -245,6 +262,7 @@ class PHYCore(SoCMini):
           axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
           self.platform.add_extension(axil_bus.get_ios("bus"))
 
+          #use AXILite2Wishbone for slaves
           self.submodules += axi.Wishbone2AXILite(wb_core, axil_bus)
           self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
           self.bus.add_master(master=axil_bus)
@@ -413,8 +431,8 @@ class EtherboneCore(PHYCore):
                 from liteeth.frontend.etherbone import LiteEthEtherbone
                 etherbone = LiteEthEtherbone(ethcore.udp, 1234, buffer_depth=16, cd="sys")
         
-        self.add_adapted_wb_master(etherbone.wishbone.bus, "wishbone")
-        #self.add_adapted_wb_master(etherbone.wishbone.bus, "axi-lite")
+        #self.add_adapted_wb_master(etherbone.wishbone.bus, "wishbone")
+        self.add_adapted_wb_master(etherbone.wishbone.bus, "axi-lite")
 
 # Build --------------------------------------------------------------------------------------------
 
