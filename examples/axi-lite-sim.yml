@@ -1,0 +1,19 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# PHY ----------------------------------------------------------------------
+phy:        LiteEthPHYModel
+vendor:     xilinx
+toolchain:  vivado
+# Core ---------------------------------------------------------------------
+clk_freq:   100e6
+core:       axi-lite
+endianness: big
+
+soc:
+    mem_map:
+        ethmac: 0x50000000

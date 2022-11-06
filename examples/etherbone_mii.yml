@@ -1,0 +1,25 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# PHY ----------------------------------------------------------------------
+phy:        LiteEthPHYMII
+vendor:     xilinx
+toolchain:  vivado
+
+# Core ---------------------------------------------------------------------
+clk_freq:   100e6
+core:       etherbone
+
+#MAC & IP ------------------------------------------------------------------
+mac_address: 0x10e2d5000001
+ip_address:  "192.168.1.51"
+
+# SoC ----------------------------------------------------------------------
+soc:
+    mem_map:
+        ethmac: 0x50000000
+
