@@ -233,10 +233,10 @@ class PHYCore(SoCMini):
 class MACCore(PHYCore):
     def __init__(self, platform, core_config):
         # Parameters -------------------------------------------------------------------------------
-        nrxslots = core_config.get("nrxslots", 2)
-        ntxslots = core_config.get("ntxslots", 2)
-        eth_bus_standard = core_config["core"]
-        assert eth_bus_standard in ["wishbone", "axi-lite"]
+        nrxslots     = core_config.get("nrxslots", 2)
+        ntxslots     = core_config.get("ntxslots", 2)
+        bus_standard = core_config["core"]
+        assert bus_standard in ["wishbone", "axi-lite"]
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -251,14 +251,14 @@ class MACCore(PHYCore):
             ntxslots       = ntxslots,
             full_memory_we = core_config.get("full_memory_we", False))
 
-        if eth_bus_standard == "wishbone":
+        if bus_standard == "wishbone":
           # Wishbone Interface -----------------------------------------------------------------------
           wb_bus = wishbone.Interface()
           platform.add_extension(wb_bus.get_ios("wishbone"))
           self.comb += wb_bus.connect_to_pads(self.platform.request("wishbone"), mode="slave")
           self.bus.add_master(master=wb_bus)
 
-        if eth_bus_standard == "axi-lite":
+        if bus_standard == "axi-lite":
           # AXI-Lite Interface -----------------------------------------------------------------------
           axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
           platform.add_extension(axil_bus.get_ios("bus"))
