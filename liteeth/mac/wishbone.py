@@ -40,7 +40,7 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
 
         # Wishbone SRAM interfaces for the reader SRAM (i.e. Ethernet TX).
         wb_tx_sram_ifs = []
-        for n in range(nrxslots):
+        for n in range(ntxslots):
             wb_tx_sram_ifs.append(wishbone.SRAM(
                 mem_or_size = self.sram.reader.mems[n],
                 read_only   = False,
