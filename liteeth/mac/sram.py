@@ -91,7 +91,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                     )
                 ).Else(
                     NextValue(errors, errors + 1),
-                    NextState("DISCARD-REMAINING")
+                    NextState("DISCARD-ALL")
                 )
             )
         )
@@ -101,6 +101,16 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
                     NextState("DISCARD")
                 ).Else(
                     NextState("TERMINATE")
+                )
+            )
+        )
+        fsm.act("DISCARD-ALL",
+            If(sink.valid & sink.last,
+                If((sink.last_be) != 0,
+                    NextState("DISCARD")
+                ).Else(
+                    NextValue(length, 0),
+                    NextState("WRITE")
                 )
             )
         )
