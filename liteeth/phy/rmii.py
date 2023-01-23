@@ -43,7 +43,7 @@ class LiteEthPHYRMIITX(Module):
 
 
 class LiteEthPHYRMIIRX(Module):
-    def __init__(self, pads):
+    def __init__(self, pads, hw_init_mode_cfg):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -64,11 +64,19 @@ class LiteEthPHYRMIIRX(Module):
         crs_dv = Signal()
         crs_dv_d = Signal()
         rx_data = Signal(2)
-        self.sync += [
-            crs_dv.eq(pads.crs_dv),
-            crs_dv_d.eq(crs_dv),
-            rx_data.eq(pads.rx_data)
-        ]
+
+        if hw_init_mode_cfg:
+            self.sync += [
+                crs_dv.eq(pads.crs_dv_i),
+                crs_dv_d.eq(crs_dv),
+                rx_data.eq(pads.rx_data_i)
+            ]
+        else:
+            self.sync += [
+                crs_dv.eq(pads.crs_dv),
+                crs_dv_d.eq(crs_dv),
+                rx_data.eq(pads.rx_data)
+            ]
 
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -93,7 +101,7 @@ class LiteEthPHYRMIIRX(Module):
 
 
 class LiteEthPHYRMIICRG(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, refclk_cd, with_hw_init_reset):
+    def __init__(self, clock_pads, pads, refclk_cd, with_hw_init_reset, hw_init_mode_cfg):
         self._reset = CSRStorage()
 
         # # #
@@ -125,6 +133,20 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
             self.comb += reset.eq(self._reset.storage)
         if hasattr(pads, "rst_n"):
             self.comb += pads.rst_n.eq(~reset)
+
+        if hw_init_mode_cfg:
+            self.specials += [
+                Tristate(pads.rx_data, pads.rx_data_o, reset, pads.rx_data_i),
+                Tristate(pads.crs_dv, pads.crs_dv_o, reset, pads.crs_dv_i),
+            ]
+            self.comb += [
+                If(self.reset,
+                    pads.rx_data_o[0].eq(hw_init_mode_cfg[0]),
+                    pads.rx_data_o[1].eq(hw_init_mode_cfg[1]),
+                    pads.crs_dv_o.eq(hw_init_mode_cfg[2]),
+                )
+            ]
+
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
@@ -135,10 +157,21 @@ class LiteEthPHYRMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 50e6
     rx_clk_freq = 50e6
-    def __init__(self, clock_pads, pads, refclk_cd="eth", with_hw_init_reset=True):
-        self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, refclk_cd, with_hw_init_reset)
+    def __init__(self, clock_pads, pads, refclk_cd="eth", with_hw_init_reset=True, hw_init_mode_cfg=False):
+
+        if hw_init_mode_cfg:
+            rx_data_o = Signal(2)
+            rx_data_i = Signal(2)
+            crs_dv_o = Signal()
+            crs_dv_i = Signal()
+            pads.rx_data_o = rx_data_o
+            pads.rx_data_i = rx_data_i
+            pads.crs_dv_o = crs_dv_o
+            pads.crs_dv_i = crs_dv_i
+
+        self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, refclk_cd, with_hw_init_reset, hw_init_mode_cfg)
         self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
+        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads, hw_init_mode_cfg))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
