@@ -2,6 +2,7 @@
 # This file is part of LiteEth.
 #
 # Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
@@ -17,7 +18,11 @@ class LiteEthIPCore(Module, AutoCSR):
     def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
         with_icmp         = True,
         with_ip_broadcast = True,
-        with_sys_datapath = False):
+        with_sys_datapath = False,
+        tx_cdc_depth      = 32,
+        tx_cdc_buffered   = False,
+        rx_cdc_depth      = 32,
+        rx_cdc_buffered   = False):
         # Parameters.
         # -----------
         ip_address = convert_ip(ip_address)
@@ -30,6 +35,10 @@ class LiteEthIPCore(Module, AutoCSR):
             interface = "crossbar",
             with_preamble_crc = True,
             with_sys_datapath = with_sys_datapath,
+            tx_cdc_depth = tx_cdc_depth,
+            tx_cdc_buffered = tx_cdc_buffered,
+            rx_cdc_depth = rx_cdc_depth,
+            rx_cdc_buffered = rx_cdc_buffered
         )
 
         # ARP.
@@ -67,7 +76,11 @@ class LiteEthUDPIPCore(LiteEthIPCore):
     def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
         with_icmp         = True,
         with_ip_broadcast = True,
-        with_sys_datapath = False):
+        with_sys_datapath = False,
+        tx_cdc_depth      = 32,
+        tx_cdc_buffered   = False,
+        rx_cdc_depth      = 32,
+        rx_cdc_buffered   = False):
         # Parameters.
         # -----------
         ip_address = convert_ip(ip_address)
@@ -83,6 +96,10 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             dw          = dw,
             with_ip_broadcast = with_ip_broadcast,
             with_sys_datapath = with_sys_datapath,
+            tx_cdc_depth      = tx_cdc_depth,
+            tx_cdc_buffered   = tx_cdc_buffered,
+            rx_cdc_depth      = rx_cdc_depth,
+            rx_cdc_buffered   = rx_cdc_buffered
         )
         # UDP.
         # ----

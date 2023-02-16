@@ -7,6 +7,7 @@
 # Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
 # Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
+# Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 """
@@ -233,9 +234,13 @@ class PHYCore(SoCMini):
 class MACCore(PHYCore):
     def __init__(self, platform, core_config):
         # Parameters -------------------------------------------------------------------------------
-        nrxslots     = core_config.get("nrxslots", 2)
-        ntxslots     = core_config.get("ntxslots", 2)
-        bus_standard = core_config["core"]
+        nrxslots        = core_config.get("nrxslots", 2)
+        ntxslots        = core_config.get("ntxslots", 2)
+        bus_standard    = core_config["core"]
+        tx_cdc_depth    = core_config.get("tx_cdc_depth", 32)
+        tx_cdc_buffered = core_config.get("tx_cdc_buffered", False)
+        rx_cdc_depth    = core_config.get("rx_cdc_depth", 32)
+        rx_cdc_buffered = core_config.get("rx_cdc_buffered", False)
         assert bus_standard in ["wishbone", "axi-lite"]
 
         # PHY --------------------------------------------------------------------------------------
@@ -243,13 +248,18 @@ class MACCore(PHYCore):
 
         # MAC --------------------------------------------------------------------------------------
         self.submodules.ethmac = ethmac = LiteEthMAC(
-            phy            = self.ethphy,
-            dw             = 32,
-            interface      = "wishbone",
-            endianness     = core_config["endianness"],
-            nrxslots       = nrxslots,
-            ntxslots       = ntxslots,
-            full_memory_we = core_config.get("full_memory_we", False))
+            phy             = self.ethphy,
+            dw              = 32,
+            interface       = "wishbone",
+            endianness      = core_config["endianness"],
+            nrxslots        = nrxslots,
+            ntxslots        = ntxslots,
+            full_memory_we  = core_config.get("full_memory_we", False),
+            tx_cdc_depth    = tx_cdc_depth
+            tx_cdc_buffered = tx_cdc_buffered
+            rx_cdc_depth    = rx_cdc_depth
+            rx_cdc_buffered = rx_cdc_buffered
+        )
 
         if bus_standard == "wishbone":
           # Wishbone Interface -----------------------------------------------------------------------
@@ -280,6 +290,10 @@ class UDPCore(PHYCore):
         from liteeth.frontend.stream import LiteEthUDPStreamer
 
         # Config -----------------------------------------------------------------------------------
+        tx_cdc_depth    = core_config.get("tx_cdc_depth", 32)
+        tx_cdc_buffered = core_config.get("tx_cdc_buffered", False)
+        rx_cdc_depth    = core_config.get("rx_cdc_depth", 32)
+        rx_cdc_buffered = core_config.get("rx_cdc_buffered", False)
 
         # MAC Address.
         mac_address = core_config.get("mac_address", None)
@@ -304,6 +318,11 @@ class UDPCore(PHYCore):
             clk_freq    = core_config["clk_freq"],
             dw          = data_width,
             with_sys_datapath = (data_width == 32),
+            tx_cdc_depth    = tx_cdc_depth
+            tx_cdc_buffered = tx_cdc_buffered
+            rx_cdc_depth    = rx_cdc_depth
+            rx_cdc_buffered = rx_cdc_buffered
+
         )
 
         # UDP Ports --------------------------------------------------------------------------------
