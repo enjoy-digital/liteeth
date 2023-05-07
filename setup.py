@@ -10,7 +10,7 @@ with open("README.md", "r") as fp:
 
 setup(
     name="liteeth",
-    version="2022.12",
+    version="2023.04",
     description="Small footprint and configurable Ethernet core",
     long_description=long_description,
     long_description_content_type="text/markdown",
