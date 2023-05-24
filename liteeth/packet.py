@@ -40,7 +40,7 @@ class Packetizer(Module):
         # Header Encode/Load/Shift.
         self.comb += header.encode(sink, self.header)
         self.sync += If(sr_load, sr.eq(self.header))
-        if header_words != 1:
+        if header_words > 1:
             self.sync += If(sr_shift, sr.eq(sr[data_width:]))
 
         source_last_a = Signal()
@@ -50,23 +50,35 @@ class Packetizer(Module):
         # FSM.
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm_from_idle = Signal()
+        if header_words < 1:
+            statements = [source.data.eq(Cat(self.header, sink.data[:data_width - header.length*8])),
+                          sr_load.eq(1),
+                          sink.ready.eq(0),
+                          NextValue(fsm_from_idle, 1),
+                          NextState("UNALIGNED-DATA-COPY")
+                          ]
+        else:
+            statements = [
+                          source.valid.eq(1),
+                          source.data.eq(self.header[:data_width]),
+                          If(source.valid & source.ready,
+                             sr_load.eq(1),
+                             NextValue(fsm_from_idle, 1),
+                             If(header_words == 1,
+                                NextState("ALIGNED-DATA-COPY" if aligned else "UNALIGNED-DATA-COPY")
+                                ).Else(
+                                    NextState("HEADER-SEND")
+                                )
+                             )
+                          ]
+
         fsm.act("IDLE",
             sink.ready.eq(1),
             NextValue(count, 1),
             If(sink.valid,
                 sink.ready.eq(0),
-                source.valid.eq(1),
                 source_last_a.eq(0),
-                source.data.eq(self.header[:data_width]),
-                If(source.valid & source.ready,
-                    sr_load.eq(1),
-                    NextValue(fsm_from_idle, 1),
-                    If(header_words == 1,
-                        NextState("ALIGNED-DATA-COPY" if aligned else "UNALIGNED-DATA-COPY")
-                    ).Else(
-                        NextState("HEADER-SEND")
-                    )
-               )
+                *statements
             )
         )
         fsm.act("HEADER-SEND",
@@ -96,7 +108,7 @@ class Packetizer(Module):
             )
         )
         if not aligned:
-            header_offset_multiplier = 1 if header_words == 1 else 2
+            header_offset_multiplier = 0 if header_words == 0 else 1 if header_words == 1 else 2
             self.sync += If(source.valid & source.ready, sink_d.eq(sink))
             fsm.act("UNALIGNED-DATA-COPY",
                 source.valid.eq(sink.valid | sink_d.last),
@@ -234,7 +246,7 @@ class Depacketizer(Module):
         sink_d            = stream.Endpoint(sink_description)
 
         # Header Shift/Decode.
-        if (header_words) == 1 and (header_leftover == 0):
+        if (header_words == 1 and (header_leftover == 0)) or header_words == 0:
             self.sync += If(sr_shift, sr.eq(sink.data))
         else:
             self.sync += [
@@ -257,7 +269,7 @@ class Depacketizer(Module):
             If(sink.valid,
                 sr_shift.eq(1),
                 NextValue(fsm_from_idle, 1),
-                If(header_words == 1,
+                If(header_words <= 1,
                     NextState("ALIGNED-DATA-COPY" if aligned else "UNALIGNED-DATA-COPY"),
                 ).Else(
                     NextState("HEADER-RECEIVE")
@@ -288,6 +300,25 @@ class Depacketizer(Module):
         )
 
         if not aligned:
+            if header_words == 0:
+                statements = [
+                    source.valid.eq(sink.valid),
+                    sink.ready.eq(~sink_d.last),
+                    If(sink.valid,
+                       NextValue(fsm_from_idle, 0),
+                       sr_shift_leftover.eq(0),
+                    )
+                ]
+            else:
+                statements = [
+                    source.valid.eq(sink_d.last),
+                    sink.ready.eq(~sink_d.last),
+                    If(sink.valid,
+                       NextValue(fsm_from_idle, 0),
+                       sr_shift_leftover.eq(1),
+                    )
+                ]
+
             self.sync += If(sink.valid & sink.ready, sink_d.eq(sink))
             fsm.act("UNALIGNED-DATA-COPY",
                 source.valid.eq(sink.valid | sink_d.last),
@@ -296,12 +327,7 @@ class Depacketizer(Module):
                 source.data.eq(sink_d.data[header_leftover*8:]),
                 source.data[min((bytes_per_clk-header_leftover)*8, data_width-1):].eq(sink.data),
                 If(fsm_from_idle,
-                    source.valid.eq(sink_d.last),
-                    sink.ready.eq(~sink_d.last),
-                    If(sink.valid,
-                        NextValue(fsm_from_idle, 0),
-                        sr_shift_leftover.eq(1),
-                    )
+                   *statements
                 ),
                 If(source.valid & source.ready,
                     If(source.last,

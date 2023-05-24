@@ -30,13 +30,16 @@ class LiteEthARPPacketizer(Packetizer):
 
 
 class LiteEthARPTX(Module):
-    def __init__(self, mac_address, ip_address, dw=8):
+    def __init__(self, mac_address, ip_address, dw=8, vlan_id=False):
         self.sink   = sink   = stream.Endpoint(_arp_table_layout)
         self.source = source = stream.Endpoint(eth_mac_description(dw))
 
         # # #
 
-        packet_length = max(arp_header.length, arp_min_length)
+        if vlan_id:
+            packet_length = max(arp_header.length, arp_vlan_min_length)
+        else:
+            packet_length = max(arp_header.length, arp_min_length)
         packet_words  = packet_length//(dw//8)
         counter       = Signal(max=packet_words, reset_less=True)
 
@@ -294,16 +297,26 @@ class LiteEthARPTable(Module):
 # ARP ----------------------------------------------------------------------------------------------
 
 class LiteEthARP(Module):
-    def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8):
-        self.submodules.tx    = tx    = LiteEthARPTX(mac_address, ip_address, dw)
+    def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8, vlan_id=False):
+        self.submodules.tx    = tx    = LiteEthARPTX(mac_address, ip_address, dw, vlan_id=vlan_id)
         self.submodules.rx    = rx    = LiteEthARPRX(mac_address, ip_address, dw)
         self.submodules.table = table = LiteEthARPTable(clk_freq)
         self.comb += [
             rx.source.connect(table.sink),
             table.source.connect(tx.sink)
         ]
-        mac_port = mac.crossbar.get_port(ethernet_type_arp, dw=dw)
-        self.comb += [
-            tx.source.connect(mac_port.sink),
-            mac_port.source.connect(rx.sink)
-        ]
+        if vlan_id:
+            assert(type(vlan_id) is int)
+            mac_port = mac.crossbar.get_port((vlan_id << 16) | ethernet_type_arp, dw=dw)
+            self.comb += [
+                mac_port.sink.vid.eq(vlan_id),
+                tx.source.connect(mac_port.sink),
+                mac_port.source.connect(rx.sink, omit={'dei', 'pcp', 'vid'})
+            ]
+
+        else:
+            mac_port = mac.crossbar.get_port(ethernet_type_arp, dw=dw)
+            self.comb += [
+                tx.source.connect(mac_port.sink),
+                mac_port.source.connect(rx.sink)
+            ]

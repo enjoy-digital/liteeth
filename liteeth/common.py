@@ -25,8 +25,9 @@ eth_interpacket_gap  = 12
 eth_preamble         = 0xd555555555555555
 buffer_depth         = 2**log2_int(eth_mtu, need_pow2=False)
 
-ethernet_type_ip     = 0x800
-ethernet_type_arp    = 0x806
+ethernet_type_ip     = 0x0800
+ethernet_type_arp    = 0x0806
+ethernet_8021q_tpid = 0x8100
 
 # MAC Constants/Header -----------------------------------------------------------------------------
 
@@ -37,6 +38,14 @@ mac_header_fields = {
     "ethernet_type": HeaderField(12, 0, 16)
 }
 mac_header = Header(mac_header_fields, mac_header_length, swap_field_bytes=True)
+
+vlan_mac_header_length = 4
+vlan_mac_header_fields = {
+    "vid": HeaderField(0, 0, 16),
+    "ethernet_type": HeaderField(2, 0, 16)
+}
+
+vlan_mac_header = Header(vlan_mac_header_fields, vlan_mac_header_length, swap_field_bytes=True)
 
 # ARP Constants/Header -----------------------------------------------------------------------------
 
@@ -59,6 +68,7 @@ arp_header_fields = {
     "target_ip":  HeaderField(24, 0, 32)
 }
 arp_header = Header(arp_header_fields, arp_header_length, swap_field_bytes=True)
+arp_vlan_min_length = eth_min_frame_length - eth_fcs_length - mac_header_length - vlan_mac_header_length
 
 # Broadcast Constants ------------------------------------------------------------------------------
 
@@ -178,6 +188,16 @@ def eth_phy_description(dw):
 # MAC
 def eth_mac_description(dw):
     payload_layout = mac_header.get_layout() + [
+        ("data",       dw),
+        ("last_be", dw//8),
+        ("error",   dw//8)
+    ]
+    return EndpointDescription(payload_layout)
+
+def eth_mac_vlan_description(dw):
+    payload_layout = vlan_mac_header.get_layout() + [
+        ("target_mac", 48),
+        ("sender_mac", 48),
         ("data",       dw),
         ("last_be", dw//8),
         ("error",   dw//8)
