@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -25,16 +25,17 @@ class LiteEthPHYRMIITX(Module):
 
         # # #
 
-        converter = stream.StrideConverter(converter_description(8),
-                                           converter_description(2))
-        self.submodules += converter
+        self.submodules.converter = converter = stream.StrideConverter(
+            description_from = converter_description(8),
+            description_to   = converter_description(2),
+        )
         self.comb += [
             converter.sink.valid.eq(sink.valid),
             converter.sink.data.eq(sink.data),
             sink.ready.eq(converter.sink.ready),
             converter.source.ready.eq(1)
         ]
-        pads.tx_en.reset_less = True
+        pads.tx_en.reset_less   = True
         pads.tx_data.reset_less = True
         self.sync += [
             pads.tx_en.eq(converter.source.valid),
@@ -48,22 +49,24 @@ class LiteEthPHYRMIIRX(Module):
 
         # # #
 
-        converter = stream.StrideConverter(converter_description(2),
-                                           converter_description(8))
+        converter = stream.StrideConverter(
+            description_from = converter_description(2),
+            description_to   = converter_description(8),
+        )
         converter = ResetInserter()(converter)
-        self.submodules += converter
+        self.submodules.converter = converter
 
         converter_sink_valid = Signal()
-        converter_sink_data = Signal(2)
+        converter_sink_data  = Signal(2)
 
         self.specials += [
             MultiReg(converter_sink_valid, converter.sink.valid, n=2),
-            MultiReg(converter_sink_data, converter.sink.data, n=2)
+            MultiReg(converter_sink_data,  converter.sink.data,  n=2)
         ]
 
-        crs_dv = Signal()
+        crs_dv   = Signal()
         crs_dv_d = Signal()
-        rx_data = Signal(2)
+        rx_data  = Signal(2)
         self.sync += [
             crs_dv.eq(pads.crs_dv),
             crs_dv_d.eq(crs_dv),
@@ -83,7 +86,7 @@ class LiteEthPHYRMIIRX(Module):
         fsm.act("RECEIVE",
             converter_sink_valid.eq(1),
             converter_sink_data.eq(rx_data),
-            # end of frame when 2 consecutives 0 on crs_dv
+            # End of frame when 2 consecutives 0 on crs_dv.
             If(~(crs_dv | crs_dv_d),
               converter.sink.last.eq(1),
               NextState("IDLE")
@@ -93,7 +96,9 @@ class LiteEthPHYRMIIRX(Module):
 
 
 class LiteEthPHYRMIICRG(Module, AutoCSR):
-    def __init__(self, clock_pads, pads, refclk_cd, with_hw_init_reset):
+    def __init__(self, clock_pads, pads, refclk_cd,
+        with_hw_init_reset     = True,
+        with_refclk_ddr_output = True):
         self._reset = CSRStorage()
 
         # # #
@@ -114,7 +119,10 @@ class LiteEthPHYRMIICRG(Module, AutoCSR):
             self.comb += self.cd_eth_tx.clk.eq(ClockSignal(refclk_cd))
             # Drive clock_pads if provided.
             if clock_pads is not None:
-                self.specials += DDROutput(0, 1, clock_pads.ref_clk, ClockSignal("eth_tx"))
+                if with_refclk_ddr_output:
+                    self.specials += DDROutput(i1=0, i2=1, o=clock_pads.ref_clk, clk=ClockSignal("eth_tx"))
+                else:
+                    self.comb += clock_pads.ref_clk.eq(~ClockSignal("eth_tx")) # CHEKCME: Keep Invert?
 
         # Reset
         self.reset = reset = Signal()
@@ -135,10 +143,15 @@ class LiteEthPHYRMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 50e6
     rx_clk_freq = 50e6
-    def __init__(self, clock_pads, pads, refclk_cd="eth", with_hw_init_reset=True):
-        self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, refclk_cd, with_hw_init_reset)
-        self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
+    def __init__(self, clock_pads, pads, refclk_cd="eth",
+        with_hw_init_reset     = True,
+        with_refclk_ddr_output = True):
+        self.submodules.crg = LiteEthPHYRMIICRG(clock_pads, pads, refclk_cd,
+            with_hw_init_reset     = with_hw_init_reset,
+            with_refclk_ddr_output = with_refclk_ddr_output,
+        )
+        self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
+        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
