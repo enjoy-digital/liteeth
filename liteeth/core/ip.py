@@ -254,14 +254,25 @@ class LiteEthIPRX(Module):
 # IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(Module):
-    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8):
+    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8, vlan_id=False):
         self.submodules.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
         self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
-        mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
-        self.comb += [
-            tx.source.connect(mac_port.sink),
-            mac_port.source.connect(rx.sink)
-        ]
+
+        if vlan_id:
+            assert(type(vlan_id) is int)
+            mac_port = mac.crossbar.get_port((vlan_id << 16) | ethernet_type_ip, dw=dw)
+            self.comb += [
+                mac_port.sink.vid.eq(vlan_id),
+                tx.source.connect(mac_port.sink),
+                mac_port.source.connect(rx.sink, omit={'dei', 'pcp', 'vid'})
+            ]
+        else:
+            mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
+            self.comb += [
+                tx.source.connect(mac_port.sink),
+                mac_port.source.connect(rx.sink)
+            ]
+
         self.submodules.crossbar = crossbar = LiteEthIPV4Crossbar(dw)
         self.comb += [
             crossbar.master.source.connect(tx.sink),
