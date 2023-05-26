@@ -28,37 +28,50 @@ class LiteEthStream2UDPTX(Module):
             ]
         else:
             level   = Signal(max=fifo_depth+1)
-            counter = Signal(max=fifo_depth+1)
+            counter = Signal(max=fifo_depth+1, reset=1)
 
+            # sink FIFO
             self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
-            self.comb += sink.connect(fifo.sink)
 
-            self.submodules.fsm = fsm = FSM(reset_state="IDLE")
-            fsm.act("IDLE",
-                # Send FIFO contents when we have a full-packet or when FIFO is full.
-                If((fifo.source.valid & fifo.source.last) | ~fifo.sink.ready,
-                    NextValue(level, fifo.level),
-                    NextValue(counter, 0),
-                    NextState("SEND")
+            # avoid assering FIFO we when the FIFO is full
+            fifo_almost_full = Signal()
+            self.comb += fifo_almost_full.eq(fifo.level >= fifo_depth - 1)
+
+            # FSM
+            self.submodules.fsm = fsm = FSM(reset_state="READ")
+            fsm.act("READ",
+                If(sink.valid,
+                    sink.ready.eq(1),
+                    fifo.sink.data.eq(sink.data),
+                    fifo.sink.valid.eq(1), # _we
+                    fifo.sink.last.eq(fifo_almost_full | sink.last),
+                    NextValue(counter, counter + 1),
+                    If(fifo.sink.last,
+                       NextValue(level, counter),
+                       NextValue(counter, 1),
+                       NextState("WRITE")
+                    )
                 )
             )
-            fsm.act("SEND",
+            fsm.act("WRITE",
                 source.valid.eq(1),
-                source.last.eq(counter == (level - 1)),
+                source.last.eq(counter == level),
                 source.src_port.eq(udp_port),
                 source.dst_port.eq(udp_port),
                 source.ip_address.eq(ip_address),
                 source.length.eq(level * (data_width//8)),
                 source.data.eq(fifo.source.data),
-                source.last_be.eq({32:0b1000, 8:0b1}[data_width]),
-                If(source.ready,
+                source.last_be.eq(2**(data_width//8 - 1)),
+                If(source.ready & fifo.source.valid,
                     fifo.source.ready.eq(1),
                     NextValue(counter, counter + 1),
                     If(source.last,
-                        NextState("IDLE")
+                       NextValue(counter, 1),
+                       NextState("READ")
                     )
                 )
             )
+
 
 # UDP to Stream RX ---------------------------------------------------------------------------------
 
