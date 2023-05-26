@@ -25,7 +25,7 @@ class DUT(Module):
         self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
         self.submodules.core = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True)
 
-        self.submodules.streamer = PacketStreamer(eth_phy_description(8), last_be=1)
+        self.submodules.streamer = PacketStreamer(eth_phy_description(8))
         self.submodules.streamer_randomizer = Randomizer(eth_phy_description(8), level=50)
 
         self.submodules.logger_randomizer = Randomizer(eth_phy_description(8), level=50)

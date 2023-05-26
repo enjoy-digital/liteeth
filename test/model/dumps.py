@@ -86,7 +86,7 @@ udp_infos = {
 ping_request = format_dump("""
 00 50 56 e0 14 49 00 0c 29 34 0b de 08 00 45 00
 00 3c d7 43 00 00 80 01 2b 73 c0 a8 9e 8b ae 89
-2a 4d 08 00 2a 5c 02 00 21 00 61 62 63 64 65 66
+2a 4d 08 00 20 b4 02 00 21 00 61 62 63 64 65 66
 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 75 76
 77 61 62 63 64 65 66 67 68 69""")
 
@@ -104,3 +104,13 @@ ping_reply = format_dump("""
 77 61 62 63 64 65 66 67 68 69""")
 
 ping_reply_infos = {}
+
+# ICMP: Destination unreachable (Port unreachable)
+icmp_unreachable_reply = format_dump("""
+00 00 00 00 00 00 00 00 00 00 00 00 08 00 45 c0
+00 3e 11 a7 00 00 40 01 6a 56 7f 00 00 01 7f 00
+00 01 03 03 d8 18 00 00 00 00 45 00 00 22 a0 52
+40 00 40 11 9c 76 7f 00 00 01 7f 00 00 01 de 05
+04 d2 00 0e fe 21 68 65 6c 6c 6f 0a
+""")
+

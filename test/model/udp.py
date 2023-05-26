@@ -69,7 +69,7 @@ class UDP(Module):
     def set_etherbone_callback(self, callback):
         self.etherbone_callback = callback
 
-    def send(self, packet):
+    def send(self, packet, target_ip=0x12345678):
         packet.encode()
         if self.debug:
             print_udp(">>>>>>>>")
@@ -77,13 +77,13 @@ class UDP(Module):
         ip_packet = ip.IPPacket(packet)
         ip_packet.version         = 0x4
         ip_packet.ihl             = 0x5
-        ip_packet.total_length    = len(packet) + ip_packet.ihl
+        ip_packet.total_length    = len(packet) + ip_packet.ihl * 4
         ip_packet.identification  = 0
         ip_packet.flags           = 0
         ip_packet.fragment_offset = 0
         ip_packet.ttl             = 0x80
         ip_packet.sender_ip       = self.ip_address
-        ip_packet.target_ip       = 0x12345678  # FIXME
+        ip_packet.target_ip       = target_ip
         ip_packet.checksum        = 0
         ip_packet.protocol        = udp_protocol
         self.ip.send(ip_packet)

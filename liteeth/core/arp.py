@@ -202,9 +202,9 @@ class LiteEthARPTable(Module):
         # table in the future to improve performance when packets are
         # targeting multiple destinations.
         update = Signal()
-        cached_valid       = Signal()
-        cached_ip_address  = Signal(32, reset_less=True)
-        cached_mac_address = Signal(48, reset_less=True)
+        self.cached_valid       = Signal()
+        self.cached_ip_address  = Signal(32, reset_less=True)
+        self.cached_mac_address = Signal(48, reset_less=True)
         cached_timer       = WaitTimer(clk_freq*10)
         self.submodules += cached_timer
 
@@ -238,21 +238,21 @@ class LiteEthARPTable(Module):
         )
         self.sync += \
             If(update,
-                cached_valid.eq(1),
-                cached_ip_address.eq(sink.ip_address),
-                cached_mac_address.eq(sink.mac_address),
+                self.cached_valid.eq(1),
+                self.cached_ip_address.eq(sink.ip_address),
+                self.cached_mac_address.eq(sink.mac_address),
             ).Else(
                 If(cached_timer.done,
-                    cached_valid.eq(0)
+                    self.cached_valid.eq(0)
                 )
             )
         self.comb += cached_timer.wait.eq(~update)
         fsm.act("CHECK_TABLE",
-            If(cached_valid,
-                If(request_ip_address == cached_ip_address,
+            If(self.cached_valid,
+                If(request_ip_address == self.cached_ip_address,
                     request_ip_address_reset.eq(1),
                     NextState("PRESENT_RESPONSE"),
-                ).Elif(request.ip_address == cached_ip_address,
+                ).Elif(request.ip_address == self.cached_ip_address,
                     request.ready.eq(request.valid),
                     NextState("PRESENT_RESPONSE"),
                 ).Else(
@@ -282,7 +282,7 @@ class LiteEthARPTable(Module):
                 request_counter_reset.eq(1),
                 request_pending_clr.eq(1)
             ),
-            response.mac_address.eq(cached_mac_address)
+            response.mac_address.eq(self.cached_mac_address)
         ]
         fsm.act("PRESENT_RESPONSE",
             response.valid.eq(1),

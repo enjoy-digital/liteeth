@@ -96,7 +96,8 @@ icmp_header_fields = {
     "msgtype":  HeaderField(0, 0,  8),
     "code":     HeaderField(1, 0,  8),
     "checksum": HeaderField(2, 0, 16),
-    "quench":   HeaderField(4, 0, 32)
+    "ident":    HeaderField(4, 0, 16),
+    "sequence": HeaderField(6, 0, 16)
 }
 icmp_header  = Header(icmp_header_fields, icmp_header_length, swap_field_bytes=True)
 
