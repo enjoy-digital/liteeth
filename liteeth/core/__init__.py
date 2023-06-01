@@ -15,6 +15,7 @@ from liteeth.core.icmp import LiteEthICMP
 
 class LiteEthIPCore(Module, AutoCSR):
     def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
+        hybrid            = False,
         with_icmp         = True,
         with_ip_broadcast = True,
         with_sys_datapath = False):
@@ -27,7 +28,7 @@ class LiteEthIPCore(Module, AutoCSR):
         self.submodules.mac = LiteEthMAC(
             phy       = phy,
             dw        = dw,
-            interface = "crossbar",
+            interface = "hybrid" if hybrid else "crossbar",
             with_preamble_crc = True,
             with_sys_datapath = with_sys_datapath,
         )
@@ -65,6 +66,7 @@ class LiteEthIPCore(Module, AutoCSR):
 
 class LiteEthUDPIPCore(LiteEthIPCore):
     def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
+        hybrid            = False,
         with_icmp         = True,
         with_ip_broadcast = True,
         with_sys_datapath = False):
@@ -83,6 +85,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             dw          = dw,
             with_ip_broadcast = with_ip_broadcast,
             with_sys_datapath = with_sys_datapath,
+            hybrid      = hybrid,
         )
         # UDP.
         # ----
