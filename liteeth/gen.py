@@ -212,6 +212,10 @@ class PHYCore(SoCMini):
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
+        elif phy in [liteeth_phys.LiteEthPHYETHERNET]:
+            assert self.clk_freq >= 40e6
+            ethphy = phy(
+                pads               = platform.request("raw_eth"))
         else:
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
