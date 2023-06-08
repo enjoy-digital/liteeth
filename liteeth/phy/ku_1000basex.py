@@ -646,8 +646,6 @@ class KU_1000BASEX(Module, AutoCSR):
             i_RXUSERRDY           = 0b1,
             i_RXUSRCLK2           = ClockSignal("eth_rx_half"),
             i_RXUSRCLK            = ClockSignal("eth_rx_half"),
-            #i_SATA_BURST         = 0b100,
-            #i_SATA_EIDLE         = 0b100,
             i_SIGVALIDCLK         = 0b0,
             i_TSTIN               = 0b00000000000000000000,
             i_TX8B10BBYPASS       = 0b00000000,

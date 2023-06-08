@@ -63,6 +63,9 @@ class BenchSoC(SoCCore):
             ident_version  = True
         )
 
+        # UARTBone ---------------------------------------------------------------------------------
+        self.add_uartbone()
+
         # CRG --------------------------------------------------------------------------------------
         self.submodules.crg = _CRG(platform, sys_clk_freq)
 
@@ -70,7 +73,7 @@ class BenchSoC(SoCCore):
         self.submodules.ethphy = USP_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("qsfp", 0),
             sys_clk_freq = self.clk_freq)
-        self.comb += self.platform.request("qsfp_fs").eq(0b01)
+        #self.comb += self.platform.request("qsfp_fs").eq(0b01)
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
@@ -80,7 +83,22 @@ class BenchSoC(SoCCore):
         from litex.soc.cores.led import LedChaser
         self.submodules.leds = LedChaser(
             pads         = platform.request_all("user_led"),
-            sys_clk_freq = sys_clk_freq)
+            sys_clk_freq = sys_clk_freq
+        )
+
+        # Litescope --------------------------------------------------------------------------------
+
+        from litescope import LiteScopeAnalyzer
+        analyzer_signals = self.ethphy.debug
+        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals,
+            depth        = 256,
+            clock_domain = "sys",
+            csr_csv      = "analyzer.csv"
+        )
+
+
+
+
 
 # Main ---------------------------------------------------------------------------------------------
 
