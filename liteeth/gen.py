@@ -311,7 +311,7 @@ class UDPCore(PHYCore):
         # Etherbone --------------------------------------------------------------------------------
 
         # /!\ WIP /!\
-        with_etherbone = True
+        with_etherbone = False
         if with_etherbone:
             assert (data_width == 32)
             self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 1234, buffer_depth=16, cd="sys")
