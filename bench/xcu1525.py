@@ -73,7 +73,7 @@ class BenchSoC(SoCCore):
         self.submodules.ethphy = USP_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("qsfp", 0),
             sys_clk_freq = self.clk_freq)
-        #self.comb += self.platform.request("qsfp_fs").eq(0b01)
+        self.comb += self.platform.request("qsfp_fs").eq(0b01)
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
