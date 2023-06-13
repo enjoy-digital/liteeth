@@ -1,19 +1,22 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
+
+from litex.gen import *
 
 from litex.build.io import DDROutput
 
 from liteeth.common import *
 from liteeth.phy.common import *
 
+# LiteEth PHY GMII TX ------------------------------------------------------------------------------
 
-class LiteEthPHYGMIITX(Module):
+class LiteEthPHYGMIITX(LiteXModule):
     def __init__(self, pads):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
@@ -22,7 +25,7 @@ class LiteEthPHYGMIITX(Module):
         if hasattr(pads, "tx_er"):
             pads.tx_er.reset_less = True
             self.sync += pads.tx_er.eq(0)
-        pads.tx_en.reset_less = True
+        pads.tx_en.reset_less   = True
         pads.tx_data.reset_less = True
         self.sync += [
             pads.tx_en.eq(sink.valid),
@@ -30,8 +33,9 @@ class LiteEthPHYGMIITX(Module):
             sink.ready.eq(1)
         ]
 
+# LiteEth PHY GMII RX ------------------------------------------------------------------------------
 
-class LiteEthPHYGMIIRX(Module):
+class LiteEthPHYGMIIRX(LiteXModule):
     def __init__(self, pads):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
@@ -41,19 +45,20 @@ class LiteEthPHYGMIIRX(Module):
         self.sync += [
             dv_d.eq(pads.rx_dv),
             source.valid.eq(pads.rx_dv),
-            source.data.eq(pads.rx_data)
+            source.data.eq(pads.rx_data),
         ]
         self.comb += source.last.eq(~pads.rx_dv & dv_d)
 
+# LiteEth PHY GMII RX ------------------------------------------------------------------------------
 
-class LiteEthPHYGMIICRG(Module, AutoCSR):
+class LiteEthPHYGMIICRG(LiteXModule):
     def __init__(self, clock_pads, pads, with_hw_init_reset, mii_mode=0, model=False):
         self._reset = CSRStorage()
 
         # # #
 
-        self.clock_domains.cd_eth_rx = ClockDomain()
-        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.cd_eth_rx = ClockDomain()
+        self.cd_eth_tx = ClockDomain()
 
         if not model:
             # RX clock: GMII, MII Use PHY clock_pads.rx as eth_rx_clk.
@@ -81,7 +86,7 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
             # Reset
             self.reset = reset = Signal()
             if with_hw_init_reset:
-                self.submodules.hw_reset = LiteEthPHYHWReset()
+                self.hw_reset = LiteEthPHYHWReset()
                 self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
             else:
                 self.comb += reset.eq(self._reset.storage)
@@ -97,17 +102,18 @@ class LiteEthPHYGMIICRG(Module, AutoCSR):
                 self.cd_eth_tx.clk.eq(ClockSignal()),
             ]
 
+# LiteEth PHY GMII ---------------------------------------------------------------------------------
 
-class LiteEthPHYGMII(Module, AutoCSR):
+class LiteEthPHYGMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, model=False):
         self.model = model
-        self.submodules.crg = LiteEthPHYGMIICRG(clock_pads, pads, with_hw_init_reset, model=model)
-        self.submodules.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYGMIITX(pads))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYGMIIRX(pads))
+        self.crg   = LiteEthPHYGMIICRG(clock_pads, pads, with_hw_init_reset, model=model)
+        self.tx    = ClockDomainsRenamer("eth_tx")(LiteEthPHYGMIITX(pads))
+        self.rx    = ClockDomainsRenamer("eth_rx")(LiteEthPHYGMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
-            self.submodules.mdio = LiteEthPHYMDIO(pads)
+            self.mdio = LiteEthPHYMDIO(pads)

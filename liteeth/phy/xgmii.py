@@ -5,18 +5,24 @@
 #
 # SPDX-License-Identifier: BSD-2-Clause
 
-
-from migen import Module
-from liteeth.common import *
-
 from functools import reduce
 from operator import or_
 
-XGMII_IDLE = Constant(0x07, bits_sign=8)
-XGMII_START = Constant(0xFB, bits_sign=8)
-XGMII_END = Constant(0xFD, bits_sign=8)
+from migen import Module
 
-class LiteEthPHYXGMIITX(Module):
+from litex.gen import *
+
+from liteeth.common import *
+
+# Constants ----------------------------------------------------------------------------------------
+
+XGMII_IDLE  = Constant(0x07, bits_sign=8)
+XGMII_START = Constant(0xFB, bits_sign=8)
+XGMII_END   = Constant(0xFD, bits_sign=8)
+
+# LiteEth PHY XGMII TX -----------------------------------------------------------------------------
+
+class LiteEthPHYXGMIITX(LiteXModule):
     def __init__(self, pads, dw, dic=True):
         # Enforce 64-bit data path
         assert dw == 64
@@ -196,7 +202,7 @@ class LiteEthPHYXGMIITX(Module):
         # ---------- XGMII transmission logic ----------
 
         # Transmit FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
 
         # This block will be executed by the FSM below in the IDLE state, when
         # it's time to start a transmission aligned on the FIRST byte in a
@@ -450,7 +456,9 @@ class LiteEthPHYXGMIITX(Module):
             )
         )
 
-class LiteEthPHYXGMIIRXAligner(Module):
+# LiteEth PHY XGMII RX Aligner ---------------------------------------------------------------------
+
+class LiteEthPHYXGMIIRXAligner(LiteXModule):
     def __init__(self, unaligned_ctl, unaligned_data):
         # Aligned ctl and data characters
         self.aligned_ctl = Signal.like(unaligned_ctl)
@@ -462,7 +470,7 @@ class LiteEthPHYXGMIIRXAligner(Module):
 
 
         # Alignment FSM
-        self.submodules.fsm = fsm = FSM(reset_state="NOSHIFT")
+        self.fsm = fsm = FSM(reset_state="NOSHIFT")
 
         fsm.act("NOSHIFT",
             If(unaligned_ctl[4] & (unaligned_data[4*8:5*8] == XGMII_START),
@@ -500,7 +508,9 @@ class LiteEthPHYXGMIIRXAligner(Module):
             ),
         )
 
-class LiteEthPHYXGMIIRX(Module):
+# LiteEth PHY XGMII RX -----------------------------------------------------------------------------
+
+class LiteEthPHYXGMIIRX(LiteXModule):
     def __init__(self, pads, dw):
         # Enforce 64-bit data path
         assert dw == 64
@@ -519,7 +529,7 @@ class LiteEthPHYXGMIIRX(Module):
         # XGMII bus word, which we can do without packet loss given 10G Ethernet
         # mandates a 5-byte interpacket gap (which may be less at the receiver,
         # but this assumption seems to work for now).
-        self.submodules.aligner = LiteEthPHYXGMIIRXAligner(pads.rx_ctl, pads.rx_data)
+        self.aligner = LiteEthPHYXGMIIRXAligner(pads.rx_ctl, pads.rx_data)
 
         # We need to have a lookahead and buffer the XGMII bus to properly
         # determine whether we are processing the last bus word in some
@@ -573,7 +583,7 @@ class LiteEthPHYXGMIIRX(Module):
         ]
 
         # Receive FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
 
         fsm.act("IDLE",
             # The Ethernet preamble and start of frame character must follow
@@ -627,12 +637,13 @@ class LiteEthPHYXGMIIRX(Module):
             )
         )
 
+# LiteEth PHY XGMII CRG ----------------------------------------------------------------------------
 
-class LiteEthPHYXGMIICRG(Module, AutoCSR):
+class LiteEthPHYXGMIICRG(LiteXModule):
     def __init__(self, clock_pads, model=False):
         self._reset = CSRStorage()
-        self.clock_domains.cd_eth_rx = ClockDomain()
-        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.cd_eth_rx = ClockDomain()
+        self.cd_eth_tx = ClockDomain()
         if model:
             self.comb += [
                 self.cd_eth_rx.clk.eq(ClockSignal()),
@@ -644,28 +655,17 @@ class LiteEthPHYXGMIICRG(Module, AutoCSR):
                 self.cd_eth_tx.clk.eq(clock_pads.tx)
             ]
 
-class LiteEthPHYXGMII(Module, AutoCSR):
+# LiteEth PHY XGMII --------------------------------------------------------------------------------
+
+class LiteEthPHYXGMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 156.25e6
     rx_clk_freq = 156.25e6
-    def __init__(self,
-                 clock_pads,
-                 pads,
-                 model=False,
-                 dw=64,
-                 with_hw_init_reset=True,
-                 dic=True,
-                 ):
+    def __init__(self, clock_pads, pads, model=False, dw=64, with_hw_init_reset=True, dic=True):
         self.dw = dw
         self.cd_eth_tx, self.cd_eth_rx = "eth_tx", "eth_rx"
         self.integrated_ifg_inserter = True
-        self.submodules.crg = LiteEthPHYXGMIICRG(clock_pads, model)
-        self.submodules.tx = ClockDomainsRenamer(self.cd_eth_tx)(
-            LiteEthPHYXGMIITX(
-                pads,
-                self.dw,
-                dic=dic,
-            ))
-        self.submodules.rx = ClockDomainsRenamer(self.cd_eth_rx)(
-            LiteEthPHYXGMIIRX(pads, self.dw))
+        self.crg = LiteEthPHYXGMIICRG(clock_pads, model)
+        self.tx  = ClockDomainsRenamer(self.cd_eth_tx)(LiteEthPHYXGMIITX(pads, self.dw, dic=dic))
+        self.rx  = ClockDomainsRenamer(self.cd_eth_rx)(LiteEthPHYXGMIIRX(pads, self.dw))
         self.sink, self.source = self.tx.sink, self.rx.source
