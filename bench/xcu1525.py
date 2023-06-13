@@ -24,18 +24,6 @@ from litex.soc.integration.builder import *
 
 from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
 
-# IOs ----------------------------------------------------------------------------------------------
-
-_qsfp_io = [
-    # QSFP0
-    ("qsfp", 0,
-        Subsignal("txp", Pins("N9")),
-        Subsignal("txn", Pins("N8")),
-        Subsignal("rxp", Pins("N4")),
-        Subsignal("rxn", Pins("N3"))
-    ),
-]
-
 # CRG ----------------------------------------------------------------------------------------------
 
 class _CRG(LiteXModule):
@@ -56,7 +44,6 @@ class _CRG(LiteXModule):
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(125e6)):
         platform = sqrl_xcu1525.Platform()
-        platform.add_extension(_qsfp_io)
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,
@@ -68,6 +55,17 @@ class BenchSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
+
+        platform.add_extension([
+            # SFP.
+            ("qsfp", 0,
+                Subsignal("txp", Pins("N9")),
+                Subsignal("txn", Pins("N8")),
+                Subsignal("rxp", Pins("N4")),
+                Subsignal("rxn", Pins("N3"))
+            )
+        ])
+
         self.ethphy = USP_GTY_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("qsfp", 0),
             sys_clk_freq = self.clk_freq)
