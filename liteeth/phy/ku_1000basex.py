@@ -21,7 +21,7 @@ class KU_1000BASEX(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -604,7 +604,7 @@ class KU_1000BASEX(LiteXModule):
             i_RXPHOVRDEN          = 0b0,
             i_RXPLLCLKSEL         = 0b00,
             i_RXPMARESET          = 0b0,
-            i_RXPOLARITY          = 0b0,
+            i_RXPOLARITY          = rx_polarity,
             i_RXPRBSCNTRESET      = 0b0,
             i_RXPRBSSEL           = 0b0000,
             i_RXPROGDIVRESET      = 0b0,
@@ -669,7 +669,7 @@ class KU_1000BASEX(LiteXModule):
             i_TXPISOPD            = 0b0,
             i_TXPLLCLKSEL         = 0b00,
             i_TXPMARESET          = 0b0,
-            i_TXPOLARITY          = 0b0,
+            i_TXPOLARITY          = tx_polarity,
             i_TXPOSTCURSORINV     = 0b0,
             i_TXPOSTCURSOR        = 0b00000,
             i_TXPRBSFORCEERR      = 0b0,
