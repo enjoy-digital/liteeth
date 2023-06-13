@@ -11,33 +11,24 @@ from migen.genlib.fsm import *
 from migen.genlib.misc import WaitTimer
 from migen.genlib.cdc import PulseSynchronizer, BusSynchronizer
 
+from litex.gen import *
 
 from litex.soc.interconnect import stream
-from litex.soc.cores import code_8b10b
+from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
 from liteeth.common import *
 
+# PCS TX -------------------------------------------------------------------------------------------
 
-__all__ = ["TransmitPath", "ReceivePath", "PCS"]
-
-
-def K(x, y):
-    return (y << 5) | x
-
-
-def D(x, y):
-    return (y << 5) | x
-
-
-class TransmitPath(Module):
+class PCSTX(LiteXModule):
     def __init__(self, lsb_first=False):
         self.config_stb = Signal()
         self.config_reg = Signal(16)
-        self.tx_stb = Signal()
-        self.tx_ack = Signal()
-        self.tx_data = Signal(8)
+        self.tx_stb     = Signal()
+        self.tx_ack     = Signal()
+        self.tx_data    = Signal(8)
 
-        self.submodules.encoder = code_8b10b.Encoder(lsb_first=lsb_first)
+        self.encoder = Encoder(lsb_first=lsb_first)
 
         # SGMII Speed Adaptation
         self.sgmii_speed = Signal(2)
@@ -48,12 +39,12 @@ class TransmitPath(Module):
         c_type = Signal()
         self.sync += parity.eq(~parity)
 
-        config_reg_buffer = Signal(16)
+        config_reg_buffer      = Signal(16)
         load_config_reg_buffer = Signal()
         self.sync += If(load_config_reg_buffer, config_reg_buffer.eq(self.config_reg))
 
-        # Timer for SGMII data rates
-        timer = Signal(max=1000)
+        # Timer for SGMII data rates.
+        timer    = Signal(max=1000)
         timer_en = Signal()
         self.sync += [
             If(~timer_en | (timer == 0),
@@ -69,26 +60,24 @@ class TransmitPath(Module):
             )
         ]
 
-        fsm = FSM()
-        self.submodules += fsm
-
+        self.fsm = fsm = FSM()
         fsm.act("START",
             If(self.config_stb,
-                self.tx_ack.eq(1),  # discard TX data if we are in config_reg phase
+                self.tx_ack.eq(1),  # Discard TX data if we are in config_reg phase.
                 load_config_reg_buffer.eq(1),
                 self.encoder.k[0].eq(1),
                 self.encoder.d[0].eq(K(28, 5)),
                 NextState("CONFIG_D")
             ).Else(
                 If(self.tx_stb,
-                    # the first byte sent is replaced by /S/
+                    # The first byte sent is replaced by /S/.
                     self.tx_ack.eq((timer == 0)),
                     timer_en.eq(1),
                     self.encoder.k[0].eq(1),
                     self.encoder.d[0].eq(K(27, 7)),
                     NextState("DATA")
                 ).Else(
-                    self.tx_ack.eq(1),  # discard TX data
+                    self.tx_ack.eq(1),  # Discard TX data.
                     self.encoder.k[0].eq(1),
                     self.encoder.d[0].eq(K(28, 5)),
                     NextState("IDLE")
@@ -113,13 +102,13 @@ class TransmitPath(Module):
             NextState("START")
         )
         fsm.act("IDLE",
-            # due to latency in the encoder, we read here the disparity
+            # Due to latency in the encoder, we read here the disparity
             # just before the K28.5 was sent. K28.5 flips the disparity.
             If(self.encoder.disparity[0],
-                # correcting /I1/ (D5.6 preserves the disparity)
+                # Correcting /I1/ (D5.6 preserves the disparity).
                 self.encoder.d[0].eq(D(5, 6))
             ).Else(
-                # preserving /I2/ (D16.2 flips the disparity)
+                # Preserving /I2/ (D16.2 flips the disparity).
                 self.encoder.d[0].eq(D(16, 2))
             ),
             NextState("START")
@@ -154,25 +143,26 @@ class TransmitPath(Module):
             NextState("START")
         )
 
+# PCS RX -------------------------------------------------------------------------------------------
 
-class ReceivePath(Module):
+class PCSRX(LiteXModule):
     def __init__(self, lsb_first=False):
-        self.rx_en = Signal()
+        self.rx_en   = Signal()
         self.rx_data = Signal(8)
 
-        self.seen_valid_ci = Signal()
+        self.seen_valid_ci   = Signal()
         self.seen_config_reg = Signal()
-        self.config_reg = Signal(16)
+        self.config_reg      = Signal(16)
 
-        self.submodules.decoder = code_8b10b.Decoder(lsb_first=lsb_first)
+        self.decoder = Decoder(lsb_first=lsb_first)
 
-        # SGMII Speed Adaptation
+        # SGMII Speed Adaptation.
         self.sgmii_speed = Signal(2)
-        self.sample_en = Signal()
+        self.sample_en   = Signal()
 
         # # #
 
-        config_reg_lsb = Signal(8)
+        config_reg_lsb      = Signal(8)
         load_config_reg_lsb = Signal()
         load_config_reg_msb = Signal()
         self.sync += [
@@ -189,8 +179,8 @@ class ReceivePath(Module):
         first_preamble_byte = Signal()
         self.comb += self.rx_data.eq(Mux(first_preamble_byte, 0x55, self.decoder.d))
 
-        # Timer for SGMII data rates
-        timer = Signal(max=1000)
+        # Timer for SGMII data rates.
+        timer    = Signal(max=1000)
         timer_en = Signal()
         self.sync += [
             If(~timer_en | (timer == 0),
@@ -209,9 +199,7 @@ class ReceivePath(Module):
         # Speed adaptation
         self.comb += self.sample_en.eq(self.rx_en & (timer == 0))
 
-        fsm = FSM()
-        self.submodules += fsm
-
+        self.fsm = fsm = FSM()
         fsm.act("START",
             If(self.decoder.k,
                 If(self.decoder.d == K(28, 5),
@@ -269,28 +257,26 @@ class ReceivePath(Module):
             )
         )
 
+# PCS ----------------------------------------------------------------------------------------------
 
-class PCS(Module):
+class PCS(LiteXModule):
     def __init__(self, lsb_first=False, check_period=6e-3, more_ack_time=10e-3):
-        self.submodules.tx = ClockDomainsRenamer("eth_tx")(
-            TransmitPath(lsb_first=lsb_first))
-        self.submodules.rx = ClockDomainsRenamer("eth_rx")(
-            ReceivePath(lsb_first=lsb_first))
+        self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
+        self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
         self.tbi_tx = self.tx.encoder.output[0]
         self.tbi_rx = self.rx.decoder.input
-        self.sink = stream.Endpoint(eth_phy_description(8))
+        self.sink   = stream.Endpoint(eth_phy_description(8))
         self.source = stream.Endpoint(eth_phy_description(8))
 
         self.link_up = Signal()
         self.restart = Signal()
 
         self.lp_abi = BusSynchronizer(16, "eth_rx", "eth_tx")
-        self.submodules += self.lp_abi
 
         # # #
         
-        # endpoint interface
+        # Endpoint interface.
         self.comb += [
             self.tx.tx_stb.eq(self.sink.valid),
             self.sink.ready.eq(self.tx.tx_ack),
@@ -301,11 +287,11 @@ class PCS(Module):
         self.sync.eth_rx += [
             rx_en_d.eq(self.rx.rx_en),
             self.source.valid.eq(self.rx.sample_en),
-            self.source.data.eq(self.rx.rx_data)
+            self.source.data.eq(self.rx.rx_data),
         ]
         self.comb += self.source.last.eq(~self.rx.rx_en & rx_en_d)
 
-        # main module
+        # Main module.
         seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
         self.submodules += seen_valid_ci
         self.comb += seen_valid_ci.i.eq(self.rx.seen_valid_ci)
@@ -326,16 +312,16 @@ class PCS(Module):
             If(checker_tick, checker_ok.eq(0))
         ]
 
-        # Control if tx_config_reg should be empty
+        # Control if tx_config_reg should be empty.
         tx_config_empty = Signal()
-        # Detections in SGMII mode
+        # Detections in SGMII mode.
         is_sgmii = Signal()
         linkdown = Signal()
         self.comb += [
             is_sgmii.eq(self.lp_abi.o[0]),
             # Detect that link is down:
-            # - 1000BASE-X: linkup can be inferred by non-empty reg
-            # - SGMII: linkup is indicated with bit 15
+            # - 1000BASE-X : linkup can be inferred by non-empty reg.
+            # - SGMII      : linkup is indicated with bit 15.
             linkdown.eq((self.lp_abi.o[0] & ~self.lp_abi.o[15]) | (self.lp_abi.o == 0)),
             self.tx.sgmii_speed.eq(Mux(self.lp_abi.o[0],
                 self.lp_abi.o[10:12], 0b10)),
@@ -345,32 +331,26 @@ class PCS(Module):
         autoneg_ack = Signal()
         self.comb += [
             self.tx.config_reg.eq(Mux(tx_config_empty, 0,
-                (is_sgmii) |                            # SGMII: SGMII in-use
-                (~is_sgmii << 5) |                      # 1000BASE-X: Full-duplex
-                (Mux(self.lp_abi.o[0],                  # SGMII: Speed
+                (is_sgmii)                          | # SGMII: SGMII in-use
+                (~is_sgmii << 5)                    | # 1000BASE-X: Full-duplex
+                (Mux(self.lp_abi.o[0],                # SGMII: Speed
                     self.lp_abi.o[10:12], 0) << 10) |
-                (is_sgmii << 12) |                      # SGMII: Full-duplex
-                (autoneg_ack << 14) |                   # SGMII/1000BASE-X: Acknowledge Bit
-                (is_sgmii & self.link_up)               # SGMII: Link-up
+                (is_sgmii << 12)                    | # SGMII: Full-duplex
+                (autoneg_ack << 14)                 | # SGMII/1000BASE-X: Acknowledge Bit
+                (is_sgmii & self.link_up)             # SGMII: Link-up
             ))
         ]
 
         rx_config_reg_abi = PulseSynchronizer("eth_rx", "eth_tx")
         rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
-        self.submodules += [
-            rx_config_reg_abi, rx_config_reg_ack
-        ]
+        self.submodules += rx_config_reg_abi, rx_config_reg_ack
 
-        more_ack_timer = ClockDomainsRenamer("eth_tx")(
-            WaitTimer(ceil(more_ack_time*125e6)))
+        more_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(more_ack_time*125e6)))
         # SGMII: use 1.6ms link_timer
-        sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(
-            WaitTimer(ceil(1.6e-3*125e6)))
+        sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(1.6e-3*125e6)))
         self.submodules += more_ack_timer, sgmii_ack_timer
 
-        fsm = ClockDomainsRenamer("eth_tx")(FSM())
-        self.submodules += fsm
-
+        self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
         # AN_ENABLE
         fsm.act("AUTONEG_BREAKLINK",
             self.tx.config_stb.eq(1),
@@ -427,7 +407,7 @@ class PCS(Module):
             )
         )
 
-        c_counter = Signal(max=5)
+        c_counter       = Signal(max=5)
         prev_config_reg = Signal(16)
         self.sync.eth_rx += [
             # Restart consistency counter
