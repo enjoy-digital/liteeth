@@ -22,7 +22,7 @@ XGMII_END   = Constant(0xFD, bits_sign=8)
 
 # LiteEth PHY XGMII TX -----------------------------------------------------------------------------
 
-class LiteEthPHYXGMIITX(LiteXModule):
+class LiteEthPHYXGMIITX(Module):
     def __init__(self, pads, dw, dic=True):
         # Enforce 64-bit data path
         assert dw == 64
@@ -202,7 +202,7 @@ class LiteEthPHYXGMIITX(LiteXModule):
         # ---------- XGMII transmission logic ----------
 
         # Transmit FSM
-        self.fsm = fsm = FSM(reset_state="IDLE")
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
 
         # This block will be executed by the FSM below in the IDLE state, when
         # it's time to start a transmission aligned on the FIRST byte in a
@@ -458,7 +458,7 @@ class LiteEthPHYXGMIITX(LiteXModule):
 
 # LiteEth PHY XGMII RX Aligner ---------------------------------------------------------------------
 
-class LiteEthPHYXGMIIRXAligner(LiteXModule):
+class LiteEthPHYXGMIIRXAligner(Module):
     def __init__(self, unaligned_ctl, unaligned_data):
         # Aligned ctl and data characters
         self.aligned_ctl = Signal.like(unaligned_ctl)
@@ -470,7 +470,7 @@ class LiteEthPHYXGMIIRXAligner(LiteXModule):
 
 
         # Alignment FSM
-        self.fsm = fsm = FSM(reset_state="NOSHIFT")
+        self.submodules.fsm = fsm = FSM(reset_state="NOSHIFT")
 
         fsm.act("NOSHIFT",
             If(unaligned_ctl[4] & (unaligned_data[4*8:5*8] == XGMII_START),
@@ -529,7 +529,7 @@ class LiteEthPHYXGMIIRX(LiteXModule):
         # XGMII bus word, which we can do without packet loss given 10G Ethernet
         # mandates a 5-byte interpacket gap (which may be less at the receiver,
         # but this assumption seems to work for now).
-        self.aligner = LiteEthPHYXGMIIRXAligner(pads.rx_ctl, pads.rx_data)
+        self.submodules.aligner = LiteEthPHYXGMIIRXAligner(pads.rx_ctl, pads.rx_data)
 
         # We need to have a lookahead and buffer the XGMII bus to properly
         # determine whether we are processing the last bus word in some
@@ -583,7 +583,7 @@ class LiteEthPHYXGMIIRX(LiteXModule):
         ]
 
         # Receive FSM
-        self.fsm = fsm = FSM(reset_state="IDLE")
+        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
 
         fsm.act("IDLE",
             # The Ethernet preamble and start of frame character must follow
@@ -639,11 +639,11 @@ class LiteEthPHYXGMIIRX(LiteXModule):
 
 # LiteEth PHY XGMII CRG ----------------------------------------------------------------------------
 
-class LiteEthPHYXGMIICRG(LiteXModule):
+class LiteEthPHYXGMIICRG(Module, AutoCSR):
     def __init__(self, clock_pads, model=False):
         self._reset = CSRStorage()
-        self.cd_eth_rx = ClockDomain()
-        self.cd_eth_tx = ClockDomain()
+        self.clock_domains.cd_eth_rx = ClockDomain()
+        self.clock_domains.cd_eth_tx = ClockDomain()
         if model:
             self.comb += [
                 self.cd_eth_rx.clk.eq(ClockSignal()),
@@ -657,7 +657,7 @@ class LiteEthPHYXGMIICRG(LiteXModule):
 
 # LiteEth PHY XGMII --------------------------------------------------------------------------------
 
-class LiteEthPHYXGMII(LiteXModule):
+class LiteEthPHYXGMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 156.25e6
     rx_clk_freq = 156.25e6
@@ -665,7 +665,13 @@ class LiteEthPHYXGMII(LiteXModule):
         self.dw = dw
         self.cd_eth_tx, self.cd_eth_rx = "eth_tx", "eth_rx"
         self.integrated_ifg_inserter = True
-        self.crg = LiteEthPHYXGMIICRG(clock_pads, model)
-        self.tx  = ClockDomainsRenamer(self.cd_eth_tx)(LiteEthPHYXGMIITX(pads, self.dw, dic=dic))
-        self.rx  = ClockDomainsRenamer(self.cd_eth_rx)(LiteEthPHYXGMIIRX(pads, self.dw))
+        self.submodules.crg = LiteEthPHYXGMIICRG(clock_pads, model)
+        self.submodules.tx = ClockDomainsRenamer(self.cd_eth_tx)(
+            LiteEthPHYXGMIITX(
+                pads,
+                self.dw,
+                dic=dic,
+            ))
+        self.submodules.rx = ClockDomainsRenamer(self.cd_eth_rx)(
+            LiteEthPHYXGMIIRX(pads, self.dw))
         self.sink, self.source = self.tx.sink, self.rx.source
