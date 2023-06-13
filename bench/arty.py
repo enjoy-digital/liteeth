@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2020-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
@@ -12,6 +12,8 @@ import argparse
 from migen import *
 from migen.genlib.cdc import MultiReg
 from migen.genlib.misc import WaitTimer
+
+from litex.gen import *
 
 from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import _CRG
@@ -37,10 +39,10 @@ class BenchSoC(SoCCore):
         )
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = LiteEthPHYMII(
+        self.ethphy = LiteEthPHYMII(
             clock_pads = self.platform.request("eth_clocks"),
             pads       = self.platform.request("eth"),
             with_hw_init_reset = False)
@@ -51,8 +53,8 @@ class BenchSoC(SoCCore):
 
         # UDP Streamer -----------------------------------------------------------------------------
         from liteeth.frontend.stream import LiteEthUDPStreamer
-        self.submodules.udp_streamer = udp_streamer = LiteEthUDPStreamer(
-            udp        = self.ethcore.udp,
+        self.udp_streamer = udp_streamer = LiteEthUDPStreamer(
+            udp        = self.ethcore_etherbone.udp,
             ip_address = "192.168.1.100",
             udp_port   = 6000,
         )
@@ -62,7 +64,7 @@ class BenchSoC(SoCCore):
 
         # Led Chaser (Default).
         chaser_leds = Signal(len(leds_pads))
-        self.submodules.leds = LedChaser(
+        self.leds = LedChaser(
             pads         = chaser_leds,
             sys_clk_freq = sys_clk_freq)
 
@@ -74,7 +76,7 @@ class BenchSoC(SoCCore):
         )
 
         # Led Mux: Switch to received UDP value for 1s then switch back to Led Chaser.
-        self.submodules.leds_timer = leds_timer = WaitTimer(sys_clk_freq)
+        self.leds_timer = leds_timer = WaitTimer(sys_clk_freq)
         self.comb += [
             leds_timer.wait.eq(~udp_streamer.rx.source.valid), # Reload Timer on new UDP value.
             If(leds_timer.done,

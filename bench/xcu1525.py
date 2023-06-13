@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2021-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
@@ -11,6 +11,8 @@ import argparse
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
+
+from litex.gen import *
 
 from litex.build.generic_platform import *
 from litex_boards.platforms import sqrl_xcu1525
@@ -37,15 +39,15 @@ _qsfp_io = [
 
 # CRG ----------------------------------------------------------------------------------------------
 
-class _CRG(Module, AutoCSR):
+class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
-        self.clock_domains.cd_sys     = ClockDomain()
-        self.clock_domains.cd_eth     = ClockDomain()
+        self.cd_sys     = ClockDomain()
+        self.cd_eth     = ClockDomain()
 
         # # #
 
         # Main PLL.
-        self.submodules.main_pll = main_pll = USPMMCM(speedgrade=-2)
+        self.main_pll = main_pll = USPMMCM(speedgrade=-2)
         main_pll.register_clkin(platform.request("clk300"), 300e6)
         main_pll.create_clkout(self.cd_sys, sys_clk_freq)
         main_pll.create_clkout(self.cd_eth, 200e6)
@@ -67,10 +69,10 @@ class BenchSoC(SoCCore):
         self.add_uartbone()
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = USP_1000BASEX(self.crg.cd_eth.clk,
+        self.ethphy = USP_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("qsfp", 0),
             sys_clk_freq = self.clk_freq)
         self.comb += self.platform.request("qsfp_fs").eq(0b01)
@@ -81,7 +83,7 @@ class BenchSoC(SoCCore):
 
         # Leds -------------------------------------------------------------------------------------
         from litex.soc.cores.led import LedChaser
-        self.submodules.leds = LedChaser(
+        self.leds = LedChaser(
             pads         = platform.request_all("user_led"),
             sys_clk_freq = sys_clk_freq
         )
@@ -90,7 +92,7 @@ class BenchSoC(SoCCore):
 
         from litescope import LiteScopeAnalyzer
         analyzer_signals = self.ethphy.debug
-        self.submodules.analyzer = LiteScopeAnalyzer(analyzer_signals,
+        self.analyzer = LiteScopeAnalyzer(analyzer_signals,
             depth        = 256,
             clock_domain = "sys",
             csr_csv      = "analyzer.csv"

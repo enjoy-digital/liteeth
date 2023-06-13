@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2021-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
@@ -11,6 +11,8 @@ import argparse
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
+
+from litex.gen import *
 
 from litex_boards.platforms import xilinx_kcu105
 
@@ -23,15 +25,15 @@ from liteeth.phy.ku_1000basex import KU_1000BASEX
 
 # CRG ----------------------------------------------------------------------------------------------
 
-class _CRG(Module, AutoCSR):
+class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
-        self.clock_domains.cd_sys     = ClockDomain()
-        self.clock_domains.cd_eth     = ClockDomain()
+        self.cd_sys     = ClockDomain()
+        self.cd_eth     = ClockDomain()
 
         # # #
 
         # Main PLL.
-        self.submodules.main_pll = main_pll = USMMCM(speedgrade=-2)
+        self.main_pll = main_pll = USMMCM(speedgrade=-2)
         self.comb += main_pll.reset.eq(platform.request("cpu_reset"))
         main_pll.register_clkin(platform.request("clk125"), 125e6)
         main_pll.create_clkout(self.cd_sys, sys_clk_freq)
@@ -50,10 +52,10 @@ class BenchSoC(SoCCore):
         )
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = KU_1000BASEX(self.crg.cd_eth.clk,
+        self.ethphy = KU_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("sfp", 0),
             sys_clk_freq = self.clk_freq)
         self.comb += self.platform.request("sfp_tx_disable_n", 0).eq(1)
@@ -65,7 +67,7 @@ class BenchSoC(SoCCore):
 
         # Leds -------------------------------------------------------------------------------------
         from litex.soc.cores.led import LedChaser
-        self.submodules.leds = LedChaser(
+        self.leds = LedChaser(
             pads         = platform.request_all("user_led"),
             sys_clk_freq = sys_clk_freq)
 

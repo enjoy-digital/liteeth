@@ -3,12 +3,14 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2020-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import argparse
 
 from migen import *
+
+from litex.gen import *
 
 from litex.build.generic_platform import *
 from litex.build.sim import SimPlatform
@@ -22,8 +24,10 @@ from liteeth.phy.model import LiteEthPHYModel
 # IOs ----------------------------------------------------------------------------------------------
 
 _io = [
+    # Sys Clk/Rst.
     ("sys_clk", 0, Pins(1)),
     ("sys_rst", 0, Pins(1)),
+    # Ethernet.
     ("eth_clocks", 0,
         Subsignal("tx", Pins(1)),
         Subsignal("rx", Pins(1)),
@@ -59,10 +63,10 @@ class BenchSoC(SoCCore):
         )
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = CRG(platform.request("sys_clk"))
+        self.crg = CRG(platform.request("sys_clk"))
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = LiteEthPHYModel(self.platform.request("eth"))
+        self.ethphy = LiteEthPHYModel(self.platform.request("eth"))
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
