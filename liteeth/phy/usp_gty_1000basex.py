@@ -21,7 +21,7 @@ class USP_GTY_1000BASEX(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -38,7 +38,9 @@ class USP_GTY_1000BASEX(LiteXModule):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.crg_reset = CSRStorage()
+        self.crg_reset = Signal()
+        if with_csr:
+            self.add_csr()
 
         # # #
 
@@ -943,8 +945,8 @@ class USP_GTY_1000BASEX(LiteXModule):
             )
         ]
         self.comb += [
-            tx_reset.eq(pll_reset | ~pll_locked | self.crg_reset.storage),
-            rx_reset.eq(pll_reset | ~pll_locked | pcs.restart | self.crg_reset.storage)
+            tx_reset.eq(pll_reset | ~pll_locked | self.crg_reset),
+            rx_reset.eq(pll_reset | ~pll_locked | pcs.restart | self.crg_reset)
         ]
 
         # Gearbox and PCS connection
@@ -956,3 +958,7 @@ class USP_GTY_1000BASEX(LiteXModule):
             gearbox.tx_data.eq(pcs.tbi_tx),
             pcs.tbi_rx.eq(gearbox.rx_data)
         ]
+
+    def add_csr(self):
+        self._crg_reset = CSRStorage()
+        self.comb += self.crg_reset.eq(self._crg_reset.storage)
