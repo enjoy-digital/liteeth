@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2019-2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2019-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # SPDX-License-Identifier: BSD-2-Clause
 
@@ -16,9 +16,9 @@ from litex.gen import *
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
-# USP_1000BASEX PHY ---------------------------------------------------------------------------------
+# USP_GTY_1000BASEX PHY ----------------------------------------------------------------------------
 
-class USP_1000BASEX(LiteXModule):
+class USP_GTY_1000BASEX(LiteXModule):
     # Configured for 200MHz transceiver reference clock.
     dw          = 8
     tx_clk_freq = 125e6
@@ -956,7 +956,7 @@ class USP_1000BASEX(LiteXModule):
             gearbox.rx_data_half.eq(rx_data),
 
             gearbox.tx_data.eq(pcs.tbi_tx),
-              pcs.tbi_rx.eq(gearbox.rx_data)
+            pcs.tbi_rx.eq(gearbox.rx_data)
         ]
 
         self.debug = [

@@ -22,13 +22,12 @@ from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.usp_1000basex import USP_1000BASEX
+from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
 
 # IOs ----------------------------------------------------------------------------------------------
 
 _qsfp_io = [
     # QSFP0
-    ("qsfp_fs", 0, Pins("AT20 AU22"), IOStandard("LVCMOS12")),
     ("qsfp", 0,
         Subsignal("txp", Pins("N9")),
         Subsignal("txn", Pins("N8")),
@@ -41,8 +40,8 @@ _qsfp_io = [
 
 class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
-        self.cd_sys     = ClockDomain()
-        self.cd_eth     = ClockDomain()
+        self.cd_sys = ClockDomain()
+        self.cd_eth = ClockDomain()
 
         # # #
 
@@ -72,10 +71,9 @@ class BenchSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.ethphy = USP_1000BASEX(self.crg.cd_eth.clk,
+        self.ethphy = USP_GTY_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("qsfp", 0),
             sys_clk_freq = self.clk_freq)
-        self.comb += self.platform.request("qsfp_fs").eq(0b01)
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
@@ -89,7 +87,6 @@ class BenchSoC(SoCCore):
         )
 
         # Litescope --------------------------------------------------------------------------------
-
         from litescope import LiteScopeAnalyzer
         analyzer_signals = self.ethphy.debug
         self.analyzer = LiteScopeAnalyzer(analyzer_signals,
@@ -97,9 +94,6 @@ class BenchSoC(SoCCore):
             clock_domain = "sys",
             csr_csv      = "analyzer.csv"
         )
-
-
-
 
 
 # Main ---------------------------------------------------------------------------------------------
