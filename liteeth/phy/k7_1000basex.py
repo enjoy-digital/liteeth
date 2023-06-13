@@ -745,7 +745,7 @@ class K7_1000BASEX(LiteXModule):
             pll.reset.eq(tx_init.pllreset),
             tx_init.plllock.eq(pll.lock),
             tx_reset.eq(tx_init.gtXxreset),
-            tx_init.Xxresetdone.eq(1), # FIXME.
+            tx_init.Xxresetdone.eq(tx_reset_done),
         ]
         self.sync += tx_mmcm_reset.eq(~pll.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -757,7 +757,7 @@ class K7_1000BASEX(LiteXModule):
             rx_init.reset.eq(~tx_init.done | self.crg_reset),
             rx_init.plllock.eq(pll.lock),
             rx_reset.eq(rx_init.gtXxreset),
-            rx_init.Xxresetdone.eq(1), # FIXME.
+            rx_init.Xxresetdone.eq(rx_reset_done),
         ]
         ps_restart = PulseSynchronizer("eth_tx", "sys")
         self.submodules += ps_restart
