@@ -9,15 +9,14 @@ from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
+from litex.gen import *
+
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
+# Gearbox ------------------------------------------------------------------------------------------
 
-class Open(Signal):
-    pass
-
-
-class Gearbox(Module):
+class Gearbox(LiteXModule):
     def __init__(self):
         self.tx_data      = Signal(10)
         self.tx_data_half = Signal(20)
@@ -42,9 +41,10 @@ class Gearbox(Module):
             phase_half.eq(~phase_half),
         ]
 
+# KU_1000BASEX PHY ---------------------------------------------------------------------------------
 
-# Configured for 200MHz transceiver reference clock
-class KU_1000BASEX(Module, AutoCSR):
+class KU_1000BASEX(LiteXModule):
+	# Configured for 200MHz transceiver reference clock
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
@@ -56,10 +56,10 @@ class KU_1000BASEX(Module, AutoCSR):
         self.source  = pcs.source
         self.link_up = pcs.link_up
 
-        self.clock_domains.cd_eth_tx      = ClockDomain()
-        self.clock_domains.cd_eth_rx      = ClockDomain()
-        self.clock_domains.cd_eth_tx_half = ClockDomain(reset_less=True)
-        self.clock_domains.cd_eth_rx_half = ClockDomain(reset_less=True)
+        self.cd_eth_tx      = ClockDomain()
+        self.cd_eth_rx      = ClockDomain()
+        self.cd_eth_tx_half = ClockDomain(reset_less=True)
+        self.cd_eth_rx_half = ClockDomain(reset_less=True)
 
         # for specifying clock constraints. 125MHz clocks.
         self.txoutclk = Signal()
@@ -80,9 +80,9 @@ class KU_1000BASEX(Module, AutoCSR):
                 o_O   = refclk,
             )
 
-        gtpowergood = Signal()
-        pll_reset   = Signal(reset=1)
-        pll_locked  = Signal()
+        gtpowergood   = Signal()
+        pll_reset     = Signal(reset=1)
+        pll_locked    = Signal()
 
         tx_reset      = Signal()
         tx_data       = Signal(20)
@@ -816,9 +816,9 @@ class KU_1000BASEX(Module, AutoCSR):
             o_TXSYNCDONE           = Open(),
             o_TXSYNCOUT            = Open(),
         )
-        tx_bufg_gt_ce = Signal()
+        tx_bufg_gt_ce  = Signal()
         tx_bufg_gt_clr = Signal()
-        rx_bufg_gt_ce = Signal()
+        rx_bufg_gt_ce  = Signal()
         rx_bufg_gt_clr = Signal()
         self.specials += [
             Instance("GTHE3_CHANNEL", **gth_params),

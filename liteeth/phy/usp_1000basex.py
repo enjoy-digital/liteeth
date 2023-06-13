@@ -11,15 +11,14 @@ from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
+from litex.gen import *
+
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
+# Gearbox ------------------------------------------------------------------------------------------
 
-class Open(Signal):
-    pass
-
-
-class Gearbox(Module):
+class Gearbox(LiteXModule):
     def __init__(self):
         self.tx_data      = Signal(10)
         self.tx_data_half = Signal(20)
@@ -44,9 +43,10 @@ class Gearbox(Module):
               phase_half.eq(~phase_half),
         ]
 
+# USP_1000BASEX PHY ---------------------------------------------------------------------------------
 
-# Configured for 200MHz transceiver reference clock
-class USP_1000BASEX(Module, AutoCSR):
+class USP_1000BASEX(LiteXModule):
+    # Configured for 200MHz transceiver reference clock.
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
@@ -58,10 +58,10 @@ class USP_1000BASEX(Module, AutoCSR):
         self.source  = pcs.source
         self.link_up = pcs.link_up
 
-        self.clock_domains.cd_eth_tx      = ClockDomain()
-        self.clock_domains.cd_eth_rx      = ClockDomain()
-        self.clock_domains.cd_eth_tx_half = ClockDomain(reset_less=True)
-        self.clock_domains.cd_eth_rx_half = ClockDomain(reset_less=True)
+        self.cd_eth_tx      = ClockDomain()
+        self.cd_eth_rx      = ClockDomain()
+        self.cd_eth_tx_half = ClockDomain(reset_less=True)
+        self.cd_eth_rx_half = ClockDomain(reset_less=True)
 
         # for specifying clock constraints. 125MHz clocks.
         self.txoutclk = Signal()
