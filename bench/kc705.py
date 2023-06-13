@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2021-2023 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
@@ -14,14 +14,14 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
 
-from litex_boards.platforms import xilinx_kcu105
+from litex_boards.platforms import xilinx_kc705
 
 from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.ku_1000basex import KU_1000BASEX
+from liteeth.phy.k7_1000basex import K7_1000BASEX
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ class _CRG(LiteXModule):
         # Main PLL.
         self.main_pll = main_pll = USMMCM(speedgrade=-2)
         self.comb += main_pll.reset.eq(platform.request("cpu_reset"))
-        main_pll.register_clkin(platform.request("clk125"), 125e6)
+        main_pll.register_clkin(platform.request("clk200"), 200e6)
         main_pll.create_clkout(self.cd_sys, sys_clk_freq)
         main_pll.create_clkout(self.cd_eth, 200e6)
 
@@ -43,11 +43,11 @@ class _CRG(LiteXModule):
 
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(125e6)):
-        platform = xilinx_kcu105.Platform()
+        platform = xilinx_kc705.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,
-            ident          = "LiteEth bench on KCU105",
+            ident          = "LiteEth bench on KC705",
             ident_version  = True
         )
 
@@ -55,11 +55,14 @@ class BenchSoC(SoCCore):
         self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.ethphy = KU_1000BASEX(self.crg.cd_eth.clk,
-            data_pads    = self.platform.request("sfp", 0),
-            sys_clk_freq = self.clk_freq)
+        self.ethphy = K7_1000BASEX(
+            refclk_or_clk_pads = self.crg.cd_eth.clk,
+            data_pads          = self.platform.request("sfp", 0),
+            sys_clk_freq       = self.clk_freq,
+            with_csr           = False
+        )
         self.comb += self.platform.request("sfp_tx_disable_n", 0).eq(1)
-        self.platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-1753]")
+        self.platform.add_platform_command("set_property SEVERITY {{Warning}} [get_drc_checks REQP-52]")
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
@@ -74,7 +77,7 @@ class BenchSoC(SoCCore):
 # Main ---------------------------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="LiteEth Bench on KCU105")
+    parser = argparse.ArgumentParser(description="LiteEth Bench on KC705")
     parser.add_argument("--build",       action="store_true", help="Build bitstream")
     parser.add_argument("--load",        action="store_true", help="Load bitstream")
     args = parser.parse_args()
