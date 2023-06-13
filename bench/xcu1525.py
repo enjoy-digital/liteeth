@@ -64,9 +64,6 @@ class BenchSoC(SoCCore):
             ident_version  = True
         )
 
-        # UARTBone ---------------------------------------------------------------------------------
-        self.add_uartbone()
-
         # CRG --------------------------------------------------------------------------------------
         self.crg = _CRG(platform, sys_clk_freq)
 
@@ -85,16 +82,6 @@ class BenchSoC(SoCCore):
             pads         = platform.request_all("user_led"),
             sys_clk_freq = sys_clk_freq
         )
-
-        # Litescope --------------------------------------------------------------------------------
-        from litescope import LiteScopeAnalyzer
-        analyzer_signals = self.ethphy.debug
-        self.analyzer = LiteScopeAnalyzer(analyzer_signals,
-            depth        = 256,
-            clock_domain = "sys",
-            csr_csv      = "analyzer.csv"
-        )
-
 
 # Main ---------------------------------------------------------------------------------------------
 
