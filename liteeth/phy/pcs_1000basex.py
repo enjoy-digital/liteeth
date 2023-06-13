@@ -22,11 +22,11 @@ from liteeth.common import *
 
 class PCSTX(LiteXModule):
     def __init__(self, lsb_first=False):
-        self.config_stb = Signal()
-        self.config_reg = Signal(16)
-        self.tx_stb     = Signal()
-        self.tx_ack     = Signal()
-        self.tx_data    = Signal(8)
+        self.config_valid = Signal()
+        self.config_reg   = Signal(16)
+        self.tx_valid     = Signal()
+        self.tx_ready     = Signal()
+        self.tx_data      = Signal(8)
 
         self.encoder = Encoder(lsb_first=lsb_first)
 
@@ -62,22 +62,22 @@ class PCSTX(LiteXModule):
 
         self.fsm = fsm = FSM()
         fsm.act("START",
-            If(self.config_stb,
-                self.tx_ack.eq(1),  # Discard TX data if we are in config_reg phase.
+            If(self.config_valid,
+                self.tx_ready.eq(1),  # Discard TX data if we are in config_reg phase.
                 load_config_reg_buffer.eq(1),
                 self.encoder.k[0].eq(1),
                 self.encoder.d[0].eq(K(28, 5)),
                 NextState("CONFIG_D")
             ).Else(
-                If(self.tx_stb,
+                If(self.tx_valid,
                     # The first byte sent is replaced by /S/.
-                    self.tx_ack.eq((timer == 0)),
+                    self.tx_ready.eq((timer == 0)),
                     timer_en.eq(1),
                     self.encoder.k[0].eq(1),
                     self.encoder.d[0].eq(K(27, 7)),
                     NextState("DATA")
                 ).Else(
-                    self.tx_ack.eq(1),  # Discard TX data.
+                    self.tx_ready.eq(1),  # Discard TX data.
                     self.encoder.k[0].eq(1),
                     self.encoder.d[0].eq(K(28, 5)),
                     NextState("IDLE")
@@ -114,12 +114,12 @@ class PCSTX(LiteXModule):
             NextState("START")
         )
         fsm.act("DATA",
-            If(self.tx_stb,
-                self.tx_ack.eq((timer == 0)),
+            If(self.tx_valid,
+                self.tx_ready.eq((timer == 0)),
                 timer_en.eq(1),
                 self.encoder.d[0].eq(self.tx_data)
             ).Else(
-                self.tx_ack.eq(1),
+                self.tx_ready.eq(1),
                 # /T/
                 self.encoder.k[0].eq(1),
                 self.encoder.d[0].eq(K(29, 7)),
@@ -278,8 +278,8 @@ class PCS(LiteXModule):
         
         # Endpoint interface.
         self.comb += [
-            self.tx.tx_stb.eq(self.sink.valid),
-            self.sink.ready.eq(self.tx.tx_ack),
+            self.tx.tx_valid.eq(self.sink.valid),
+            self.sink.ready.eq(self.tx.tx_ready),
             self.tx.tx_data.eq(self.sink.data),
         ]
 
@@ -353,7 +353,7 @@ class PCS(LiteXModule):
         self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
         # AN_ENABLE
         fsm.act("AUTONEG_BREAKLINK",
-            self.tx.config_stb.eq(1),
+            self.tx.config_valid.eq(1),
             tx_config_empty.eq(1),
             more_ack_timer.wait.eq(1),
             If(more_ack_timer.done,
@@ -362,7 +362,7 @@ class PCS(LiteXModule):
         )
         # ABILITY_DETECT
         fsm.act("AUTONEG_WAIT_ABI",
-            self.tx.config_stb.eq(1),
+            self.tx.config_valid.eq(1),
             If(rx_config_reg_abi.o,
                 NextState("AUTONEG_WAIT_ACK")
             ),
@@ -373,7 +373,7 @@ class PCS(LiteXModule):
         )
         # ACKNOWLEDGE_DETECT
         fsm.act("AUTONEG_WAIT_ACK",
-            self.tx.config_stb.eq(1),
+            self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
             If(rx_config_reg_ack.o,
                 NextState("AUTONEG_SEND_MORE_ACK")
@@ -385,7 +385,7 @@ class PCS(LiteXModule):
         )
         # COMPLETE_ACKNOWLEDGE
         fsm.act("AUTONEG_SEND_MORE_ACK",
-            self.tx.config_stb.eq(1),
+            self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
             more_ack_timer.wait.eq(~is_sgmii),
             sgmii_ack_timer.wait.eq(is_sgmii),
