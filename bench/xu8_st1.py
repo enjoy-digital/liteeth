@@ -48,7 +48,7 @@ class _CRG(LiteXModule):
         self.pll = pll = USMMCM(speedgrade=-1)
         pll.register_clkin(platform.request("clk100"), 100e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
-        pll.create_clkout(self.cd_eth, 200e6, buf=None)
+        pll.create_clkout(self.cd_eth, 200e6)
 
 # Bench SoC ----------------------------------------------------------------------------------------
 
@@ -64,10 +64,10 @@ class BenchSoC(SoCCore):
         )
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = USP_GTH_1000BASEX(self.crg.cd_eth.clk,
+        self.ethphy = USP_GTH_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("sfp", 0),
             sys_clk_freq = self.clk_freq)
         self.add_etherbone(phy=self.ethphy, buffer_depth=4)
@@ -77,7 +77,7 @@ class BenchSoC(SoCCore):
 
         # Leds -------------------------------------------------------------------------------------
         from litex.soc.cores.led import LedChaser
-        self.submodules.leds = LedChaser(
+        self.leds = LedChaser(
             pads         = platform.request_all("user_led"),
             sys_clk_freq = sys_clk_freq
         )

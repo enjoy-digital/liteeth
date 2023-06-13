@@ -5,8 +5,6 @@
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # SPDX-License-Identifier: BSD-2-Clause
 
-# Work-In-Progress...
-
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
@@ -940,19 +938,4 @@ class USP_GTH_1000BASEX(LiteXModule):
 
             gearbox.tx_data.eq(pcs.tbi_tx),
             pcs.tbi_rx.eq(gearbox.rx_data)
-        ]
-
-        self.debug = [
-            gtpowergood,
-            pll_reset,
-            pll_locked,
-            tx_reset,
-            tx_data,
-            tx_reset_done,
-            rx_reset,
-            rx_data,
-            rx_reset_done,
-            self.sink,
-            self.source,
-            self.link_up
         ]
