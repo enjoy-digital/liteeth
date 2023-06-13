@@ -882,9 +882,9 @@ class USP_GTH_1000BASEX(LiteXModule):
             o_TXSYNCDONE           = Open(),
             o_TXSYNCOUT            = Open(),
         )
-        tx_bufg_gt_ce = Signal()
+        tx_bufg_gt_ce  = Signal()
         tx_bufg_gt_clr = Signal()
-        rx_bufg_gt_ce = Signal()
+        rx_bufg_gt_ce  = Signal()
         rx_bufg_gt_clr = Signal()
         self.specials += [
             Instance("GTHE4_CHANNEL", **gth_params),
@@ -917,11 +917,11 @@ class USP_GTH_1000BASEX(LiteXModule):
         reset_counter    = Signal(max=pll_reset_cycles+1)
         self.sync += [
             If(~gtpowergood,
-                pll_reset.eq(1),
+                  pll_reset.eq(1),
                 reset_counter.eq(0)
             ).Else(
                 If(reset_counter == pll_reset_cycles,
-                    pll_reset.eq(0)
+                      pll_reset.eq(0)
                 ).Else(
                     reset_counter.eq(reset_counter + 1)
                 )
@@ -942,10 +942,17 @@ class USP_GTH_1000BASEX(LiteXModule):
             pcs.tbi_rx.eq(gearbox.rx_data)
         ]
 
-        self.comb += [
-            tx_data.eq(gearbox.tx_data_half),
-            gearbox.rx_data_half.eq(rx_data),
-
-            gearbox.tx_data.eq(pcs.tbi_tx),
-            pcs.tbi_rx.eq(gearbox.rx_data)
+        self.debug = [
+            gtpowergood,
+            pll_reset,
+            pll_locked,
+            tx_reset,
+            tx_data,
+            tx_reset_done,
+            rx_reset,
+            rx_data,
+            rx_reset_done,
+            self.sink,
+            self.source,
+            self.link_up
         ]
