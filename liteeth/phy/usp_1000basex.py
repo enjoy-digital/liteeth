@@ -16,33 +16,6 @@ from litex.gen import *
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
-# Gearbox ------------------------------------------------------------------------------------------
-
-class Gearbox(LiteXModule):
-    def __init__(self):
-        self.tx_data      = Signal(10)
-        self.tx_data_half = Signal(20)
-        self.rx_data_half = Signal(20)
-        self.rx_data      = Signal(10)
-
-        # TX
-        buf = Signal(20)
-        self.sync.eth_tx += buf.eq(Cat(buf[10:], self.tx_data))
-        self.sync.eth_tx_half += self.tx_data_half.eq(buf)
-
-        # RX
-        phase_half       = Signal()
-        phase_half_rereg = Signal()
-        self.sync.eth_rx_half += phase_half_rereg.eq(phase_half)
-        self.sync.eth_rx += [
-            If(phase_half == phase_half_rereg,
-                self.rx_data.eq(self.rx_data_half[10:])
-            ).Else(
-                self.rx_data.eq(self.rx_data_half[:10])
-            ),
-              phase_half.eq(~phase_half),
-        ]
-
 # USP_1000BASEX PHY ---------------------------------------------------------------------------------
 
 class USP_1000BASEX(LiteXModule):
@@ -977,9 +950,7 @@ class USP_1000BASEX(LiteXModule):
         ]
 
         # Gearbox and PCS connection
-        gearbox = Gearbox()
-        self.submodules += gearbox
-
+        self.gearbox = gearbox = PCSGearbox()
         self.comb += [
             tx_data.eq(gearbox.tx_data_half),
             gearbox.rx_data_half.eq(rx_data),
