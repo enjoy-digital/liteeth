@@ -11,6 +11,8 @@ from migen.genlib.cdc import PulseSynchronizer
 
 from litex.gen import *
 
+from litex.soc.cores.clock import S7MMCM
+
 from liteeth.common import *
 from liteeth.phy.a7_gtp import *
 from liteeth.phy.pcs_1000basex import *
@@ -73,11 +75,13 @@ class A7_1000BASEX(LiteXModule):
         # GTP transceiver
         tx_reset       = Signal()
         tx_mmcm_locked = Signal()
+        tx_mmcm_reset  = Signal(reset=1)
         tx_data        = Signal(20)
         tx_reset_done  = Signal()
 
         rx_reset          = Signal()
         rx_mmcm_locked    = Signal()
+        rx_mmcm_reset     = Signal(reset=1)
         rx_data           = Signal(20)
         rx_reset_done     = Signal()
         rx_pma_reset_done = Signal()
@@ -714,71 +718,21 @@ class A7_1000BASEX(LiteXModule):
         rxoutclk_rebuffer = Signal()
         self.specials += Instance("BUFG", i_I=self.rxoutclk, o_O=rxoutclk_rebuffer)
 
-        tx_mmcm_fb        = Signal()
-        tx_mmcm_reset     = Signal(reset=1)
-        clk_tx_unbuf      = Signal()
-        clk_tx_half_unbuf = Signal()
-        self.specials += [
-            Instance("MMCME2_BASE",
-                p_CLKIN1_PERIOD    = 16.0,
-                i_CLKIN1           = txoutclk_rebuffer,
-                i_RST              = tx_mmcm_reset,
+        # TX MMCM.
+        self.tx_mmcm = tx_mmcm = S7MMCM()
+        tx_mmcm.register_clkin(txoutclk_rebuffer,   62.5e6)
+        tx_mmcm.create_clkout(self.cd_eth_tx_half,  62.5e6, buf="bufh", with_reset=False)
+        tx_mmcm.create_clkout(self.cd_eth_tx,      125.0e6, buf="bufh", with_reset=True)
+        self.comb += tx_mmcm.reset.eq(tx_mmcm_reset)
+        self.comb += tx_mmcm_locked.eq(tx_mmcm.locked)
 
-                o_CLKFBOUT         = tx_mmcm_fb,
-                i_CLKFBIN          = tx_mmcm_fb,
-
-                p_CLKFBOUT_MULT_F  = 16,
-                o_LOCKED           = tx_mmcm_locked,
-                p_DIVCLK_DIVIDE    = 1,
-
-                p_CLKOUT0_DIVIDE_F = 16,
-                o_CLKOUT0          = clk_tx_half_unbuf,
-                p_CLKOUT1_DIVIDE   = 8,
-                o_CLKOUT1          = clk_tx_unbuf,
-            ),
-            Instance("BUFH",
-                i_I = clk_tx_half_unbuf,
-                o_O = self.cd_eth_tx_half.clk,
-            ),
-            Instance("BUFH",
-                i_I = clk_tx_unbuf,
-                o_O = self.cd_eth_tx.clk,
-            ),
-            AsyncResetSynchronizer(self.cd_eth_tx, ~tx_mmcm_locked)
-        ]
-
-        rx_mmcm_fb        = Signal()
-        rx_mmcm_reset     = Signal(reset=1)
-        clk_rx_unbuf      = Signal()
-        clk_rx_half_unbuf = Signal()
-        self.specials += [
-            Instance("MMCME2_BASE",
-                p_CLKIN1_PERIOD    = 16.0,
-                i_CLKIN1           = rxoutclk_rebuffer,
-                i_RST              = rx_mmcm_reset,
-
-                o_CLKFBOUT         = rx_mmcm_fb,
-                i_CLKFBIN          = rx_mmcm_fb,
-
-                p_CLKFBOUT_MULT_F  = 16,
-                o_LOCKED           = rx_mmcm_locked,
-                p_DIVCLK_DIVIDE    = 1,
-
-                p_CLKOUT0_DIVIDE_F = 16,
-                o_CLKOUT0          = clk_rx_half_unbuf,
-                p_CLKOUT1_DIVIDE   = 8,
-                o_CLKOUT1          = clk_rx_unbuf,
-            ),
-            Instance("BUFG",
-                i_I = clk_rx_half_unbuf,
-                o_O = self.cd_eth_rx_half.clk,
-            ),
-            Instance("BUFG",
-                i_I = clk_rx_unbuf,
-                o_O = self.cd_eth_rx.clk,
-            ),
-            AsyncResetSynchronizer(self.cd_eth_rx, ~rx_mmcm_locked)
-        ]
+        # RX MMCM.
+        self.rx_mmcm = rx_mmcm = S7MMCM()
+        rx_mmcm.register_clkin(rxoutclk_rebuffer,   62.5e6)
+        rx_mmcm.create_clkout(self.cd_eth_rx_half,  62.5e6, buf="bufg", with_reset=False)
+        rx_mmcm.create_clkout(self.cd_eth_rx,      125.0e6, buf="bufg", with_reset=True)
+        self.comb += rx_mmcm.reset.eq(rx_mmcm_reset)
+        self.comb += rx_mmcm_locked.eq(rx_mmcm.locked)
 
         # Transceiver init
         tx_init = GTPTxInit(sys_clk_freq)
