@@ -51,7 +51,7 @@ class K7_1000BASEX(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -597,7 +597,7 @@ class K7_1000BASEX(LiteXModule):
             i_RXELECIDLEMODE   = 0b11,
 
             # Receive Ports - RX Polarity Control Ports
-            i_RXPOLARITY       = 0,
+            i_RXPOLARITY       = rx_polarity,
 
             # Receive Ports - RX gearbox ports
             i_RXSLIDE          = 0,
@@ -719,7 +719,7 @@ class K7_1000BASEX(LiteXModule):
             i_TXPDELECIDLEMODE = 0,
 
             # Transmit Ports - TX Polarity Control Ports
-            i_TXPOLARITY       = 0,
+            i_TXPOLARITY       = tx_polarity,
 
             # Transmit Ports - TX Receiver Detection Ports
             i_TXDETECTRX       = 0,
@@ -765,11 +765,14 @@ class K7_1000BASEX(LiteXModule):
         self.comb += rx_mmcm_locked.eq(rx_mmcm.locked)
 
         # Transceiver init
-        tx_init = GTXTXInit(sys_clk_freq, buffer_enable=True)
+        tx_init = ResetInserter()(GTXTXInit(sys_clk_freq, buffer_enable=True))
+        self.submodules += tx_init
         self.comb += [
+            tx_init.reset.eq(self.crg_reset),
             pll.reset.eq(tx_init.pllreset),
             tx_init.plllock.eq(pll.lock),
-            tx_reset.eq(tx_init.gtXxreset | self.crg_reset)
+            tx_reset.eq(tx_init.gtXxreset),
+            tx_init.Xxresetdone.eq(1), # FIXME.
         ]
         self.sync += tx_mmcm_reset.eq(~pll.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -778,8 +781,10 @@ class K7_1000BASEX(LiteXModule):
         rx_init = ResetInserter()(GTXRXInit(sys_clk_freq, buffer_enable=True))
         self.submodules += rx_init
         self.comb += [
-            rx_init.reset.eq(~tx_init.done),
-            rx_reset.eq(rx_init.gtXxreset | self.crg_reset)
+            rx_init.reset.eq(~tx_init.done | self.crg_reset),
+            rx_init.plllock.eq(pll.lock),
+            rx_reset.eq(rx_init.gtXxreset),
+            rx_init.Xxresetdone.eq(1), # FIXME.
         ]
         ps_restart = PulseSynchronizer("eth_tx", "sys")
         self.submodules += ps_restart
