@@ -32,7 +32,7 @@ class Gearbox(LiteXModule):
         self.sync.eth_tx_half += self.tx_data_half.eq(buf)
 
         # RX
-        phase_half = Signal()
+        phase_half       = Signal()
         phase_half_rereg = Signal()
         self.sync.eth_rx_half += phase_half_rereg.eq(phase_half)
         self.sync.eth_rx += [
@@ -51,7 +51,7 @@ class A7_1000BASEX(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, qpll_channel, data_pads, sys_clk_freq, rx_polarity=0, tx_polarity=0):
+    def __init__(self, qpll_channel, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -68,7 +68,9 @@ class A7_1000BASEX(LiteXModule):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.crg_reset = CSRStorage()
+        self.crg_reset = Signal()
+        if with_csr:
+            self.add_csr()
 
         # # #
 
@@ -740,7 +742,7 @@ class A7_1000BASEX(LiteXModule):
         self.comb += [
             qpll_channel.reset.eq(tx_init.qpll_reset),
             tx_init.qpll_lock.eq(qpll_channel.lock),
-            tx_reset.eq(tx_init.tx_reset | self.crg_reset.storage)
+            tx_reset.eq(tx_init.tx_reset | self.crg_reset)
         ]
         self.sync += tx_mmcm_reset.eq(~qpll_channel.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -749,7 +751,7 @@ class A7_1000BASEX(LiteXModule):
         self.submodules += rx_init
         self.comb += [
             rx_init.enable.eq(tx_init.done),
-            rx_reset.eq(rx_init.rx_reset | self.crg_reset.storage),
+            rx_reset.eq(rx_init.rx_reset | self.crg_reset),
 
             rx_init.rx_pma_reset_done.eq(rx_pma_reset_done),
             drpaddr.eq(rx_init.drpaddr),
@@ -794,3 +796,7 @@ class A7_1000BASEX(LiteXModule):
             gearbox.tx_data.eq(pcs.tbi_tx),
             pcs.tbi_rx.eq(gearbox.rx_data)
         ]
+
+    def add_csr(self):
+        self._crg_reset = CSRStorage()
+        self.comb += self.crg_reset.eq(self._crg_reset.storage)
