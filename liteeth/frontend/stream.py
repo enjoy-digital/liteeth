@@ -1,14 +1,16 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
+
+from litex.gen import *
 
 from liteeth.common import *
 
 # Stream to UDP TX -----------------------------------------------------------------------------------
 
-class LiteEthStream2UDPTX(Module):
+class LiteEthStream2UDPTX(LiteXModule):
     def __init__(self, ip_address, udp_port, data_width=8, fifo_depth=None):
         self.sink   = sink   = stream.Endpoint(eth_tty_tx_description(data_width))
         self.source = source = stream.Endpoint(eth_udp_user_description(data_width))
@@ -30,17 +32,23 @@ class LiteEthStream2UDPTX(Module):
             level   = Signal(max=fifo_depth+1)
             counter = Signal(max=fifo_depth+1)
 
-            self.submodules.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
+            self.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
             self.comb += sink.connect(fifo.sink)
 
-            self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+            self.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
-                # Send FIFO contents when we have a full-packet or when FIFO is full.
-                If((fifo.source.valid & fifo.source.last) | ~fifo.sink.ready,
-                    NextValue(level, fifo.level),
-                    NextValue(counter, 0),
+                NextValue(counter, 0),
+                # Send FIFO contenst when:
+                # - We have a full packet:
+                If(fifo.sink.valid & fifo.sink.ready & fifo.sink.last,
+                    NextValue(level, fifo.level + 1), # +1 for level latency.
                     NextState("SEND")
-                )
+                ),
+                # - Or when FIFO is full.
+                If(~fifo.sink.ready,
+                    NextValue(level, fifo_depth),
+                    NextState("SEND")
+                ),
             )
             fsm.act("SEND",
                 source.valid.eq(1),
@@ -62,7 +70,7 @@ class LiteEthStream2UDPTX(Module):
 
 # UDP to Stream RX ---------------------------------------------------------------------------------
 
-class LiteEthUDP2StreamRX(Module):
+class LiteEthUDP2StreamRX(LiteXModule):
     def __init__(self, ip_address=None, udp_port=None, data_width=8, fifo_depth=None, with_broadcast=True):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(data_width))
         self.source = source = stream.Endpoint(eth_tty_rx_description(data_width))
@@ -88,7 +96,7 @@ class LiteEthUDP2StreamRX(Module):
                 sink.ready.eq(source.ready | ~valid)
             ]
         else:
-            self.submodules.fifo = fifo = stream.SyncFIFO(
+            self.fifo = fifo = stream.SyncFIFO(
                 layout   = [("data", data_width), ("error", 1)],
                 depth    = fifo_depth,
                 buffered = True,
@@ -102,10 +110,10 @@ class LiteEthUDP2StreamRX(Module):
 
 # UDP Streamer -------------------------------------------------------------------------------------
 
-class LiteEthUDPStreamer(Module):
+class LiteEthUDPStreamer(LiteXModule):
     def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64, with_broadcast=True, cd="sys"):
-        self.submodules.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth)
-        self.submodules.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, data_width, rx_fifo_depth, with_broadcast)
+        self.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth)
+        self.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, data_width, rx_fifo_depth, with_broadcast)
         udp_port = udp.crossbar.get_port(udp_port, dw=data_width, cd=cd)
         self.comb += [
             tx.source.connect(udp_port.sink),
