@@ -64,11 +64,11 @@ _io = [
     ("interrupt", 0, Pins(1)),
 
     # MII PHY Pads
-    ("mii_eth_clocks", 0,
+    ("mii_clocks", 0,
         Subsignal("tx", Pins(1)),
         Subsignal("rx", Pins(1)),
     ),
-    ("mii_eth", 0,
+    ("mii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("mdio",    Pins(1)),
         Subsignal("mdc",     Pins(1)),
@@ -82,10 +82,10 @@ _io = [
     ),
 
     # RMII PHY Pads
-    ("rmii_eth_clocks", 0,
+    ("rmii_clocks", 0,
         Subsignal("ref_clk", Pins(1))
     ),
-    ("rmii_eth", 0,
+    ("rmii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("rx_data", Pins(2)),
         Subsignal("crs_dv",  Pins(1)),
@@ -96,12 +96,12 @@ _io = [
     ),
 
     # GMII PHY Pads
-    ("gmii_eth_clocks", 0,
+    ("gmii_clocks", 0,
         Subsignal("tx",  Pins(1)),
         Subsignal("gtx", Pins(1)),
         Subsignal("rx",  Pins(1))
     ),
-    ("gmii_eth", 0,
+    ("gmii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("int_n",   Pins(1)),
         Subsignal("mdio",    Pins(1)),
@@ -117,11 +117,11 @@ _io = [
     ),
 
     # RGMII PHY Pads
-    ("rgmii_eth_clocks", 0,
+    ("rgmii_clocks", 0,
         Subsignal("tx", Pins(1)),
         Subsignal("rx", Pins(1))
     ),
-    ("rgmii_eth", 0,
+    ("rgmii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("int_n",   Pins(1)),
         Subsignal("mdio",    Pins(1)),
@@ -133,7 +133,7 @@ _io = [
     ),
 
     # SGMII PHY Pads
-    ("sgmii_eth", 0,
+    ("sgmii", 0,
         Subsignal("refclk200", Pins(1)),
         Subsignal("txp",    Pins(1)),
         Subsignal("txn",    Pins(1)),
@@ -201,24 +201,24 @@ class PHYCore(SoCMini):
         # MII.
         if phy in [liteeth_phys.LiteEthPHYMII]:
             ethphy = phy(
-                clock_pads = platform.request("mii_eth_clocks"),
-                pads       = platform.request("mii_eth"))
+                clock_pads = platform.request("mii_clocks"),
+                pads       = platform.request("mii"))
         # RMII.
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
             ethphy = phy(
                 refclk_cd  = None,
-                clock_pads = platform.request("rmii_eth_clocks"),
-                pads       = platform.request("rmii_eth"))
+                clock_pads = platform.request("rmii_clocks"),
+                pads       = platform.request("rmii"))
         # GMII.
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
             ethphy = phy(
-                clock_pads = platform.request("gmii_eth_clocks"),
-                pads       = platform.request("gmii_eth"))
+                clock_pads = platform.request("gmii_clocks"),
+                pads       = platform.request("gmii"))
         # GMII / MII.
         elif phy in [liteeth_phys.LiteEthPHYGMIIMII]:
             ethphy = phy(
-                clock_pads = platform.request("gmii_eth_clocks"),
-                pads       = platform.request("gmii_eth"),
+                clock_pads = platform.request("gmii_clocks"),
+                pads       = platform.request("gmii"),
                 clk_freq   = self.clk_freq)
         # RGMII.
         elif phy in [
@@ -226,8 +226,8 @@ class PHYCore(SoCMini):
             liteeth_phys.LiteEthECP5PHYRGMII,
         ]:
             ethphy = phy(
-                clock_pads         = platform.request("rgmii_eth_clocks"),
-                pads               = platform.request("rgmii_eth"),
+                clock_pads         = platform.request("rgmii_clocks"),
+                pads               = platform.request("rgmii"),
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
@@ -239,7 +239,7 @@ class PHYCore(SoCMini):
             liteeth_phys.USP_GTH_1000BASEX,
             liteeth_phys.USP_GTY_1000BASEX,
         ]:
-            ethphy_pads = platform.request("sgmii_eth")
+            ethphy_pads = platform.request("sgmii")
             ethphy = phy(
                 refclk_or_clk_pads = ethphy_pads.refclk200,
                 data_pads          = ethphy_pads,
