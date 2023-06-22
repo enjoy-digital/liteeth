@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2022 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
 # Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
@@ -131,6 +131,15 @@ _io = [
         Subsignal("tx_ctl",  Pins(1)),
         Subsignal("tx_data", Pins(4))
     ),
+
+    # SGMII PHY Pads
+    ("sgmii_eth", 0,
+        Subsignal("refclk200", Pins(1)),
+        Subsignal("txp",    Pins(1)),
+        Subsignal("txn",    Pins(1)),
+        Subsignal("rxp",    Pins(1)),
+        Subsignal("rxn",    Pins(1))
+    ),
 ]
 
 def get_udp_port_ios(name, data_width, dynamic_params=False):
@@ -189,31 +198,56 @@ class PHYCore(SoCMini):
 
         # PHY --------------------------------------------------------------------------------------
         phy = core_config["phy"]
+        # MII.
         if phy in [liteeth_phys.LiteEthPHYMII]:
             ethphy = phy(
                 clock_pads = platform.request("mii_eth_clocks"),
                 pads       = platform.request("mii_eth"))
+        # RMII.
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
             ethphy = phy(
                 refclk_cd  = None,
                 clock_pads = platform.request("rmii_eth_clocks"),
                 pads       = platform.request("rmii_eth"))
+        # GMII.
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"))
+        # GMII / MII.
         elif phy in [liteeth_phys.LiteEthPHYGMIIMII]:
             ethphy = phy(
                 clock_pads = platform.request("gmii_eth_clocks"),
                 pads       = platform.request("gmii_eth"),
                 clk_freq   = self.clk_freq)
-        elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
+        # RGMII.
+        elif phy in [
+            liteeth_phys.LiteEthS7PHYRGMII,
+            liteeth_phys.LiteEthECP5PHYRGMII,
+        ]:
             ethphy = phy(
                 clock_pads         = platform.request("rgmii_eth_clocks"),
                 pads               = platform.request("rgmii_eth"),
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
+        # SGMII.
+        elif phy in [
+            liteeth_phys.A7_1000BASEX,
+            liteeth_phys.K7_1000BASEX,
+            liteeth_phys.KU_1000BASEX,
+            liteeth_phys.USP_GTH_1000BASEX,
+            liteeth_phys.USP_GTY_1000BASEX,
+        ]:
+            ethphy_pads = platform.request("sgmii_eth")
+            ethphy = phy(
+                refclk_or_clk_pads = ethphy_pads.refclk200,
+                data_pads          = ethphy_pads,
+                sys_clk_freq       = self.clk_freq,
+                with_csr           = False,
+                rx_polarity        = 0, # Add support to liteeth_gen if useful.
+                tx_polarity        = 0, # Add support to liteeth_gen if useful.
+            )
         else:
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
