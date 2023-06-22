@@ -344,16 +344,22 @@ class UDPCore(PHYCore):
 
         # Etherbone --------------------------------------------------------------------------------
 
-        # /!\ WIP /!\
-        with_etherbone = False
-        if with_etherbone:
+        etherbone              = core_config.get("etherbone", False)
+        etherbone_port         = core_config.get("etherbone_port", 1234)
+        etherbone_buffer_depth = core_config.get("etherbone_buffer_depth", 16)
+
+        if etherbone:
             assert (data_width == 32)
-            self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 1234, buffer_depth=16, cd="sys")
+            self.submodules.etherbone = LiteEthEtherbone(
+                udp          =  self.core.udp,
+                udp_port     = etherbone_port,
+                buffer_depth = etherbone_buffer_depth,
+                cd           = "sys"
+            )
             axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
             platform.add_extension(axil_bus.get_ios("mmap"))
             self.submodules += axi.Wishbone2AXILite(self.etherbone.wishbone.bus, axil_bus)
             self.comb += axil_bus.connect_to_pads(platform.request("mmap"), mode="master")
-         # /!\ WIP /!\
 
         # UDP Ports --------------------------------------------------------------------------------
         for name, port in core_config["udp_ports"].items():
