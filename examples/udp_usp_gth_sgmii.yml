@@ -5,14 +5,15 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 # PHY ----------------------------------------------------------------------
-phy:          USP_GTH_1000BASEX
-vendor:       xilinx
-toolchain:    vivado
+phy       : USP_GTH_1000BASEX
+vendor    : xilinx
+toolchain : vivado
 
 # Core ---------------------------------------------------------------------
-clk_freq:    125e6
-core:        udp
-data_width:  32
+refclk_freq : 156.25e6
+clk_freq    : 25e6
+core        : udp
+data_width  : 32
 
 # UDP Ports --------------------------------------------------------------------
 udp_ports:   {

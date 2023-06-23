@@ -134,7 +134,7 @@ _io = [
 
     # SGMII PHY Pads
     ("sgmii", 0,
-        Subsignal("refclk200", Pins(1)),
+        Subsignal("refclk", Pins(1)),
         Subsignal("txp",    Pins(1)),
         Subsignal("txn",    Pins(1)),
         Subsignal("rxp",    Pins(1)),
@@ -241,9 +241,10 @@ class PHYCore(SoCMini):
         ]:
             ethphy_pads = platform.request("sgmii")
             ethphy = phy(
-                refclk_or_clk_pads = ethphy_pads.refclk200,
+                refclk_or_clk_pads = ethphy_pads.refclk,
                 data_pads          = ethphy_pads,
                 sys_clk_freq       = self.clk_freq,
+                refclk_freq        = core_config.get("refclk_freq", 200e6),
                 with_csr           = False,
                 rx_polarity        = 0, # Add support to liteeth_gen if useful.
                 tx_polarity        = 0, # Add support to liteeth_gen if useful.
@@ -438,7 +439,7 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
-        if k in ["clk_freq"]:
+        if k in ["refclk_freq", "clk_freq"]:
             core_config[k] = int(float(core_config[k]))
         if k in ["phy_tx_delay", "phy_rx_delay"]:
             core_config[k] = float(core_config[k])
