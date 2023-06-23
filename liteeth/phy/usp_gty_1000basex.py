@@ -574,7 +574,7 @@ class USP_GTY_1000BASEX(LiteXModule):
             i_CPLLLOCKDETCLK      = 0b0,
             i_CPLLLOCKEN          = 0b1,
             i_CPLLPD              = pll_reset,
-            i_CPLLREFCLKSEL       = 0b111,
+            i_CPLLREFCLKSEL       = 0b001,
             i_CPLLRESET           = 0b0,
             i_DMONFIFORESET       = 0b0,
             i_DMONITORCLK         = 0b0,
