@@ -17,11 +17,12 @@ from liteeth.phy.pcs_1000basex import *
 # USP_GTH_1000BASEX PHY ----------------------------------------------------------------------------
 
 class USP_GTH_1000BASEX(LiteXModule):
-    # Configured for 200MHz transceiver reference clock
+    # Configured for 200MHz or 156.25MHz transceiver reference clock
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
+        assert refclk_freq in [200e6, 156.25e6]
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -134,11 +135,11 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_CPLL_CFG1                    = 0b0000000000100011,
             p_CPLL_CFG2                    = 0b0000000000000010,
             p_CPLL_CFG3                    = 0b000000,
-            p_CPLL_FBDIV                   = 5,
-            p_CPLL_FBDIV_45                = 5,
+            p_CPLL_FBDIV                   = {200e6: 5, 156.25e6: 4}[refclk_freq],
+            p_CPLL_FBDIV_45                = {200e6: 5, 156.25e6: 4}[refclk_freq],
             p_CPLL_INIT_CFG0               = 0b0000001010110010,
             p_CPLL_LOCK_CFG                = 0b0000000111101000,
-            p_CPLL_REFCLK_DIV              = 2,
+            p_CPLL_REFCLK_DIV              = {200e6: 2, 156.25e6: 1}[refclk_freq],
             p_CTLE3_OCAP_EXT_CTRL          = 0b000,
             p_CTLE3_OCAP_EXT_EN            = 0b0,
             p_DDI_REALIGN_WAIT             = 15,
@@ -357,7 +358,7 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_RX_BIAS_CFG0                 = 0b0001010101010100,
             p_RX_BUFFER_CFG                = 0b000000,
             p_RX_CAPFF_SARC_ENB            = 0b0,
-            p_RX_CLK25_DIV                 = 8,
+            p_RX_CLK25_DIV                 = {200e6: 8, 156.25e6: 7}[refclk_freq],
             p_RX_CLKMUX_EN                 = 0b1,
             p_RX_CLK_SLIP_OVRD             = 0b00000,
             p_RX_CM_BUF_CFG                = 0b1010,
@@ -467,7 +468,7 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_TXSYNC_MULTILANE             = 0b0,
             p_TXSYNC_OVRD                  = 0b0,
             p_TXSYNC_SKIP_DA               = 0b0,
-            p_TX_CLK25_DIV                 = 8,
+            p_TX_CLK25_DIV                 = {200e6: 8, 156.25e6: 7}[refclk_freq],
             p_TX_CLKMUX_EN                 = 0b1,
             p_TX_DATA_WIDTH                = 20,
             p_TX_DCC_LOOP_RST_CFG          = 0b0000000000000100,
