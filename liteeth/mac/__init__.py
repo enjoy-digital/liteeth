@@ -18,6 +18,7 @@ class LiteEthMAC(Module, AutoCSR):
         with_preamble_crc = True,
         nrxslots          = 2,
         ntxslots          = 2,
+        tx_write_only     = False,
         hw_mac            = None,
         timestamp         = None,
         full_memory_we    = False,
@@ -55,6 +56,7 @@ class LiteEthMAC(Module, AutoCSR):
                 ntxslots   = ntxslots,
                 endianness = endianness,
                 timestamp  = timestamp,
+                tx_write_only = tx_write_only,
             )
             # On some targets (Intel/Altera), the complex ports aren't inferred
             # as block ram, but are created with LUTs.  FullMemoryWe splits such
