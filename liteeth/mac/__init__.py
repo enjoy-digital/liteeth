@@ -16,9 +16,8 @@ class LiteEthMAC(Module, AutoCSR):
         interface         = "crossbar",
         endianness        = "big",
         with_preamble_crc = True,
-        nrxslots          = 2,
-        ntxslots          = 2,
-        tx_write_only     = False,
+        nrxslots          = 2, rxslots_read_only  = True,
+        ntxslots          = 2, txslots_write_only = False,
         hw_mac            = None,
         timestamp         = None,
         full_memory_we    = False,
@@ -52,11 +51,10 @@ class LiteEthMAC(Module, AutoCSR):
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
             wishbone_interface = LiteEthMACWishboneInterface(
                 dw         = dw,
-                nrxslots   = nrxslots,
-                ntxslots   = ntxslots,
+                nrxslots   = nrxslots, rxslots_read_only  = rxslots_read_only,
+                ntxslots   = ntxslots, txslots_write_only = txslots_write_only,
                 endianness = endianness,
                 timestamp  = timestamp,
-                tx_write_only = tx_write_only,
             )
             # On some targets (Intel/Altera), the complex ports aren't inferred
             # as block ram, but are created with LUTs.  FullMemoryWe splits such
