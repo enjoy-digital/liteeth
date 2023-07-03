@@ -23,7 +23,6 @@ for some use cases it could be interesting to generate a standalone verilog file
 The standalone core is generated from a YAML configuration file that allows the user to generate
 easily a custom configuration of the core.
 
-TODO: identify limitations
 """
 
 import argparse
@@ -31,6 +30,8 @@ import os
 import yaml
 
 from migen import *
+
+from litex.gen import *
 
 from litex.build.generic_platform import *
 from litex.build.xilinx.platform import XilinxPlatform
@@ -205,7 +206,7 @@ class PHYCore(SoCMini):
         SoCMini.__init__(self, platform, clk_freq=core_config["clk_freq"], **soc_args)
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = CRG(platform.request("sys_clock"), platform.request("sys_reset"))
+        self.crg = CRG(platform.request("sys_clock"), platform.request("sys_reset"))
 
         # PHY --------------------------------------------------------------------------------------
         phy = core_config["phy"]
@@ -263,7 +264,7 @@ class PHYCore(SoCMini):
             self.comb += ethphy_pads.link_up.eq(ethphy.link_up)
         else:
             raise ValueError("Unsupported PHY")
-        self.submodules.ethphy = ethphy
+        self.ethphy = ethphy
 
         # Timing constaints.
         # Generate timing constraints to ensure the "keep" attribute is properly set on the various
@@ -295,7 +296,7 @@ class MACCore(PHYCore):
         PHYCore.__init__(self, platform, core_config)
 
         # MAC --------------------------------------------------------------------------------------
-        self.submodules.ethmac = ethmac = LiteEthMAC(
+        self.ethmac = ethmac = LiteEthMAC(
             phy             = self.ethphy,
             dw              = 32,
             interface       = "wishbone",
@@ -363,7 +364,7 @@ class UDPCore(PHYCore):
 
         # Core -------------------------------------------------------------------------------------
         data_width = core_config.get("data_width", 8)
-        self.submodules.core = LiteEthUDPIPCore(self.ethphy,
+        self.core = LiteEthUDPIPCore(self.ethphy,
             mac_address       = mac_address,
             ip_address        = ip_address,
             clk_freq          = core_config["clk_freq"],
@@ -384,7 +385,7 @@ class UDPCore(PHYCore):
                 dhcp_mac_address = mac_address
             else:
                 dhcp_mac_address = Signal(48, reset=0x10e2d5000001)
-            self.submodules.dhcp = LiteEthDHCP(udp_port=dhcp_port, sys_clk_freq=self.sys_clk_freq)
+            self.dhcp = LiteEthDHCP(udp_port=dhcp_port, sys_clk_freq=self.sys_clk_freq)
             self.comb += [
                 self.dhcp.start.eq(dhcp_pads.start),
                 dhcp_pads.done.eq(self.dhcp.done),
@@ -400,7 +401,7 @@ class UDPCore(PHYCore):
 
         if etherbone:
             assert (data_width == 32)
-            self.submodules.etherbone = LiteEthEtherbone(
+            self.etherbone = LiteEthEtherbone(
                 udp          =  self.core.udp,
                 udp_port     = etherbone_port,
                 buffer_depth = etherbone_buffer_depth,
