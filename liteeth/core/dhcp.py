@@ -547,8 +547,8 @@ class LiteEthDHCP(LiteXModule):
         self.timeout = Signal() # o
 
         # Parameters
-        self.mac_address        = Signal(48) # i
-        self.offered_ip_address = Signal(48) # o
+        self.mac_address = Signal(48) # i
+        self.ip_address  = Signal(48) # o
 
         # # #
 
@@ -615,7 +615,7 @@ class LiteEthDHCP(LiteXModule):
         fsm.act("RECEIVE-ACK",
             rx.ack.eq(1),
             If(rx.present & (rx.type == DHCP_RX_ACK),
-                NextValue(self.offered_ip_address, offered_ip_address),
+                NextValue(self.ip_address, offered_ip_address),
                 NextState("IDLE")
             )
         )
