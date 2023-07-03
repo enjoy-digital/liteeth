@@ -148,7 +148,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 # LiteEth PHY RGMII CRG ----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIICRG(LiteXModule):
-    def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9, with_phy_tx_clock = None):
+    def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9, tx_clk=None):
         self._reset = CSRStorage()
 
         # # #
@@ -159,13 +159,10 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         # TX Clock
         self.cd_eth_tx = ClockDomain()
-
-        if isinstance(with_phy_tx_clock, Signal):
-            phy_tx_clock = with_phy_tx_clock
+        if isinstance(tx_clk, Signal):
+            self.comb += self.cd_eth_tx.clk.eq(tx_clk)
         else:
-            phy_tx_clock = self.cd_eth_rx.clk
-
-        self.comb += self.cd_eth_tx.clk.eq(phy_tx_clock)
+            self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
 
         tx_delay_taps = int(tx_delay/25e-12) # 25ps per tap
         assert tx_delay_taps < 128
@@ -209,9 +206,9 @@ class LiteEthPHYRGMII(LiteXModule):
         tx_delay           = 2e-9,
         rx_delay           = 2e-9,
         with_inband_status = True,
-        with_phy_tx_clock  = None
+        tx_clk             = None,
         ):
-        self.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay, with_phy_tx_clock)
+        self.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay, tx_clk)
         self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
         self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, with_inband_status))
         self.sink, self.source = self.tx.sink, self.rx.source
