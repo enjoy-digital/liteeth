@@ -43,7 +43,7 @@ PHY:
 
 Core:
   - Configurable MAC (HW or SW interface)
-  - ARP / ICMP / UDP (HW or SW)
+  - ARP / ICMP / UDP (HW or SW) / DHCP
 
 Frontend:
   - Etherbone (Wishbone over UDP: Slave or Master support)
