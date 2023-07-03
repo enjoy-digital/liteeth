@@ -2,6 +2,7 @@
 # This file is part of LiteEth.
 #
 # Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
@@ -21,7 +22,11 @@ class LiteEthMAC(Module, AutoCSR):
         hw_mac            = None,
         timestamp         = None,
         full_memory_we    = False,
-        with_sys_datapath = False):
+        with_sys_datapath = False,
+        tx_cdc_depth      = 32,
+        tx_cdc_buffered   = False,
+        rx_cdc_depth      = 32,
+        rx_cdc_buffered   = False):
 
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -31,7 +36,11 @@ class LiteEthMAC(Module, AutoCSR):
             phy               = phy,
             dw                = dw,
             with_sys_datapath = with_sys_datapath,
-            with_preamble_crc = with_preamble_crc
+            with_preamble_crc = with_preamble_crc,
+            tx_cdc_depth      = tx_cdc_depth,
+            tx_cdc_buffered   = tx_cdc_buffered,
+            rx_cdc_depth      = rx_cdc_depth,
+            rx_cdc_buffered   = rx_cdc_buffered
         )
         self.csrs = []
         if interface == "crossbar":

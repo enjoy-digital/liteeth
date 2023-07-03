@@ -5,6 +5,7 @@
 # Copyright (c) 2015-2017 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2021 David Sawatzke <d-git@sawatzke.dev>
 # Copyright (c) 2017-2018 whitequark <whitequark@whitequark.org>
+# Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from liteeth.common import *
@@ -21,7 +22,12 @@ class LiteEthMACCore(Module, AutoCSR):
     def __init__(self, phy, dw,
                  with_sys_datapath = False,
                  with_preamble_crc = True,
-                 with_padding      = True):
+                 with_padding      = True,
+                 tx_cdc_depth      = 32,
+                 tx_cdc_buffered   = False,
+                 rx_cdc_depth      = 32,
+                 rx_cdc_buffered   = False,
+                 ):
 
         # Endpoints.
         self.sink   = stream.Endpoint(eth_phy_description(dw))
@@ -57,7 +63,9 @@ class LiteEthMACCore(Module, AutoCSR):
                 tx_cdc = stream.ClockDomainCrossing(eth_phy_description(core_dw),
                     cd_from = "sys",
                     cd_to   = "eth_tx",
-                    depth   = 32)
+                    depth   = tx_cdc_depth,
+                    buffered = tx_cdc_buffered
+                    )
                 self.submodules += tx_cdc
                 self.pipeline.append(tx_cdc)
 
@@ -186,7 +194,9 @@ class LiteEthMACCore(Module, AutoCSR):
                 rx_cdc = stream.ClockDomainCrossing(eth_phy_description(core_dw),
                     cd_from = "eth_rx",
                     cd_to   = "sys",
-                    depth   = 32)
+                    depth   = rx_cdc_depth,
+                    buffered = rx_cdc_buffered
+                )
                 self.submodules += rx_cdc
                 self.pipeline.append(rx_cdc)
 
