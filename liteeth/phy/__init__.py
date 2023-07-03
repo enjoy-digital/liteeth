@@ -22,17 +22,19 @@ def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
     else:
         raise ValueError("Unable to autodetect PHY from platform file, use direct instantiation")
 
-from liteeth.phy.mii  import LiteEthPHYMII
-from liteeth.phy.rmii import LiteEthPHYRMII
-from liteeth.phy.gmii import LiteEthPHYGMII
+from liteeth.phy.mii      import LiteEthPHYMII
+from liteeth.phy.rmii     import LiteEthPHYRMII
+from liteeth.phy.gmii     import LiteEthPHYGMII
 from liteeth.phy.gmii_mii import LiteEthPHYGMIIMII
-from liteeth.phy.xgmii import LiteEthPHYXGMII
+from liteeth.phy.xgmii    import LiteEthPHYXGMII
 
-from liteeth.phy.s6rgmii import LiteEthPHYRGMII as LiteEthS6PHYRGMII
+from liteeth.phy.s6rgmii   import LiteEthPHYRGMII as LiteEthS6PHYRGMII
 from liteeth.phy.s7rgmii   import LiteEthPHYRGMII as LiteEthS7PHYRGMII
 from liteeth.phy.usrgmii   import LiteEthPHYRGMII as LiteEthUSPHYRGMII
 from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII as LiteEthECP5PHYRGMII
 
-from liteeth.phy.a7_1000basex import A7_1000BASEX
-from liteeth.phy.k7_1000basex import K7_1000BASEX
-from liteeth.phy.ku_1000basex import KU_1000BASEX
+from liteeth.phy.a7_1000basex      import A7_1000BASEX
+from liteeth.phy.k7_1000basex      import K7_1000BASEX
+from liteeth.phy.ku_1000basex      import KU_1000BASEX
+from liteeth.phy.usp_gth_1000basex import USP_GTH_1000BASEX
+from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX

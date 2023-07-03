@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2022 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
 # Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
@@ -47,6 +47,9 @@ from liteeth.common import *
 from liteeth import phy as liteeth_phys
 from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
+from liteeth.core.dhcp import LiteEthDHCP
+
+from liteeth.frontend.etherbone import LiteEthEtherbone
 
 # IOs ----------------------------------------------------------------------------------------------
 
@@ -62,12 +65,20 @@ _io = [
     # Interrupt
     ("interrupt", 0, Pins(1)),
 
+    # DHCP.
+    ("dhcp", 0,
+        Subsignal("start",      Pins(1)),
+        Subsignal("done",       Pins(1)),
+        Subsignal("timeout",    Pins(1)),
+        Subsignal("ip_address", Pins(32)),
+    ),
+
     # MII PHY Pads
-    ("mii_eth_clocks", 0,
+    ("mii_clocks", 0,
         Subsignal("tx", Pins(1)),
         Subsignal("rx", Pins(1)),
     ),
-    ("mii_eth", 0,
+    ("mii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("mdio",    Pins(1)),
         Subsignal("mdc",     Pins(1)),
@@ -81,10 +92,10 @@ _io = [
     ),
 
     # RMII PHY Pads
-    ("rmii_eth_clocks", 0,
+    ("rmii_clocks", 0,
         Subsignal("ref_clk", Pins(1))
     ),
-    ("rmii_eth", 0,
+    ("rmii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("rx_data", Pins(2)),
         Subsignal("crs_dv",  Pins(1)),
@@ -95,12 +106,12 @@ _io = [
     ),
 
     # GMII PHY Pads
-    ("gmii_eth_clocks", 0,
+    ("gmii_clocks", 0,
         Subsignal("tx",  Pins(1)),
         Subsignal("gtx", Pins(1)),
         Subsignal("rx",  Pins(1))
     ),
-    ("gmii_eth", 0,
+    ("gmii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("int_n",   Pins(1)),
         Subsignal("mdio",    Pins(1)),
@@ -116,11 +127,11 @@ _io = [
     ),
 
     # RGMII PHY Pads
-    ("rgmii_eth_clocks", 0,
+    ("rgmii_clocks", 0,
         Subsignal("tx", Pins(1)),
         Subsignal("rx", Pins(1))
     ),
-    ("rgmii_eth", 0,
+    ("rgmii", 0,
         Subsignal("rst_n",   Pins(1)),
         Subsignal("int_n",   Pins(1)),
         Subsignal("mdio",    Pins(1)),
@@ -129,6 +140,16 @@ _io = [
         Subsignal("rx_data", Pins(4)),
         Subsignal("tx_ctl",  Pins(1)),
         Subsignal("tx_data", Pins(4))
+    ),
+
+    # SGMII PHY Pads
+    ("sgmii", 0,
+        Subsignal("refclk",  Pins(1)),
+        Subsignal("txp",     Pins(1)),
+        Subsignal("txn",     Pins(1)),
+        Subsignal("rxp",     Pins(1)),
+        Subsignal("rxn",     Pins(1)),
+        Subsignal("link_up", Pins(1)),
     ),
 ]
 
@@ -188,31 +209,58 @@ class PHYCore(SoCMini):
 
         # PHY --------------------------------------------------------------------------------------
         phy = core_config["phy"]
+        # MII.
         if phy in [liteeth_phys.LiteEthPHYMII]:
             ethphy = phy(
-                clock_pads = platform.request("mii_eth_clocks"),
-                pads       = platform.request("mii_eth"))
+                clock_pads = platform.request("mii_clocks"),
+                pads       = platform.request("mii"))
+        # RMII.
         elif phy in [liteeth_phys.LiteEthPHYRMII]:
             ethphy = phy(
                 refclk_cd  = None,
-                clock_pads = platform.request("rmii_eth_clocks"),
-                pads       = platform.request("rmii_eth"))
+                clock_pads = platform.request("rmii_clocks"),
+                pads       = platform.request("rmii"))
+        # GMII.
         elif phy in [liteeth_phys.LiteEthPHYGMII]:
             ethphy = phy(
-                clock_pads = platform.request("gmii_eth_clocks"),
-                pads       = platform.request("gmii_eth"))
+                clock_pads = platform.request("gmii_clocks"),
+                pads       = platform.request("gmii"))
+        # GMII / MII.
         elif phy in [liteeth_phys.LiteEthPHYGMIIMII]:
             ethphy = phy(
-                clock_pads = platform.request("gmii_eth_clocks"),
-                pads       = platform.request("gmii_eth"),
+                clock_pads = platform.request("gmii_clocks"),
+                pads       = platform.request("gmii"),
                 clk_freq   = self.clk_freq)
-        elif phy in [liteeth_phys.LiteEthS7PHYRGMII, liteeth_phys.LiteEthECP5PHYRGMII]:
+        # RGMII.
+        elif phy in [
+            liteeth_phys.LiteEthS7PHYRGMII,
+            liteeth_phys.LiteEthECP5PHYRGMII,
+        ]:
             ethphy = phy(
-                clock_pads         = platform.request("rgmii_eth_clocks"),
-                pads               = platform.request("rgmii_eth"),
+                clock_pads         = platform.request("rgmii_clocks"),
+                pads               = platform.request("rgmii"),
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
+        # SGMII.
+        elif phy in [
+            liteeth_phys.A7_1000BASEX,
+            liteeth_phys.K7_1000BASEX,
+            liteeth_phys.KU_1000BASEX,
+            liteeth_phys.USP_GTH_1000BASEX,
+            liteeth_phys.USP_GTY_1000BASEX,
+        ]:
+            ethphy_pads = platform.request("sgmii")
+            ethphy = phy(
+                refclk_or_clk_pads = ethphy_pads.refclk,
+                data_pads          = ethphy_pads,
+                sys_clk_freq       = self.clk_freq,
+                refclk_freq        = core_config.get("refclk_freq", 200e6),
+                with_csr           = False,
+                rx_polarity        = 0, # Add support to liteeth_gen if useful.
+                tx_polarity        = 0, # Add support to liteeth_gen if useful.
+            )
+            self.comb += ethphy_pads.link_up.eq(ethphy.link_up)
         else:
             raise ValueError("Unsupported PHY")
         self.submodules.ethphy = ethphy
@@ -302,10 +350,13 @@ class UDPCore(PHYCore):
             mac_address = platform.request("mac_address")
 
         # IP Address.
+        dhcp       = core_config.get("dhcp", False)
         ip_address = core_config.get("ip_address", None)
         # Get IP Address from IOs when not specified.
         if ip_address is None:
             ip_address = platform.request("ip_address")
+        else:
+            assert not dhcp
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -324,6 +375,42 @@ class UDPCore(PHYCore):
             rx_cdc_buffered = rx_cdc_buffered
 
         )
+
+        # DHCP -------------------------------------------------------------------------------------
+
+        if dhcp:
+            dhcp_pads = platform.request("dhcp")
+            dhcp_port = self.core.udp.crossbar.get_port(68, dw=32, cd="sys")
+            if isinstance(mac_address, Signal):
+                dhcp_mac_address = mac_address
+            else:
+                dhcp_mac_address = Signal(48, reset=0x10e2d5000001)
+            self.submodules.dhcp = LiteEthDHCP(udp_port=dhcp_port, sys_clk_freq=self.sys_clk_freq)
+            self.comb += [
+                self.dhcp.start.eq(dhcp_pads.start),
+                dhcp_pads.done.eq(self.dhcp.done),
+                dhcp_pads.timeout.eq(self.dhcp.timeout),
+                dhcp_pads.ip_address.eq(self.dhcp.ip_address),
+            ]
+
+        # Etherbone --------------------------------------------------------------------------------
+
+        etherbone              = core_config.get("etherbone", False)
+        etherbone_port         = core_config.get("etherbone_port", 1234)
+        etherbone_buffer_depth = core_config.get("etherbone_buffer_depth", 16)
+
+        if etherbone:
+            assert (data_width == 32)
+            self.submodules.etherbone = LiteEthEtherbone(
+                udp          =  self.core.udp,
+                udp_port     = etherbone_port,
+                buffer_depth = etherbone_buffer_depth,
+                cd           = "sys"
+            )
+            axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
+            platform.add_extension(axil_bus.get_ios("mmap"))
+            self.submodules += axi.Wishbone2AXILite(self.etherbone.wishbone.bus, axil_bus)
+            self.comb += axil_bus.connect_to_pads(platform.request("mmap"), mode="master")
 
         # UDP Ports --------------------------------------------------------------------------------
         for name, port in core_config["udp_ports"].items():
@@ -402,7 +489,7 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
-        if k in ["clk_freq"]:
+        if k in ["refclk_freq", "clk_freq"]:
             core_config[k] = int(float(core_config[k]))
         if k in ["phy_tx_delay", "phy_rx_delay"]:
             core_config[k] = float(core_config[k])

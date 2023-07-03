@@ -5,16 +5,22 @@
 #
 # SPDX-License-Identifier: BSD-2-Clause
 
-
-from migen import Module
-from liteeth.common import *
-
 from functools import reduce
 from operator import or_
 
-XGMII_IDLE = Constant(0x07, bits_sign=8)
+from migen import Module
+
+from litex.gen import *
+
+from liteeth.common import *
+
+# Constants ----------------------------------------------------------------------------------------
+
+XGMII_IDLE  = Constant(0x07, bits_sign=8)
 XGMII_START = Constant(0xFB, bits_sign=8)
-XGMII_END = Constant(0xFD, bits_sign=8)
+XGMII_END   = Constant(0xFD, bits_sign=8)
+
+# LiteEth PHY XGMII TX -----------------------------------------------------------------------------
 
 class LiteEthPHYXGMIITX(Module):
     def __init__(self, pads, dw, dic=True):
@@ -450,6 +456,8 @@ class LiteEthPHYXGMIITX(Module):
             )
         )
 
+# LiteEth PHY XGMII RX Aligner ---------------------------------------------------------------------
+
 class LiteEthPHYXGMIIRXAligner(Module):
     def __init__(self, unaligned_ctl, unaligned_data):
         # Aligned ctl and data characters
@@ -500,7 +508,9 @@ class LiteEthPHYXGMIIRXAligner(Module):
             ),
         )
 
-class LiteEthPHYXGMIIRX(Module):
+# LiteEth PHY XGMII RX -----------------------------------------------------------------------------
+
+class LiteEthPHYXGMIIRX(LiteXModule):
     def __init__(self, pads, dw):
         # Enforce 64-bit data path
         assert dw == 64
@@ -627,6 +637,7 @@ class LiteEthPHYXGMIIRX(Module):
             )
         )
 
+# LiteEth PHY XGMII CRG ----------------------------------------------------------------------------
 
 class LiteEthPHYXGMIICRG(Module, AutoCSR):
     def __init__(self, clock_pads, model=False):
@@ -644,18 +655,13 @@ class LiteEthPHYXGMIICRG(Module, AutoCSR):
                 self.cd_eth_tx.clk.eq(clock_pads.tx)
             ]
 
+# LiteEth PHY XGMII --------------------------------------------------------------------------------
+
 class LiteEthPHYXGMII(Module, AutoCSR):
     dw          = 8
     tx_clk_freq = 156.25e6
     rx_clk_freq = 156.25e6
-    def __init__(self,
-                 clock_pads,
-                 pads,
-                 model=False,
-                 dw=64,
-                 with_hw_init_reset=True,
-                 dic=True,
-                 ):
+    def __init__(self, clock_pads, pads, model=False, dw=64, with_hw_init_reset=True, dic=True):
         self.dw = dw
         self.cd_eth_tx, self.cd_eth_rx = "eth_tx", "eth_rx"
         self.integrated_ifg_inserter = True

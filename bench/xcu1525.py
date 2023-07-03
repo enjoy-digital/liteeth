@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2021-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
@@ -11,6 +11,8 @@ import argparse
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
+
+from litex.gen import *
 
 from litex.build.generic_platform import *
 from litex_boards.platforms import sqrl_xcu1525
@@ -20,32 +22,19 @@ from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc_core import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.usp_1000basex import USP_1000BASEX
-
-# IOs ----------------------------------------------------------------------------------------------
-
-_qsfp_io = [
-    # QSFP0
-    ("qsfp_fs", 0, Pins("AT20 AU22"), IOStandard("LVCMOS12")),
-    ("qsfp", 0,
-        Subsignal("txp", Pins("N9")),
-        Subsignal("txn", Pins("N8")),
-        Subsignal("rxp", Pins("N4")),
-        Subsignal("rxn", Pins("N3"))
-    ),
-]
+from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
 
 # CRG ----------------------------------------------------------------------------------------------
 
-class _CRG(Module, AutoCSR):
+class _CRG(LiteXModule):
     def __init__(self, platform, sys_clk_freq):
-        self.clock_domains.cd_sys     = ClockDomain()
-        self.clock_domains.cd_eth     = ClockDomain()
+        self.cd_sys = ClockDomain()
+        self.cd_eth = ClockDomain()
 
         # # #
 
         # Main PLL.
-        self.submodules.main_pll = main_pll = USPMMCM(speedgrade=-2)
+        self.main_pll = main_pll = USPMMCM(speedgrade=-2)
         main_pll.register_clkin(platform.request("clk300"), 300e6)
         main_pll.create_clkout(self.cd_sys, sys_clk_freq)
         main_pll.create_clkout(self.cd_eth, 200e6)
@@ -55,7 +44,6 @@ class _CRG(Module, AutoCSR):
 class BenchSoC(SoCCore):
     def __init__(self, sys_clk_freq=int(125e6)):
         platform = sqrl_xcu1525.Platform()
-        platform.add_extension(_qsfp_io)
 
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(self, platform, clk_freq=sys_clk_freq,
@@ -64,13 +52,23 @@ class BenchSoC(SoCCore):
         )
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = USP_1000BASEX(self.crg.cd_eth.clk,
+
+        platform.add_extension([
+            # SFP.
+            ("qsfp", 0,
+                Subsignal("txp", Pins("N9")),
+                Subsignal("txn", Pins("N8")),
+                Subsignal("rxp", Pins("N4")),
+                Subsignal("rxn", Pins("N3"))
+            )
+        ])
+
+        self.ethphy = USP_GTY_1000BASEX(self.crg.cd_eth.clk,
             data_pads    = self.platform.request("qsfp", 0),
             sys_clk_freq = self.clk_freq)
-        self.comb += self.platform.request("qsfp_fs").eq(0b01)
         self.add_etherbone(phy=self.ethphy, buffer_depth=255)
 
         # SRAM -------------------------------------------------------------------------------------
@@ -78,9 +76,10 @@ class BenchSoC(SoCCore):
 
         # Leds -------------------------------------------------------------------------------------
         from litex.soc.cores.led import LedChaser
-        self.submodules.leds = LedChaser(
+        self.leds = LedChaser(
             pads         = platform.request_all("user_led"),
-            sys_clk_freq = sys_clk_freq)
+            sys_clk_freq = sys_clk_freq
+        )
 
 # Main ---------------------------------------------------------------------------------------------
 

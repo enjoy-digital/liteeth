@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2019-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 # RGMII PHY for Spartan6 Xilinx FPGA
@@ -9,11 +9,14 @@
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.gen import *
+
 from liteeth.common import *
 from liteeth.phy.common import *
 
+# LiteEth PHY RGMII TX -----------------------------------------------------------------------------
 
-class LiteEthPHYRGMIITX(Module):
+class LiteEthPHYRGMIITX(LiteXModule):
     def __init__(self, pads):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
@@ -27,7 +30,7 @@ class LiteEthPHYRGMIITX(Module):
                 p_DDR_ALIGNMENT = "C0",
                 p_SRTYPE        = "ASYNC",
                 o_Q  = tx_ctl_obuf,
-                i_C0 = ClockSignal("eth_tx"),
+                i_C0 =  ClockSignal("eth_tx"),
                 i_C1 = ~ClockSignal("eth_tx"),
                 i_CE = 1,
                 i_D0 = sink.valid,
@@ -58,7 +61,7 @@ class LiteEthPHYRGMIITX(Module):
                     p_DDR_ALIGNMENT = "C0",
                     p_SRTYPE        = "ASYNC",
                     o_Q  = tx_data_obuf[i],
-                    i_C0 = ClockSignal("eth_tx"),
+                    i_C0 =  ClockSignal("eth_tx"),
                     i_C1 = ~ClockSignal("eth_tx"),
                     i_CE = 1,
                     i_D0 = sink.data[i],
@@ -85,14 +88,15 @@ class LiteEthPHYRGMIITX(Module):
             ]
         self.comb += sink.ready.eq(1)
 
+# LiteEth PHY RGMII RX -----------------------------------------------------------------------------
 
-class LiteEthPHYRGMIIRX(Module):
+class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
-        rx_delay_taps = int(rx_delay/50e-12) # 50ps per tap
+        rx_delay_taps = int(rx_delay/50e-12) # 50ps per tap.
         assert rx_delay_taps < 256
 
         rx_ctl_ibuf    = Signal()
@@ -128,7 +132,7 @@ class LiteEthPHYRGMIIRX(Module):
             Instance("IDDR2",
                 p_DDR_ALIGNMENT = "C0",
                 o_Q0 = rx_ctl,
-                i_C0 = ClockSignal("eth_rx"),
+                i_C0 =  ClockSignal("eth_rx"),
                 i_C1 = ~ClockSignal("eth_rx"),
                 i_CE = 1,
                 i_D  = rx_ctl_idelay,
@@ -163,7 +167,7 @@ class LiteEthPHYRGMIIRX(Module):
                     p_DDR_ALIGNMENT = "C0",
                     o_Q0 = rx_data[i],
                     o_Q1 = rx_data[i+4],
-                    i_C0 = ClockSignal("eth_rx"),
+                    i_C0 =  ClockSignal("eth_rx"),
                     i_C1 = ~ClockSignal("eth_rx"),
                     i_CE = 1,
                     i_D  = rx_data_idelay[i],
@@ -180,20 +184,20 @@ class LiteEthPHYRGMIIRX(Module):
         self.comb += last.eq(~rx_ctl_reg & rx_ctl_reg_d)
         self.sync += [
             source.valid.eq(rx_ctl_reg),
-            source.data.eq(Cat(rx_data_reg[:4], rx_data[4:]))
+            source.data.eq(Cat(rx_data_reg[:4], rx_data[4:])),
         ]
         self.comb += source.last.eq(last)
 
+# LiteEth PHY RGMII CRG ----------------------------------------------------------------------------
 
-class LiteEthPHYRGMIICRG(Module, AutoCSR):
+class LiteEthPHYRGMIICRG(LiteXModule):
     def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9):
         self._reset = CSRStorage()
 
         # # #
 
-        # RX clock
-        self.clock_domains.cd_eth_rx = ClockDomain()
-        eth_rx_clk_ibuf = Signal()
+        # RX clock.
+        self.cd_eth_rx = ClockDomain()
         self.specials += [
             Instance("BUFG",
                 i_I = clock_pads.rx,
@@ -201,10 +205,10 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             ),
         ]
 
-        # TX clock
-        self.clock_domains.cd_eth_tx = ClockDomain()
+        # TX clock.
+        self.cd_eth_tx = ClockDomain()
         self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
-        tx_delay_taps = int(tx_delay/50e-12) # 50ps per tap
+        tx_delay_taps = int(tx_delay/50e-12) # 50ps per tap.
         assert tx_delay_taps < 256
 
         eth_tx_clk_o = Signal()
@@ -213,7 +217,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
                 p_DDR_ALIGNMENT = "C0",
                 p_SRTYPE        = "ASYNC",
                 o_Q  = eth_tx_clk_o,
-                i_C0 = ClockSignal("eth_tx"),
+                i_C0 =  ClockSignal("eth_tx"),
                 i_C1 = ~ClockSignal("eth_tx"),
                 i_CE = 1,
                 i_D0 = 1,
@@ -239,10 +243,10 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             )
         ]
 
-        # Reset
+        # Reset.
         self.reset = reset = Signal()
         if with_hw_init_reset:
-            self.submodules.hw_reset = LiteEthPHYHWReset()
+            self.hw_reset = LiteEthPHYHWReset()
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
@@ -253,16 +257,17 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
         ]
 
+# LiteEth PHY RGMII --------------------------------------------------------------------------------
 
-class LiteEthPHYRGMII(Module, AutoCSR):
+class LiteEthPHYRGMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9):
-        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
-        self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
+        self.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
+        self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
+        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
-            self.submodules.mdio = LiteEthPHYMDIO(pads)
+            self.mdio = LiteEthPHYMDIO(pads)

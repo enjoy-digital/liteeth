@@ -3,13 +3,15 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2022 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2022-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import os
 import argparse
 
 from migen import *
+
+from litex.gen import *
 
 from litex_boards.platforms import gsd_butterstick
 from litex_boards.targets.gsd_butterstick import _CRG
@@ -34,10 +36,10 @@ class BenchSoC(SoCCore):
         )
 
         # CRG --------------------------------------------------------------------------------------
-        self.submodules.crg = _CRG(platform, sys_clk_freq)
+        self.crg = _CRG(platform, sys_clk_freq)
 
         # Etherbone --------------------------------------------------------------------------------
-        self.submodules.ethphy = LiteEthPHYRGMII(
+        self.ethphy = LiteEthPHYRGMII(
             clock_pads = self.platform.request("eth_clocks"),
             pads       = self.platform.request("eth"),
             tx_delay   = 0e-9,
@@ -50,7 +52,7 @@ class BenchSoC(SoCCore):
         # Leds -------------------------------------------------------------------------------------
         from litex.soc.cores.led import LedChaser
         self.comb += platform.request("user_led_color").eq(0b010) # Blue.
-        self.submodules.leds = LedChaser(
+        self.leds = LedChaser(
             pads         = platform.request_all("user_led"),
             sys_clk_freq = sys_clk_freq
         )
@@ -62,7 +64,7 @@ class BenchSoC(SoCCore):
         from litescope import LiteScopeAnalyzer
         ethcore   = self.ethcore_etherbone
         etherbone = self.etherbone
-        self.submodules.analyzer = LiteScopeAnalyzer([
+        self.analyzer = LiteScopeAnalyzer([
             # MAC.
             ethcore.mac.core.sink.valid,
             ethcore.mac.core.sink.ready,

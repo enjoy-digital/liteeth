@@ -1,0 +1,26 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2020-2023 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# PHY ----------------------------------------------------------------------
+phy       : USP_GTH_1000BASEX
+vendor    : xilinx
+toolchain : vivado
+
+# Core ---------------------------------------------------------------------
+refclk_freq : 156.25e6
+clk_freq    : 25e6
+core        : udp
+data_width  : 32
+dhcp        : True
+
+# UDP Ports --------------------------------------------------------------------
+udp_ports:   {
+  "udp0": {
+    "data_width"    : 32,
+    "tx_fifo_depth" : 1024,
+    "rx_fifo_depth" : 1024,
+  },
+}

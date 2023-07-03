@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 # RGMII PHY for 7-Series Xilinx FPGA
@@ -9,11 +9,16 @@
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
+from litex.gen import *
+
+from litex.soc.cores.clock import S7PLL
+
 from liteeth.common import *
 from liteeth.phy.common import *
 
+# LiteEth PHY RGMII TX -----------------------------------------------------------------------------
 
-class LiteEthPHYRGMIITX(Module):
+class LiteEthPHYRGMIITX(LiteXModule):
     def __init__(self, pads):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
@@ -57,8 +62,9 @@ class LiteEthPHYRGMIITX(Module):
             ]
         self.comb += sink.ready.eq(1)
 
+# LiteEth PHY RGMII RX -----------------------------------------------------------------------------
 
-class LiteEthPHYRGMIIRX(Module):
+class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads, rx_delay=2e-9, iodelay_clk_freq=200e6):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
@@ -79,8 +85,8 @@ class LiteEthPHYRGMIIRX(Module):
         self.specials += [
             Instance("IBUF", i_I=pads.rx_ctl, o_O=rx_ctl_ibuf),
             Instance("IDELAYE2",
-                p_IDELAY_TYPE  = "FIXED",
-                p_IDELAY_VALUE = rx_delay_taps,
+                p_IDELAY_TYPE      = "FIXED",
+                p_IDELAY_VALUE     = rx_delay_taps,
                 p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                 i_C        = 0,
                 i_LD       = 0,
@@ -108,8 +114,8 @@ class LiteEthPHYRGMIIRX(Module):
                     o_O = rx_data_ibuf[i],
                 ),
                 Instance("IDELAYE2",
-                    p_IDELAY_TYPE  = "FIXED",
-                    p_IDELAY_VALUE = rx_delay_taps,
+                    p_IDELAY_TYPE      = "FIXED",
+                    p_IDELAY_VALUE     = rx_delay_taps,
                     p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                     i_C        = 0,
                     i_LD       = 0,
@@ -142,15 +148,16 @@ class LiteEthPHYRGMIIRX(Module):
         ]
         self.comb += source.last.eq(last)
 
+# LiteEth PHY RGMII CRG ----------------------------------------------------------------------------
 
-class LiteEthPHYRGMIICRG(Module, AutoCSR):
+class LiteEthPHYRGMIICRG(LiteXModule):
     def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9, hw_reset_cycles=256):
         self._reset = CSRStorage()
 
         # # #
 
-        # RX clock
-        self.clock_domains.cd_eth_rx = ClockDomain()
+        # RX clock.
+        self.cd_eth_rx = ClockDomain()
         eth_rx_clk_ibuf = Signal()
         self.specials += [
             Instance("IBUF",
@@ -163,15 +170,14 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             ),
         ]
 
-        # TX clock
-        self.clock_domains.cd_eth_tx         = ClockDomain()
-        self.clock_domains.cd_eth_tx_delayed = ClockDomain(reset_less=True)
+        # TX clock.
+        self.cd_eth_tx         = ClockDomain()
+        self.cd_eth_tx_delayed = ClockDomain(reset_less=True)
         tx_phase = 125e6*tx_delay*360
         assert tx_phase < 360
-        from litex.soc.cores.clock import S7PLL
-        self.submodules.pll = pll = S7PLL()
+        self.pll = pll = S7PLL()
         pll.register_clkin(ClockSignal("eth_rx"), 125e6)
-        pll.create_clkout(self.cd_eth_tx, 125e6, with_reset=False)
+        pll.create_clkout(self.cd_eth_tx,         125e6, with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, 125e6, phase=tx_phase)
 
         eth_tx_clk_obuf = Signal()
@@ -195,7 +201,7 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
         # Reset
         self.reset = reset = Signal()
         if with_hw_init_reset:
-            self.submodules.hw_reset = LiteEthPHYHWReset(cycles=hw_reset_cycles)
+            self.hw_reset = LiteEthPHYHWReset(cycles=hw_reset_cycles)
             self.comb += reset.eq(self._reset.storage | self.hw_reset.reset)
         else:
             self.comb += reset.eq(self._reset.storage)
@@ -206,17 +212,18 @@ class LiteEthPHYRGMIICRG(Module, AutoCSR):
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
         ]
 
+# LiteEth PHY RGMII --------------------------------------------------------------------------------
 
-class LiteEthPHYRGMII(Module, AutoCSR):
+class LiteEthPHYRGMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
     def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9,
             iodelay_clk_freq=200e6, hw_reset_cycles=256):
-        self.submodules.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay, hw_reset_cycles)
-        self.submodules.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.submodules.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, iodelay_clk_freq))
+        self.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay, hw_reset_cycles)
+        self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
+        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, iodelay_clk_freq))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
-            self.submodules.mdio = LiteEthPHYMDIO(pads)
+            self.mdio = LiteEthPHYMDIO(pads)

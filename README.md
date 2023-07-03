@@ -4,7 +4,7 @@
                                     / /__/ / __/ -_) _// __/ _ \
                                    /____/_/\__/\__/___/\__/_//_/
 
-                                 Copyright 2012-2022 / EnjoyDigital
+                                 Copyright 2012-2023 / EnjoyDigital
 
                              A small footprint and configurable Ethernet core
                                       powered by Migen & LiteX
@@ -30,14 +30,24 @@ design flow by generating the verilog rtl that you will use as a standard core.
 -----------
 PHY:
   - MII, RMII 100Mbps PHYs.
-  - GMII / RGMII /1000BaseX 1Gbps PHYs.
+  - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
+
+| -     | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
+|-------|-----|------|----------|-------|----------|----------|---------------|
+| MII   |  X  |  X  |      X    |   X   |     X    |     X    |       X       |
+| RMII  |  X  |  X  |      X    |   X   |     X    |     X    |       X       |
+| GMII  |     |     |      X    |       |          |     X    |       X       |
+| RGMII |     |  X  |      X    |   X   |     X    |     X    |       X       |
+| SGMII |     |     |           |       |          |     X    |       X       |
+
 
 Core:
   - Configurable MAC (HW or SW interface)
-  - ARP / ICMP / UDP (HW or SW)
+  - ARP / ICMP / UDP (HW or SW) / DHCP
 
 Frontend:
   - Etherbone (Wishbone over UDP: Slave or Master support)
+  - UDP Streaming.
 
 [> FPGA Proven
 ---------------
