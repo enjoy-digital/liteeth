@@ -303,10 +303,10 @@ class MACCore(PHYCore):
             nrxslots        = nrxslots,
             ntxslots        = ntxslots,
             full_memory_we  = core_config.get("full_memory_we", False),
-            tx_cdc_depth    = tx_cdc_depth
-            tx_cdc_buffered = tx_cdc_buffered
-            rx_cdc_depth    = rx_cdc_depth
-            rx_cdc_buffered = rx_cdc_buffered
+            tx_cdc_depth    = tx_cdc_depth,
+            tx_cdc_buffered = tx_cdc_buffered,
+            rx_cdc_depth    = rx_cdc_depth,
+            rx_cdc_buffered = rx_cdc_buffered,
         )
 
         if bus_standard == "wishbone":
@@ -364,16 +364,15 @@ class UDPCore(PHYCore):
         # Core -------------------------------------------------------------------------------------
         data_width = core_config.get("data_width", 8)
         self.submodules.core = LiteEthUDPIPCore(self.ethphy,
-            mac_address = mac_address,
-            ip_address  = ip_address,
-            clk_freq    = core_config["clk_freq"],
-            dw          = data_width,
+            mac_address       = mac_address,
+            ip_address        = ip_address,
+            clk_freq          = core_config["clk_freq"],
+            dw                = data_width,
             with_sys_datapath = (data_width == 32),
-            tx_cdc_depth    = tx_cdc_depth
-            tx_cdc_buffered = tx_cdc_buffered
-            rx_cdc_depth    = rx_cdc_depth
-            rx_cdc_buffered = rx_cdc_buffered
-
+            tx_cdc_depth      = tx_cdc_depth,
+            tx_cdc_buffered   = tx_cdc_buffered,
+            rx_cdc_depth      = rx_cdc_depth,
+            rx_cdc_buffered   = rx_cdc_buffered,
         )
 
         # DHCP -------------------------------------------------------------------------------------

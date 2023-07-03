@@ -14,20 +14,22 @@ from liteeth.mac.wishbone import LiteEthMACWishboneInterface
 
 class LiteEthMAC(Module, AutoCSR):
     def __init__(self, phy, dw,
-        interface         = "crossbar",
-        endianness        = "big",
-        with_preamble_crc = True,
-        nrxslots          = 2, rxslots_read_only  = True,
-        ntxslots          = 2, txslots_write_only = False,
-        hw_mac            = None,
-        timestamp         = None,
-        full_memory_we    = False,
-        with_sys_datapath = False,
-        tx_cdc_depth      = 32,
-        tx_cdc_buffered   = False,
-        rx_cdc_depth      = 32,
-        rx_cdc_buffered   = False):
-
+        interface          = "crossbar",
+        endianness         = "big",
+        with_preamble_crc  = True,
+        nrxslots           = 2,
+        rxslots_read_only  = True,
+        ntxslots           = 2,
+        txslots_write_only = False,
+        hw_mac             = None,
+        timestamp          = None,
+        full_memory_we     = False,
+        with_sys_datapath  = False,
+        tx_cdc_depth       = 32,
+        tx_cdc_buffered    = False,
+        rx_cdc_depth       = 32,
+        rx_cdc_buffered    = False,
+    ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
         assert endianness in ["big", "little"]
@@ -40,7 +42,7 @@ class LiteEthMAC(Module, AutoCSR):
             tx_cdc_depth      = tx_cdc_depth,
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
-            rx_cdc_buffered   = rx_cdc_buffered
+            rx_cdc_buffered   = rx_cdc_buffered,
         )
         self.csrs = []
         if interface == "crossbar":
