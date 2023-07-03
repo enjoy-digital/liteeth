@@ -14,6 +14,7 @@ refclk_freq : 156.25e6
 clk_freq    : 25e6
 core        : udp
 data_width  : 32
+dhcp        : True
 
 # UDP Ports --------------------------------------------------------------------
 udp_ports:   {
