@@ -560,6 +560,7 @@ class LiteEthDHCP(LiteXModule):
         # DHCP TX.
         self.tx = tx = ResetInserter()(LiteEthDHCPTX(udp_port))
         self.comb += [
+            tx.reset.eq(self.timeout),
             tx.mac_address.eq(self.mac_address),
             tx.transaction_id.eq(transaction_id),
         ]
@@ -567,6 +568,7 @@ class LiteEthDHCP(LiteXModule):
         # DHCP RX.
         self.rx = rx = ResetInserter()(LiteEthDHCPRX(udp_port))
         self.comb += [
+            rx.reset.eq(self.timeout),
             rx.mac_address.eq(self.mac_address),
             rx.transaction_id.eq(transaction_id),
         ]
