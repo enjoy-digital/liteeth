@@ -61,7 +61,9 @@ _io = [
 
     # IP/MAC Address.
     ("mac_address", 0, Pins(48)),
-    ("ip_address",  0, Pins(32)),
+    ("ip_address", 0, Pins(32)),
+    ("gateway", 0, Pins(32)),
+    ("netmask", 0, Pins(32)),
 
     # Interrupt
     ("interrupt", 0, Pins(1)),
@@ -359,6 +361,15 @@ class UDPCore(PHYCore):
         else:
             assert not dhcp
 
+        # Gateway
+        with_gateway = core_config.get("with_gateway_support", False)
+        gateway = core_config.get("gateway", None)
+        netmask = core_config.get("netmask", None)
+        if with_gateway and gateway is None:
+            gateway = platform.request("gateway")
+        if with_gateway and netmask is None:
+            netmask = platform.request("netmask")
+
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
 
@@ -370,6 +381,8 @@ class UDPCore(PHYCore):
             clk_freq          = core_config["clk_freq"],
             dw                = data_width,
             with_sys_datapath = (data_width == 32),
+            gateway           = gateway,
+            netmask           = netmask,
             tx_cdc_depth      = tx_cdc_depth,
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
