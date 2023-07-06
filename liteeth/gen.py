@@ -25,6 +25,7 @@ easily a custom configuration of the core.
 
 """
 
+import ipaddress
 import argparse
 import os
 import yaml
@@ -52,17 +53,22 @@ from liteeth.core.dhcp import LiteEthDHCP
 
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
+
 # IOs ----------------------------------------------------------------------------------------------
 
 _io = [
     # Clk / Rst
     ("sys_clock", 0, Pins(1)),
     ("sys_reset", 1, Pins(1)),
+    ("phy_tx_clock", 0, Pins(1)),
 
     # IP/MAC Address.
     ("mac_address", 0, Pins(48)),
     ("ip_address", 0, Pins(32)),
+
+    # Gateway
     ("gateway", 0, Pins(32)),
+    ("netaddress", 0, Pins(32)),
     ("netmask", 0, Pins(32)),
 
     # Interrupt
@@ -180,6 +186,35 @@ def get_udp_port_ios(name, data_width, dynamic_params=False):
         ),
     ]
 
+def get_udp_raw_port_ios(name, data_width):
+    return [
+        (f"{name}", 0,
+            # Sink.
+            Subsignal("sink_valid",      Pins(1)),
+            Subsignal("sink_src_port",   Pins(16)),
+            Subsignal("sink_dst_port",   Pins(16)),
+            Subsignal("sink_ip_address", Pins(32)),
+            Subsignal("sink_length",     Pins(16)),
+            Subsignal("sink_last",       Pins(1)),
+            Subsignal("sink_ready",      Pins(1)),
+            Subsignal("sink_data",       Pins(data_width)),
+            Subsignal("sink_last_be",    Pins(data_width//8)),
+
+            # Source.
+            Subsignal("source_valid",      Pins(1)),
+            Subsignal("source_src_port",   Pins(16)),
+            Subsignal("source_dst_port",   Pins(16)),
+            Subsignal("source_ip_address", Pins(32)),
+            Subsignal("source_length",     Pins(16)),
+            Subsignal("source_last",       Pins(1)),
+            Subsignal("source_ready",      Pins(1)),
+            Subsignal("source_data",       Pins(data_width)),
+            Subsignal("source_last_be",    Pins(data_width//8)),
+            Subsignal("source_error",      Pins(1)),
+        ),
+    ]
+
+
 # PHY Core -----------------------------------------------------------------------------------------
 
 class PHYCore(SoCMini):
@@ -235,16 +270,23 @@ class PHYCore(SoCMini):
                 pads       = platform.request("gmii"),
                 clk_freq   = self.clk_freq)
         # RGMII.
-        elif phy in [
-            liteeth_phys.LiteEthS7PHYRGMII,
-            liteeth_phys.LiteEthECP5PHYRGMII,
-        ]:
+        elif phy in [liteeth_phys.LiteEthS7PHYRGMII]:
             ethphy = phy(
                 clock_pads         = platform.request("rgmii_clocks"),
                 pads               = platform.request("rgmii"),
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
+        elif phy in [liteeth_phys.LiteEthECP5PHYRGMII]:
+            phy_tx_clk = platform.request("phy_tx_clock")
+            ethphy = phy(
+                clock_pads         = platform.request("rgmii_clocks"),
+                pads               = platform.request("rgmii"),
+                tx_delay           = core_config.get("phy_tx_delay", 2e-9),
+                rx_delay           = core_config.get("phy_rx_delay", 2e-9),
+                with_hw_init_reset = False, # FIXME: required since sys_clk = eth_rx_clk.
+                tx_clk             = phy_tx_clk
+            )
         # SGMII.
         elif phy in [
             liteeth_phys.A7_1000BASEX,
@@ -362,13 +404,20 @@ class UDPCore(PHYCore):
             assert not dhcp
 
         # Gateway
-        with_gateway = core_config.get("with_gateway_support", False)
+        with_gateway = core_config.get("with_gateway", False)
         gateway = core_config.get("gateway", None)
-        netmask = core_config.get("netmask", None)
+        subnet_mask = core_config.get("subnet_mask", None)
+        netaddress = None
+        netmask = None
         if with_gateway and gateway is None:
             gateway = platform.request("gateway")
-        if with_gateway and netmask is None:
+        if with_gateway and subnet_mask is None:
+            netaddress = platform.request("netaddress")
             netmask = platform.request("netmask")
+        elif with_gateway and subnet_mask is not None:
+            subnet_mask = ipaddress.ip_network(subnet_mask)
+            netaddress = str(subnet_mask.network_address)
+            netmask = str(subnet_mask.netmask)
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -382,6 +431,7 @@ class UDPCore(PHYCore):
             dw                = data_width,
             with_sys_datapath = (data_width == 32),
             gateway           = gateway,
+            netaddress        = netaddress,
             netmask           = netmask,
             tx_cdc_depth      = tx_cdc_depth,
             tx_cdc_buffered   = tx_cdc_buffered,
@@ -484,6 +534,130 @@ class UDPCore(PHYCore):
                 port_ios.source_error.eq(udp_streamer.source.error),
             ]
 
+# UDP Raw Core -------------------------------------------------------------------------------------
+
+class UDPRawCore(PHYCore):
+    def __init__(self, platform, core_config):
+        from liteeth.frontend.stream import LiteEthUDPStreamer
+
+        # Config -----------------------------------------------------------------------------------
+        tx_cdc_depth    = core_config.get("tx_cdc_depth", 32)
+        tx_cdc_buffered = core_config.get("tx_cdc_buffered", False)
+        rx_cdc_depth    = core_config.get("rx_cdc_depth", 32)
+        rx_cdc_buffered = core_config.get("rx_cdc_buffered", False)
+
+        # MAC Address.
+        mac_address = core_config.get("mac_address", None)
+        # Get MAC Address from IOs when not specified.
+        if mac_address is None:
+            mac_address = platform.request("mac_address")
+
+        # IP Address.
+        ip_address = core_config.get("ip_address", None)
+        dhcp       = core_config.get("dhcp", False)
+        # Get IP Address from IOs when not specified.
+        if ip_address is None:
+            ip_address = platform.request("ip_address")
+
+        # Gateway
+        with_gateway = core_config.get("with_gateway", False)
+        gateway = core_config.get("gateway", None)
+        subnet_mask = core_config.get("subnet_mask", None)
+        netaddress = None
+        netmask = None
+        if with_gateway and gateway is None:
+            gateway = platform.request("gateway")
+        if with_gateway and subnet_mask is None:
+            netaddress = platform.request("netaddress")
+            netmask = platform.request("netmask")
+        elif with_gateway and subnet_mask is not None:
+            subnet_mask = ipaddress.ip_network(subnet_mask)
+            netaddress = str(subnet_mask.network_address)
+            netmask = str(subnet_mask.netmask)
+
+        # PHY --------------------------------------------------------------------------------------
+        PHYCore.__init__(self, platform, core_config)
+
+        # Core -------------------------------------------------------------------------------------
+        data_width = core_config.get("data_width", 8)
+        self.submodules.core = LiteEthUDPIPCore(self.ethphy,
+            mac_address       = mac_address,
+            ip_address        = ip_address,
+            clk_freq          = core_config["clk_freq"],
+            dw                = data_width,
+            with_sys_datapath = (data_width == 32),
+            gateway           = gateway,
+            netaddress        = netaddress,
+            netmask           = netmask,
+            tx_cdc_depth      = tx_cdc_depth,
+            tx_cdc_buffered   = tx_cdc_buffered,
+            rx_cdc_depth      = rx_cdc_depth,
+            rx_cdc_buffered   = rx_cdc_buffered
+        )
+
+        # DHCP -------------------------------------------------------------------------------------
+
+        if dhcp:
+            dhcp_pads = platform.request("dhcp")
+            dhcp_port = self.core.udp.crossbar.get_port(68, dw=32, cd="sys")
+            if isinstance(mac_address, Signal):
+                dhcp_mac_address = mac_address
+            else:
+                dhcp_mac_address = Signal(48, reset=0x10e2d5000001)
+            self.dhcp = LiteEthDHCP(udp_port=dhcp_port, sys_clk_freq=self.sys_clk_freq)
+            self.comb += [
+                self.dhcp.start.eq(dhcp_pads.start),
+                dhcp_pads.done.eq(self.dhcp.done),
+                dhcp_pads.timeout.eq(self.dhcp.timeout),
+                dhcp_pads.ip_address.eq(self.dhcp.ip_address),
+            ]
+
+        # UDP Raw Ports --------------------------------------------------------------------------------
+        for name, port in core_config["udp_ports"].items():
+            # Parameters.
+            # -----------
+
+            # Use default Data-Width of 8-bit when not specified.
+            data_width = port.get("data_width", 8)
+
+            # Create/Add IOs.
+            # ---------------
+            platform.add_extension(get_udp_raw_port_ios(name, data_width=data_width))
+            port_ios = platform.request(name)
+
+            # Create UDP Interface.
+            # ---------------------
+            udp_port = self.core.udp.crossbar.get_port(port_ios.sink_dst_port, dw=data_width)
+
+            # Connect IOs.
+            # ------------
+             # Connect UDP Sink IOs to UDP.
+            self.comb += [
+                udp_port.sink.valid.eq(port_ios.sink_valid),
+                udp_port.sink.last.eq(port_ios.sink_last),
+                udp_port.sink.dst_port.eq(port_ios.sink_dst_port),
+                udp_port.sink.src_port.eq(port_ios.sink_src_port),
+                udp_port.sink.ip_address.eq(port_ios.sink_ip_address),
+                udp_port.sink.length.eq(port_ios.sink_length),
+                port_ios.sink_ready.eq(udp_port.sink.ready),
+                udp_port.sink.data.eq(port_ios.sink_data),
+                udp_port.sink.last_be.eq(port_ios.sink_last_be),
+            ]
+
+            # Connect UDP to UDP Source IOs.
+            self.comb += [
+                port_ios.source_valid.eq(udp_port.source.valid),
+                port_ios.source_last.eq(udp_port.source.last),
+                port_ios.source_dst_port.eq(udp_port.source.dst_port),
+                port_ios.source_src_port.eq(udp_port.source.src_port),
+                port_ios.source_ip_address.eq(udp_port.source.ip_address),
+                port_ios.source_length.eq(udp_port.source.length),
+                udp_port.source.ready.eq(port_ios.source_ready),
+                port_ios.source_data.eq(udp_port.source.data),
+                port_ios.source_last_be.eq(udp_port.source.last_be),
+                port_ios.source_error.eq(udp_port.source.error),
+            ]
+
 # Build --------------------------------------------------------------------------------------------
 
 def main():
@@ -524,6 +698,8 @@ def main():
         soc = MACCore(platform, core_config)
     elif core_config["core"] == "udp":
         soc = UDPCore(platform, core_config)
+    elif core_config["core"] == "udp_raw":
+        soc = UDPRawCore(platform, core_config)
     else:
         raise ValueError("Unknown core: {}".format(core_config["core"]))
 
