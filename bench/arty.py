@@ -11,9 +11,9 @@ import argparse
 
 from migen import *
 from migen.genlib.cdc import MultiReg
-from migen.genlib.misc import WaitTimer
 
 from litex.gen import *
+from litex.gen.genlib.misc import WaitTimer
 
 from litex_boards.platforms import digilent_arty
 from litex_boards.targets.digilent_arty import _CRG

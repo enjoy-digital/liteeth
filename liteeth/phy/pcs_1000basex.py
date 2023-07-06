@@ -8,10 +8,10 @@ from math import ceil
 
 from migen import *
 from migen.genlib.fsm import *
-from migen.genlib.misc import WaitTimer
 from migen.genlib.cdc import PulseSynchronizer, BusSynchronizer
 
 from litex.gen import *
+from litex.gen.genlib.misc import WaitTimer
 
 from litex.soc.interconnect import stream
 from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder

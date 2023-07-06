@@ -6,7 +6,7 @@
 
 from liteeth.common import *
 
-from migen.genlib.misc import WaitTimer
+from litex.gen.genlib.misc import WaitTimer
 
 from liteeth.packet import Depacketizer, Packetizer
 

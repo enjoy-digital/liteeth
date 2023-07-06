@@ -9,7 +9,7 @@
 
 from liteeth.common import *
 
-from migen.genlib.misc import chooser
+from litex.gen.genlib.misc import chooser
 
 # MAC Preamble Inserter ----------------------------------------------------------------------------
 

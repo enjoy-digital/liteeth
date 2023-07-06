@@ -19,9 +19,9 @@ issue a DHCP request regularly. Limitations is due to 32-bit data-path and parsi
 """
 
 from migen import *
-from migen.genlib.misc import WaitTimer
 
 from litex.gen import *
+from litex.gen.genlib.misc import WaitTimer
 
 from liteeth.common import *
 

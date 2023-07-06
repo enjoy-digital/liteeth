@@ -15,7 +15,7 @@ from math import ceil
 
 from liteeth.common import *
 
-from migen.genlib.misc import chooser, WaitTimer
+from litex.gen.genlib.misc import chooser, WaitTimer
 
 # MAC CRC Engine -----------------------------------------------------------------------------------
 
