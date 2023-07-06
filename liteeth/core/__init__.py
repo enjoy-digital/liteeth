@@ -20,9 +20,9 @@ class LiteEthIPCore(Module, AutoCSR):
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
-        tx_cdc_buffered   = False,
+        tx_cdc_buffered   = True,
         rx_cdc_depth      = 32,
-        rx_cdc_buffered   = False,
+        rx_cdc_buffered   = True,
     ):
         # Parameters.
         # -----------
@@ -79,9 +79,9 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
-        tx_cdc_buffered   = False,
+        tx_cdc_buffered   = True,
         rx_cdc_depth      = 32,
-        rx_cdc_buffered   = False,
+        rx_cdc_buffered   = True,
     ):
         # Parameters.
         # -----------
