@@ -23,3 +23,7 @@ class TestExamples(unittest.TestCase):
     def test_wishbone_mii(self):
         errors = build_config("wishbone_mii")
         self.assertEqual(errors, 0)
+
+    def test_udpraw_ecp5rgmii_dhcp_gateway(self):
+        errors = build_config("udpraw_ecp5rgmii_dhcp_gateway")
+        self.assertEqual(errors, 0)
