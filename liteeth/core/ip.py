@@ -160,7 +160,12 @@ class LiteEthIPTX(Module):
         )
 
         if gateway is not None:
-            self.comb += If(sink.ip_address & netmask == netaddress,
+            masked_ip = Signal(32, reset_less=True)
+            in_subnet = Signal(1, reset_less=True)
+
+            self.sync += masked_ip.eq(sink.ip_address & netmask)
+            self.sync += in_subnet.eq(masked_ip == netaddress)
+            self.sync += If(in_subnet,
                             arp_table.request.ip_address.eq(sink.ip_address)
                          ).Else(
                             arp_table.request.ip_address.eq(gateway)
