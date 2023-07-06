@@ -2,6 +2,7 @@
 # This file is part of LiteEth.
 #
 # Copyright (c) 2023 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2023 LumiGuide Fietsdetectie B.V.
 # SPDX-License-Identifier: BSD-2-Clause
 
 """
