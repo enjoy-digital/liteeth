@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 """
@@ -14,6 +14,8 @@ and introduces some limitations:
 - 32bits data and address
 - 1 record per frame
 """
+
+from litex.gen import *
 
 from liteeth.common import *
 
@@ -29,17 +31,18 @@ class LiteEthEtherbonePacketPacketizer(Packetizer):
         Packetizer.__init__(self,
             eth_etherbone_packet_description(32),
             eth_udp_user_description(32),
-            etherbone_packet_header)
+            etherbone_packet_header
+        )
 
 
-class LiteEthEtherbonePacketTX(Module):
+class LiteEthEtherbonePacketTX(LiteXModule):
     def __init__(self, udp_port):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_udp_user_description(32))
 
         # # #
 
-        self.submodules.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
+        self.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
         self.comb += [
             sink.connect(packetizer.sink, keep={"valid", "last", "last_be", "ready", "data"}),
             sink.connect(packetizer.sink, keep={"pf", "pr", "nr"}),
@@ -48,7 +51,7 @@ class LiteEthEtherbonePacketTX(Module):
             packetizer.sink.port_size.eq(32//8),
             packetizer.sink.addr_size.eq(32//8),
         ]
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(packetizer.source.valid,
                 NextState("SEND")
@@ -74,17 +77,17 @@ class LiteEthEtherbonePacketDepacketizer(Depacketizer):
             etherbone_packet_header)
 
 
-class LiteEthEtherbonePacketRX(Module):
+class LiteEthEtherbonePacketRX(LiteXModule):
     def __init__(self):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
         # # #
 
-        self.submodules.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
+        self.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
         self.comb += sink.connect(depacketizer.sink)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(depacketizer.source.valid,
                 NextState("DROP"),
@@ -118,10 +121,10 @@ class LiteEthEtherbonePacketRX(Module):
         )
 
 
-class LiteEthEtherbonePacket(Module):
+class LiteEthEtherbonePacket(LiteXModule):
     def __init__(self, udp, udp_port, cd="sys"):
-        self.submodules.tx = tx = LiteEthEtherbonePacketTX(udp_port)
-        self.submodules.rx = rx = LiteEthEtherbonePacketRX()
+        self.tx = tx = LiteEthEtherbonePacketTX(udp_port)
+        self.rx = rx = LiteEthEtherbonePacketRX()
         udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
         self.comb += [
             tx.source.connect(udp_port.sink),
@@ -132,21 +135,21 @@ class LiteEthEtherbonePacket(Module):
 
 # Etherbone Probe ----------------------------------------------------------------------------------
 
-class LiteEthEtherboneProbe(Module):
+class LiteEthEtherboneProbe(LiteXModule):
     def __init__(self):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
         # # #
 
-        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
+        self.fifo = fifo = PacketFIFO(eth_etherbone_packet_user_description(32),
             payload_depth = 1,
             param_depth   = 1,
             buffered      = False
         )
         self.comb += sink.connect(fifo.sink)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(fifo.source.valid,
                 NextState("PROBE_RESPONSE")
@@ -181,7 +184,7 @@ class LiteEthEtherboneRecordDepacketizer(Depacketizer):
             etherbone_record_header)
 
 
-class LiteEthEtherboneRecordReceiver(Module):
+class LiteEthEtherboneRecordReceiver(LiteXModule):
     def __init__(self, buffer_depth=4):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_record_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
@@ -189,7 +192,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         # # #
 
         assert buffer_depth <= 256
-        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
+        self.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
             payload_depth = buffer_depth,
             param_depth   = 1,
             buffered      = True
@@ -202,7 +205,7 @@ class LiteEthEtherboneRecordReceiver(Module):
 
         count = Signal(max=512, reset_less=True)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             fifo.source.ready.eq(1),
             NextValue(count, 0),
@@ -260,7 +263,7 @@ class LiteEthEtherboneRecordReceiver(Module):
         )
 
 
-class LiteEthEtherboneRecordSender(Module):
+class LiteEthEtherboneRecordSender(LiteXModule):
     def __init__(self, buffer_depth=4):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_record_description(32))
@@ -268,14 +271,14 @@ class LiteEthEtherboneRecordSender(Module):
         # # #
 
         assert buffer_depth <= 256
-        self.submodules.fifo = fifo = PacketFIFO(eth_etherbone_mmap_description(32),
+        self.fifo = fifo = PacketFIFO(eth_etherbone_mmap_description(32),
             payload_depth = buffer_depth,
             param_depth   = 1,
             buffered      = True
         )
         self.comb += sink.connect(fifo.sink)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(fifo.source.valid,
                 NextState("SEND_BASE_ADDRESS")
@@ -311,7 +314,7 @@ class LiteEthEtherboneRecordSender(Module):
         )
 
 
-class LiteEthEtherboneRecord(Module):
+class LiteEthEtherboneRecord(LiteXModule):
     def __init__(self, endianness="big", buffer_depth=4):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
@@ -319,8 +322,8 @@ class LiteEthEtherboneRecord(Module):
         # # #
 
         # Receive record, decode it and generate mmap stream
-        self.submodules.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
-        self.submodules.receiver = receiver = LiteEthEtherboneRecordReceiver(buffer_depth)
+        self.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
+        self.receiver = receiver = LiteEthEtherboneRecordReceiver(buffer_depth)
         self.comb += [
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
@@ -339,8 +342,8 @@ class LiteEthEtherboneRecord(Module):
         ]
 
         # Receive MMAP stream, encode it and send records
-        self.submodules.sender     = sender     = LiteEthEtherboneRecordSender(buffer_depth)
-        self.submodules.packetizer = packetizer = LiteEthEtherboneRecordPacketizer()
+        self.sender     = sender     = LiteEthEtherboneRecordSender(buffer_depth)
+        self.packetizer = packetizer = LiteEthEtherboneRecordPacketizer()
         self.comb += [
             sender.source.connect(packetizer.sink),
             packetizer.source.connect(source),
@@ -354,7 +357,7 @@ class LiteEthEtherboneRecord(Module):
 
 # Etherbone Wishbone Master ------------------------------------------------------------------------
 
-class LiteEthEtherboneWishboneMaster(Module):
+class LiteEthEtherboneWishboneMaster(LiteXModule):
     def __init__(self):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
@@ -364,7 +367,7 @@ class LiteEthEtherboneWishboneMaster(Module):
 
         data_update = Signal()
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ready.eq(1),
             If(sink.valid,
@@ -422,7 +425,7 @@ class LiteEthEtherboneWishboneMaster(Module):
 
 # Etherbone Wishbone Slave -------------------------------------------------------------------------
 
-class LiteEthEtherboneWishboneSlave(Module):
+class LiteEthEtherboneWishboneSlave(LiteXModule):
     def __init__(self):
         self.bus    = bus    = wishbone.Interface()
         self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
@@ -430,7 +433,7 @@ class LiteEthEtherboneWishboneSlave(Module):
 
         # # #
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.ready.eq(1),
             If(bus.stb & bus.cyc,
@@ -480,14 +483,14 @@ class LiteEthEtherboneWishboneSlave(Module):
 
 # Etherbone ----------------------------------------------------------------------------------------
 
-class LiteEthEtherbone(Module):
+class LiteEthEtherbone(LiteXModule):
     def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
         # Encode/encode etherbone packets
-        self.submodules.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
+        self.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
 
         # Packets can be probe (etherbone discovering) or records with writes and reads
-        self.submodules.probe  = probe = LiteEthEtherboneProbe()
-        self.submodules.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth)
+        self.probe  = probe = LiteEthEtherboneProbe()
+        self.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth)
 
         # Arbitrate/dispatch probe/records packets
         dispatcher = Dispatcher(packet.source, [probe.sink, record.sink])
@@ -496,7 +499,7 @@ class LiteEthEtherbone(Module):
         self.submodules += dispatcher, arbiter
 
         # Create MMAP wishbone
-        self.submodules.wishbone = {
+        self.wishbone = {
             "master": LiteEthEtherboneWishboneMaster(),
             "slave":  LiteEthEtherboneWishboneSlave(),
         }[mode]
