@@ -1,8 +1,10 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
+
+from litex.gen import *
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
@@ -45,7 +47,7 @@ class LiteEthIPV4Crossbar(LiteEthCrossbar):
 
 @ResetInserter()
 @CEInserter()
-class LiteEthIPV4Checksum(Module):
+class LiteEthIPV4Checksum(LiteXModule):
     def __init__(self, words_per_clock_cycle=1, skip_checksum=False):
         self.header = Signal(ipv4_header.length*8)
         self.value  = Signal(16)
@@ -87,10 +89,11 @@ class LiteEthIPV4Packetizer(Packetizer):
         Packetizer.__init__(self,
             eth_ipv4_description(dw),
             eth_mac_description(dw),
-            ipv4_header)
+            ipv4_header
+        )
 
 
-class LiteEthIPTX(Module):
+class LiteEthIPTX(LiteXModule):
     def __init__(self, mac_address, ip_address, arp_table, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_mac_description(dw))
@@ -99,12 +102,12 @@ class LiteEthIPTX(Module):
         # # #
 
         # Checksum.
-        self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
+        self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
         self.comb += checksum.ce.eq(sink.valid)
         self.comb += checksum.reset.eq(source.valid & source.last & source.ready)
 
         # Packetizer.
-        self.submodules.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
+        self.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
         self.comb += [
             sink.connect(packetizer.sink, keep={
                 "last",
@@ -128,7 +131,7 @@ class LiteEthIPTX(Module):
         target_mac = Signal(48, reset_less=True)
 
         # FSM.
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(packetizer.source.valid,
                 # Broadcast.
@@ -189,10 +192,11 @@ class LiteEthIPV4Depacketizer(Depacketizer):
         Depacketizer.__init__(self,
             eth_mac_description(dw),
             eth_ipv4_description(dw),
-            ipv4_header)
+            ipv4_header
+        )
 
 
-class LiteEthIPRX(Module):
+class LiteEthIPRX(LiteXModule):
     def __init__(self, mac_address, ip_address, with_broadcast=True, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
@@ -200,11 +204,11 @@ class LiteEthIPRX(Module):
         # # #
 
         # Depacketizer.
-        self.submodules.depacketizer = depacketizer = LiteEthIPV4Depacketizer(dw)
+        self.depacketizer = depacketizer = LiteEthIPV4Depacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
         # Checksum.
-        self.submodules.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
+        self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
         self.comb += [
             checksum.header.eq(depacketizer.header),
             checksum.reset.eq(~depacketizer.source.valid),
@@ -212,7 +216,7 @@ class LiteEthIPRX(Module):
         ]
 
         # FSM.
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(depacketizer.source.valid & checksum.done,
                 NextState("DROP"),
@@ -253,16 +257,16 @@ class LiteEthIPRX(Module):
 
 # IP -----------------------------------------------------------------------------------------------
 
-class LiteEthIP(Module):
+class LiteEthIP(LiteXModule):
     def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8):
-        self.submodules.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
-        self.submodules.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
+        self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
+        self.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [
             tx.source.connect(mac_port.sink),
             mac_port.source.connect(rx.sink)
         ]
-        self.submodules.crossbar = crossbar = LiteEthIPV4Crossbar(dw)
+        self.crossbar = crossbar = LiteEthIPV4Crossbar(dw)
         self.comb += [
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)
