@@ -50,6 +50,7 @@ from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.core.dhcp import LiteEthDHCP
 
+from liteeth.frontend.stream import LiteEthUDPStreamer
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
 # IOs ----------------------------------------------------------------------------------------------
@@ -177,6 +178,36 @@ def get_udp_port_ios(name, data_width, dynamic_params=False):
             Subsignal("source_error", Pins(1)),
         ),
     ]
+
+def get_udp_raw_port_ios(name, data_width):
+    return [
+        (f"{name}", 0,
+
+            # Sink.
+            Subsignal("sink_ip_address", Pins(32)),
+            Subsignal("sink_src_port",   Pins(16)),
+            Subsignal("sink_dst_port",   Pins(16)),
+            Subsignal("sink_valid",      Pins(1)),
+            Subsignal("sink_length",     Pins(16)),
+            Subsignal("sink_last",       Pins(1)),
+            Subsignal("sink_ready",      Pins(1)),
+            Subsignal("sink_data",       Pins(data_width)),
+            Subsignal("sink_last_be",    Pins(data_width//8)),
+
+            # Source.
+            Subsignal("source_ip_address", Pins(32)),
+            Subsignal("source_src_port",   Pins(16)),
+            Subsignal("source_dst_port",   Pins(16)),
+            Subsignal("source_valid",      Pins(1)),
+            Subsignal("source_length",     Pins(16)),
+            Subsignal("source_last",       Pins(1)),
+            Subsignal("source_ready",      Pins(1)),
+            Subsignal("source_data",       Pins(data_width)),
+            Subsignal("source_last_be",    Pins(data_width//8)),
+            Subsignal("source_error",      Pins(1)),
+        ),
+    ]
+
 
 # PHY Core -----------------------------------------------------------------------------------------
 
@@ -335,9 +366,107 @@ class MACCore(PHYCore):
 # UDP Core -----------------------------------------------------------------------------------------
 
 class UDPCore(PHYCore):
-    def __init__(self, platform, core_config):
-        from liteeth.frontend.stream import LiteEthUDPStreamer
+    def add_streamer_port(self, platform, name, port_cfg):
+        # Use default Data-Width of 8-bit when not specified.
+        data_width = port_cfg.get("data_width", 8)
 
+        # Used dynamic UDP-Port/IP-Address when not specified.
+        dynamic_params = port_cfg.get("ip_address", None) is None
+
+        # FIFO Depth.
+        tx_fifo_depth = port_cfg.get("tx_fifo_depth", 64)
+        rx_fifo_depth = port_cfg.get("rx_fifo_depth", 64)
+
+        # Create/Add IOs.
+        # ---------------
+        platform.add_extension(get_udp_port_ios(name,
+            data_width     = data_width,
+            dynamic_params = dynamic_params
+        ))
+
+        port_ios = platform.request(name)
+
+        if dynamic_params:
+            ip_address = port_ios.ip_address
+            udp_port   = port_ios.udp_port
+        else:
+            ip_address = port_cfg.get("ip_address")
+            udp_port   = port_cfg.get("udp_port")
+
+        # Create UDPStreamer.
+        # -------------------
+        udp_streamer = LiteEthUDPStreamer(self.core.udp,
+            ip_address    = ip_address,
+            udp_port      = udp_port,
+            data_width    = data_width,
+            tx_fifo_depth = tx_fifo_depth,
+            rx_fifo_depth = rx_fifo_depth
+        )
+        self.submodules += udp_streamer
+
+        # Connect IOs.
+        # ------------
+        # Connect UDP Sink IOs to UDP Steamer.
+        self.comb += [
+            udp_streamer.sink.valid.eq(port_ios.sink_valid),
+            udp_streamer.sink.last.eq(port_ios.sink_last),
+            port_ios.sink_ready.eq(udp_streamer.sink.ready),
+            udp_streamer.sink.data.eq(port_ios.sink_data)
+        ]
+
+        # Connect UDP Streamer to UDP Source IOs.
+        self.comb += [
+            port_ios.source_valid.eq(udp_streamer.source.valid),
+            port_ios.source_last.eq(udp_streamer.source.last),
+            udp_streamer.source.ready.eq(port_ios.source_ready),
+            port_ios.source_data.eq(udp_streamer.source.data),
+            port_ios.source_error.eq(udp_streamer.source.error),
+        ]
+
+    def add_raw_port(self, platform, name, port_cfg):
+        # Use default Data-Width of 8-bit when not specified.
+        data_width = port_cfg.get("data_width", 8)
+
+        # Create/Add IOs.
+         # ---------------
+        platform.add_extension(get_udp_raw_port_ios(name,
+            data_width     = data_width,
+         ))
+
+        port_ios = platform.request(name)
+
+        raw_port = self.core.udp.crossbar.get_port(port_ios.sink_dst_port, dw=data_width)
+
+        # Connect IOs.
+        # ------------
+        # Connect UDP Sink IOs to UDP.
+        self.comb += [
+            raw_port.sink.valid.eq(port_ios.sink_valid),
+            raw_port.sink.last.eq(port_ios.sink_last),
+            raw_port.sink.dst_port.eq(port_ios.sink_dst_port),
+            raw_port.sink.src_port.eq(port_ios.sink_src_port),
+            raw_port.sink.ip_address.eq(port_ios.sink_ip_address),
+            raw_port.sink.length.eq(port_ios.sink_length),
+            port_ios.sink_ready.eq(raw_port.sink.ready),
+            raw_port.sink.data.eq(port_ios.sink_data),
+            raw_port.sink.last_be.eq(port_ios.sink_last_be),
+        ]
+
+        # Connect UDP to UDP Source IOs.
+        self.comb += [
+            port_ios.source_valid.eq(raw_port.source.valid),
+            port_ios.source_last.eq(raw_port.source.last),
+            port_ios.source_dst_port.eq(raw_port.source.dst_port),
+            port_ios.source_src_port.eq(raw_port.source.src_port),
+            port_ios.source_ip_address.eq(raw_port.source.ip_address),
+            port_ios.source_length.eq(raw_port.source.length),
+            raw_port.source.ready.eq(port_ios.source_ready),
+            port_ios.source_data.eq(raw_port.source.data),
+            port_ios.source_last_be.eq(raw_port.source.last_be),
+            port_ios.source_error.eq(raw_port.source.error),
+        ]
+
+    def __init__(self, platform, core_config):
         # Config -----------------------------------------------------------------------------------
         tx_cdc_depth    = core_config.get("tx_cdc_depth", 32)
         tx_cdc_buffered = core_config.get("tx_cdc_buffered", False)
@@ -413,63 +542,16 @@ class UDPCore(PHYCore):
             self.comb += axil_bus.connect_to_pads(platform.request("mmap"), mode="master")
 
         # UDP Ports --------------------------------------------------------------------------------
-        for name, port in core_config["udp_ports"].items():
-            # Parameters.
-            # -----------
+        for name, port_cfg in core_config["udp_ports"].items():
+            # mode either `raw` or `stream`, default to streamer to be backwards compatible
+            mode = port_cfg.get("mode", "streamer")
+            assert mode == "raw" or mode == "streamer"
 
-            # Use default Data-Width of 8-bit when not specified.
-            data_width = port.get("data_width", 8)
+            if mode == "streamer":
+                self.add_streamer_port(platform, name, port_cfg)
+            elif mode == "raw":
+                self.add_raw_port(platform, name, port_cfg)
 
-            # Used dynamic UDP-Port/IP-Address when not specified.
-            dynamic_params = port.get("ip_address", None) is None
-
-            # FIFO Depth.
-            tx_fifo_depth = port.get("tx_fifo_depth", 64)
-            rx_fifo_depth = port.get("rx_fifo_depth", 64)
-
-            # Create/Add IOs.
-            # ---------------
-            platform.add_extension(get_udp_port_ios(name,
-                data_width     = data_width,
-                dynamic_params = dynamic_params
-            ))
-            port_ios = platform.request(name)
-
-            # Create UDPStreamer.
-            # -------------------
-            if dynamic_params:
-                ip_address = port_ios.ip_address
-                udp_port   = port_ios.udp_port
-            else:
-                ip_address = port.get("ip_address")
-                udp_port   = port.get("udp_port")
-            udp_streamer = LiteEthUDPStreamer(self.core.udp,
-                ip_address    = ip_address,
-                udp_port      = udp_port,
-                data_width    = data_width,
-                tx_fifo_depth = tx_fifo_depth,
-                rx_fifo_depth = rx_fifo_depth
-            )
-            self.submodules += udp_streamer
-
-            # Connect IOs.
-            # ------------
-             # Connect UDP Sink IOs to UDP Steamer.
-            self.comb += [
-                udp_streamer.sink.valid.eq(port_ios.sink_valid),
-                udp_streamer.sink.last.eq(port_ios.sink_last),
-                port_ios.sink_ready.eq(udp_streamer.sink.ready),
-                udp_streamer.sink.data.eq(port_ios.sink_data)
-            ]
-
-            # Connect UDP Streamer to UDP Source IOs.
-            self.comb += [
-                port_ios.source_valid.eq(udp_streamer.source.valid),
-                port_ios.source_last.eq(udp_streamer.source.last),
-                udp_streamer.source.ready.eq(port_ios.source_ready),
-                port_ios.source_data.eq(udp_streamer.source.data),
-                port_ios.source_error.eq(udp_streamer.source.error),
-            ]
 
 # Build --------------------------------------------------------------------------------------------
 
