@@ -146,6 +146,7 @@ _io = [
     # SGMII PHY Pads
     ("sgmii", 0,
         Subsignal("refclk",  Pins(1)),
+        Subsignal("rst",     Pins(1)),
         Subsignal("txp",     Pins(1)),
         Subsignal("txn",     Pins(1)),
         Subsignal("rxp",     Pins(1)),
@@ -261,7 +262,10 @@ class PHYCore(SoCMini):
                 rx_polarity        = 0, # Add support to liteeth_gen if useful.
                 tx_polarity        = 0, # Add support to liteeth_gen if useful.
             )
-            self.comb += ethphy_pads.link_up.eq(ethphy.link_up)
+            self.comb += [
+                ethphy.reset.eq(ethphy_pads.rst),
+                ethphy_pads.link_up.eq(ethphy.link_up),
+            ]
         else:
             raise ValueError("Unsupported PHY")
         self.ethphy = ethphy
