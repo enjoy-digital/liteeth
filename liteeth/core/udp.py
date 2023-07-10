@@ -1,14 +1,15 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from liteeth.common import *
-from liteeth.crossbar import LiteEthCrossbar
+from litex.gen import *
 
 from litex.soc.interconnect import stream
 
+from liteeth.common import *
+from liteeth.crossbar import LiteEthCrossbar
 from liteeth.packet import Depacketizer, Packetizer
 
 # UDP Crossbar -------------------------------------------------------------------------------------
@@ -48,7 +49,7 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         # ---
 
         # CDC.
-        self.submodules.tx_cdc = tx_cdc = stream.ClockDomainCrossing(
+        self.tx_cdc = tx_cdc = stream.ClockDomainCrossing(
             layout  = eth_udp_user_description(user_port.dw),
             cd_from = cd,
             cd_to   ="sys"
@@ -56,7 +57,7 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         self.comb += user_port.sink.connect(tx_cdc.sink)
 
         # Data-Width Conversion.
-        self.submodules.tx_converter = tx_converter = stream.StrideConverter(
+        self.tx_converter = tx_converter = stream.StrideConverter(
             description_from = eth_udp_user_description(user_port.dw),
             description_to   = eth_udp_user_description(self.dw)
         )
@@ -68,14 +69,14 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         # RX
         # --
         # Data-Width Conversion.
-        self.submodules.rx_converter = rx_converter = stream.StrideConverter(
+        self.rx_converter = rx_converter = stream.StrideConverter(
             description_from = eth_udp_user_description(self.dw),
             description_to   = eth_udp_user_description(user_port.dw)
         )
         self.comb += internal_port.source.connect(rx_converter.sink)
 
         # CDC.
-        self.submodules.rx_cdc = rx_cdc = stream.ClockDomainCrossing(
+        self.rx_cdc = rx_cdc = stream.ClockDomainCrossing(
             layout  = eth_udp_user_description(user_port.dw),
             cd_from = "sys",
             cd_to   = cd
@@ -98,10 +99,11 @@ class LiteEthUDPPacketizer(Packetizer):
         Packetizer.__init__(self,
             eth_udp_description(dw),
             eth_ipv4_user_description(dw),
-            udp_header)
+            udp_header
+        )
 
 
-class LiteEthUDPTX(Module):
+class LiteEthUDPTX(LiteXModule):
     def __init__(self, ip_address, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(dw))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
@@ -109,7 +111,7 @@ class LiteEthUDPTX(Module):
         # # #
 
         # Packetizer.
-        self.submodules.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
+        self.packetizer = packetizer = LiteEthUDPPacketizer(dw=dw)
 
         # Data-Path.
         self.comb += [
@@ -126,7 +128,7 @@ class LiteEthUDPTX(Module):
         ]
 
         # Control-Path (FSM).
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(packetizer.source.valid,
                 NextState("SEND")
@@ -151,10 +153,11 @@ class LiteEthUDPDepacketizer(Depacketizer):
         Depacketizer.__init__(self,
             eth_ipv4_user_description(dw),
             eth_udp_description(dw),
-            udp_header)
+            udp_header
+        )
 
 
-class LiteEthUDPRX(Module):
+class LiteEthUDPRX(LiteXModule):
     def __init__(self, ip_address, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_udp_user_description(dw))
@@ -162,7 +165,7 @@ class LiteEthUDPRX(Module):
         # # #
 
         # Depacketizer.
-        self.submodules.depacketizer = depacketizer = LiteEthUDPDepacketizer(dw)
+        self.depacketizer = depacketizer = LiteEthUDPDepacketizer(dw)
 
         # Data-Path.
         self.comb += [
@@ -178,7 +181,7 @@ class LiteEthUDPRX(Module):
 
         # Control-Path (FSM).
         count = Signal(16)
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             NextValue(count, dw//8),
             If(depacketizer.source.valid,
@@ -227,16 +230,16 @@ class LiteEthUDPRX(Module):
 
 # UDP ----------------------------------------------------------------------------------------------
 
-class LiteEthUDP(Module):
+class LiteEthUDP(LiteXModule):
     def __init__(self, ip, ip_address, dw=8):
-        self.submodules.tx = tx = LiteEthUDPTX(ip_address, dw)
-        self.submodules.rx = rx = LiteEthUDPRX(ip_address, dw)
+        self.tx = tx = LiteEthUDPTX(ip_address, dw)
+        self.rx = rx = LiteEthUDPRX(ip_address, dw)
         ip_port = ip.crossbar.get_port(udp_protocol, dw)
         self.comb += [
             tx.source.connect(ip_port.sink),
             ip_port.source.connect(rx.sink)
         ]
-        self.submodules.crossbar = crossbar = LiteEthUDPCrossbar(dw)
+        self.crossbar = crossbar = LiteEthUDPCrossbar(dw)
         self.comb += [
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)
