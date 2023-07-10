@@ -1,13 +1,13 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from liteeth.common import *
-
+from litex.gen import *
 from litex.gen.genlib.misc import WaitTimer
 
+from liteeth.common import *
 from liteeth.packet import Depacketizer, Packetizer
 
 # ARP Layouts --------------------------------------------------------------------------------------
@@ -26,10 +26,11 @@ class LiteEthARPPacketizer(Packetizer):
         Packetizer.__init__(self,
             eth_arp_description(dw),
             eth_mac_description(dw),
-            arp_header)
+            arp_header
+        )
 
 
-class LiteEthARPTX(Module):
+class LiteEthARPTX(LiteXModule):
     def __init__(self, mac_address, ip_address, dw=8):
         self.sink   = sink   = stream.Endpoint(_arp_table_layout)
         self.source = source = stream.Endpoint(eth_mac_description(dw))
@@ -40,9 +41,9 @@ class LiteEthARPTX(Module):
         packet_words  = packet_length//(dw//8)
         counter       = Signal(max=packet_words, reset_less=True)
 
-        self.submodules.packetizer = packetizer = LiteEthARPPacketizer(dw)
+        self.packetizer = packetizer = LiteEthARPPacketizer(dw)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             NextValue(counter, 0),
             If(sink.valid,
@@ -99,17 +100,17 @@ class LiteEthARPDepacketizer(Depacketizer):
             arp_header)
 
 
-class LiteEthARPRX(Module):
+class LiteEthARPRX(LiteXModule):
     def __init__(self, mac_address, ip_address, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(_arp_table_layout)
 
         # # #s
 
-        self.submodules.depacketizer = depacketizer = LiteEthARPDepacketizer(dw)
+        self.depacketizer = depacketizer = LiteEthARPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid,
@@ -154,7 +155,7 @@ class LiteEthARPRX(Module):
 
 # ARP Table ----------------------------------------------------------------------------------------
 
-class LiteEthARPTable(Module):
+class LiteEthARPTable(LiteXModule):
     def __init__(self, clk_freq, max_requests=8):
         self.sink   = sink   = stream.Endpoint(_arp_table_layout)  # from arp_rx
         self.source = source = stream.Endpoint(_arp_table_layout)  # to arp_tx
@@ -208,7 +209,7 @@ class LiteEthARPTable(Module):
         cached_timer       = WaitTimer(clk_freq*10)
         self.submodules += cached_timer
 
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             # Note: for simplicicy, if ARP table is busy response from arp_rx
             # is lost. This is compensated by the protocol (retries)
@@ -293,11 +294,11 @@ class LiteEthARPTable(Module):
 
 # ARP ----------------------------------------------------------------------------------------------
 
-class LiteEthARP(Module):
+class LiteEthARP(LiteXModule):
     def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8):
-        self.submodules.tx    = tx    = LiteEthARPTX(mac_address, ip_address, dw)
-        self.submodules.rx    = rx    = LiteEthARPRX(mac_address, ip_address, dw)
-        self.submodules.table = table = LiteEthARPTable(clk_freq)
+        self.tx    = tx    = LiteEthARPTX(mac_address, ip_address, dw)
+        self.rx    = rx    = LiteEthARPRX(mac_address, ip_address, dw)
+        self.table = table = LiteEthARPTable(clk_freq)
         self.comb += [
             rx.source.connect(table.sink),
             table.source.connect(tx.sink)
