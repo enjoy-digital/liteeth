@@ -129,14 +129,14 @@ class LiteEthICMPRX(LiteXModule):
 # ICMP Echo ----------------------------------------------------------------------------------------
 
 class LiteEthICMPEcho(LiteXModule):
-    def __init__(self, dw=8):
+    def __init__(self, dw=8, fifo_depth=128):
         self.sink   = sink   = stream.Endpoint(eth_icmp_user_description(dw))
         self.source = source = stream.Endpoint(eth_icmp_user_description(dw))
 
         # # #
 
         self.buffer = PacketFIFO(eth_icmp_user_description(dw),
-            payload_depth = 128//(dw//8),
+            payload_depth = fifo_depth//(dw//8),
             param_depth   = 1,
             buffered      = True
         )
@@ -150,10 +150,10 @@ class LiteEthICMPEcho(LiteXModule):
 # ICMP ---------------------------------------------------------------------------------------------
 
 class LiteEthICMP(LiteXModule):
-    def __init__(self, ip, ip_address, dw=8):
+    def __init__(self, ip, ip_address, dw=8, fifo_depth=128):
         self.tx   = tx   = LiteEthICMPTX(ip_address, dw)
         self.rx   = rx   = LiteEthICMPRX(ip_address, dw)
-        self.echo = echo = LiteEthICMPEcho(dw)
+        self.echo = echo = LiteEthICMPEcho(dw, fifo_depth=fifo_depth)
         self.comb += [
             rx.source.connect(echo.sink),
             echo.source.connect(tx.sink)
