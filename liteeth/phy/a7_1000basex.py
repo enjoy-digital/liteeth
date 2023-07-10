@@ -40,7 +40,7 @@ class A7_1000BASEX(LiteXModule):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.crg_reset = Signal()
+        self.reset = Signal()
         if with_csr:
             self.add_csr()
 
@@ -720,7 +720,7 @@ class A7_1000BASEX(LiteXModule):
         self.comb += [
             qpll_channel.reset.eq(tx_init.qpll_reset),
             tx_init.qpll_lock.eq(qpll_channel.lock),
-            tx_reset.eq(tx_init.tx_reset | self.crg_reset)
+            tx_reset.eq(tx_init.tx_reset | self.reset)
         ]
         self.sync += tx_mmcm_reset.eq(~qpll_channel.lock)
         tx_mmcm_reset.attr.add("no_retiming")
@@ -729,7 +729,7 @@ class A7_1000BASEX(LiteXModule):
         self.submodules += rx_init
         self.comb += [
             rx_init.enable.eq(tx_init.done),
-            rx_reset.eq(rx_init.rx_reset | self.crg_reset),
+            rx_reset.eq(rx_init.rx_reset | self.reset),
 
             rx_init.rx_pma_reset_done.eq(rx_pma_reset_done),
             drpaddr.eq(rx_init.drpaddr),
@@ -774,5 +774,5 @@ class A7_1000BASEX(LiteXModule):
         ]
 
     def add_csr(self):
-        self._crg_reset = CSRStorage()
-        self.comb += self.crg_reset.eq(self._crg_reset.storage)
+        self._reset = CSRStorage()
+        self.comb += self.reset.eq(self._reset.storage)

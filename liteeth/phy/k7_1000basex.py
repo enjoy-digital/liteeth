@@ -41,7 +41,7 @@ class K7_1000BASEX(LiteXModule):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.crg_reset = Signal()
+        self.reset = Signal()
         if with_csr:
             self.add_csr()
 
@@ -741,7 +741,7 @@ class K7_1000BASEX(LiteXModule):
         tx_init = ResetInserter()(GTXTXInit(sys_clk_freq, buffer_enable=True))
         self.submodules += tx_init
         self.comb += [
-            tx_init.reset.eq(self.crg_reset),
+            tx_init.reset.eq(self.reset),
             pll.reset.eq(tx_init.pllreset),
             tx_init.plllock.eq(pll.lock),
             tx_reset.eq(tx_init.gtXxreset),
@@ -754,7 +754,7 @@ class K7_1000BASEX(LiteXModule):
         rx_init = ResetInserter()(GTXRXInit(sys_clk_freq, buffer_enable=True))
         self.submodules += rx_init
         self.comb += [
-            rx_init.reset.eq(~tx_init.done | self.crg_reset),
+            rx_init.reset.eq(~tx_init.done | self.reset),
             rx_init.plllock.eq(pll.lock),
             rx_reset.eq(rx_init.gtXxreset),
             rx_init.Xxresetdone.eq(rx_reset_done),
@@ -794,5 +794,5 @@ class K7_1000BASEX(LiteXModule):
         ]
 
     def add_csr(self):
-        self._crg_reset = CSRStorage()
-        self.comb += self.crg_reset.eq(self._crg_reset.storage)
+        self._reset = CSRStorage()
+        self.comb += self.reset.eq(self._reset.storage)

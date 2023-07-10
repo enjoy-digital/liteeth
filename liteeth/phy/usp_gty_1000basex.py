@@ -39,7 +39,7 @@ class USP_GTY_1000BASEX(LiteXModule):
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
-        self.crg_reset = Signal()
+        self.reset = Signal()
         if with_csr:
             self.add_csr()
 
@@ -946,8 +946,8 @@ class USP_GTY_1000BASEX(LiteXModule):
             )
         ]
         self.comb += [
-            tx_reset.eq(pll_reset | ~pll_locked | self.crg_reset),
-            rx_reset.eq(pll_reset | ~pll_locked | pcs.restart | self.crg_reset)
+            tx_reset.eq(pll_reset | ~pll_locked | self.reset),
+            rx_reset.eq(pll_reset | ~pll_locked | pcs.restart | self.reset)
         ]
 
         # Gearbox and PCS connection
@@ -961,5 +961,5 @@ class USP_GTY_1000BASEX(LiteXModule):
         ]
 
     def add_csr(self):
-        self._crg_reset = CSRStorage()
-        self.comb += self.crg_reset.eq(self._crg_reset.storage)
+        self._reset = CSRStorage()
+        self.comb += self.reset.eq(self._reset.storage)
