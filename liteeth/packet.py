@@ -9,13 +9,15 @@
 from math import log2
 
 from migen import *
+
 from litex.gen import *
 
 from litex.soc.interconnect.packet import Header, HeaderField
 from litex.soc.interconnect import stream
+
 # Packetizer ---------------------------------------------------------------------------------------
 
-class Packetizer(Module):
+class Packetizer(LiteXModule):
     def __init__(self, sink_description, source_description, header):
         self.sink   = sink   = stream.Endpoint(sink_description)
         self.source = source = stream.Endpoint(source_description)
@@ -48,7 +50,7 @@ class Packetizer(Module):
         source_last_s = Signal()
 
         # FSM.
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm_from_idle = Signal()
         fsm.act("IDLE",
             sink.ready.eq(1),
@@ -148,7 +150,7 @@ class Packetizer(Module):
 
             # FSM used to conveniently assign combinational and synchronous
             # signals in the same context.
-            self.submodules.last_be_fsm = last_be_fsm = FSM(reset_state="DEFAULT")
+            self.last_be_fsm = last_be_fsm = FSM(reset_state="DEFAULT")
 
             # Whether the main FSM is in one of the DATA-COPY states. This is
             # important as we overwrite sink.ready below and need to have
@@ -211,7 +213,7 @@ class Packetizer(Module):
 
 # Depacketizer -------------------------------------------------------------------------------------
 
-class Depacketizer(Module):
+class Depacketizer(LiteXModule):
     def __init__(self, sink_description, source_description, header):
         self.sink   = sink   = stream.Endpoint(sink_description)
         self.source = source = stream.Endpoint(source_description)
@@ -249,7 +251,7 @@ class Depacketizer(Module):
         source_last_s = Signal()
 
         # FSM.
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm_from_idle = Signal()
         fsm.act("IDLE",
             sink.ready.eq(1),
@@ -346,7 +348,7 @@ class Depacketizer(Module):
 
             # FSM used to conveniently assign combinational and synchronous
             # signals in the same context.
-            self.submodules.last_be_fsm = last_be_fsm = FSM(reset_state="DEFAULT")
+            self.last_be_fsm = last_be_fsm = FSM(reset_state="DEFAULT")
 
             # Whether the main FSM is / was in one of the DATA-COPY states. This
             # is important as we must handle a special case when last is
