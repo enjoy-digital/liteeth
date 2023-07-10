@@ -105,7 +105,8 @@ class LiteEthICMPRX(LiteXModule):
                 "quench",
                 "data",
                 "error",
-                "last_be"}),
+                "last_be"
+            }),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length - icmp_header.length),
         ]
@@ -141,7 +142,13 @@ class LiteEthICMPEcho(LiteXModule):
             buffered      = True
         )
         self.comb += [
-            sink.connect(self.buffer.sink),
+            # Connect to buffer when length <= buffer's depth.
+            If(sink.length <= fifo_depth,
+                sink.connect(self.buffer.sink)
+            # Else drop.
+            ).Else(
+                sink.ready.eq(1)
+            ),
             self.buffer.source.connect(source, omit={"checksum"}),
             self.source.msgtype.eq(icmp_type_ping_reply),
             self.source.checksum.eq(self.buffer.source.checksum + 0x800 + (self.buffer.source.checksum >= 0xf800))

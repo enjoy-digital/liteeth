@@ -88,11 +88,11 @@ ipv4_header = Header(ipv4_header_fields, ipv4_header_length, swap_field_bytes=Tr
 
 # ICMP Constants/Header ----------------------------------------------------------------------------
 
-icmp_protocol      = 0x01
-icmp_type_ping_reply = 0
+icmp_protocol          = 0x01
+icmp_type_ping_reply   = 0
 icmp_type_ping_request = 8
-icmp_header_length = 8
-icmp_header_fields = {
+icmp_header_length     = 8
+icmp_header_fields     = {
     "msgtype":  HeaderField(0, 0,  8),
     "code":     HeaderField(1, 0,  8),
     "checksum": HeaderField(2, 0, 16),

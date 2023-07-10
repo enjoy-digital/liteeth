@@ -235,7 +235,7 @@ class LiteEthIPRX(LiteXModule):
                 "data",
                 "error",
                 "last_be"}),
-            source.length.eq(depacketizer.source.total_length - (0x5*4)),
+            source.length.eq(depacketizer.source.total_length - ipv4_header_length),
             source.ip_address.eq(depacketizer.source.sender_ip),
         ]
         fsm.act("RECEIVE",
