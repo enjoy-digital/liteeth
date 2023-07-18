@@ -32,12 +32,17 @@ class LiteEthStream2UDPTX(LiteXModule):
             level   = Signal(max=fifo_depth+1)
             counter = Signal(max=fifo_depth+1)
 
+            _ip_address = Signal(32)
+            _udp_port   = Signal(16)
+
             self.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
             self.comb += sink.connect(fifo.sink)
 
             self.fsm = fsm = FSM(reset_state="IDLE")
             fsm.act("IDLE",
                 NextValue(counter, 0),
+                NextValue(_ip_address, ip_address),
+                NextValue(_udp_port,     udp_port),
                 # Send FIFO contenst when:
                 # - We have a full packet:
                 If(fifo.sink.valid & fifo.sink.ready & fifo.sink.last,
@@ -53,9 +58,9 @@ class LiteEthStream2UDPTX(LiteXModule):
             fsm.act("SEND",
                 source.valid.eq(1),
                 source.last.eq(counter == (level - 1)),
-                source.src_port.eq(udp_port),
-                source.dst_port.eq(udp_port),
-                source.ip_address.eq(ip_address),
+                source.src_port.eq(_udp_port),
+                source.dst_port.eq(_udp_port),
+                source.ip_address.eq(_ip_address),
                 source.length.eq(level * (data_width//8)),
                 source.data.eq(fifo.source.data),
                 source.last_be.eq({
