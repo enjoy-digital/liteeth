@@ -1,0 +1,44 @@
+--- # PHY ----------------------------------------------------------------------
+# Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
+# License: BSD
+
+phy: LiteEthECP5PHYRGMII
+phy_tx_delay: 0e-9
+phy_rx_delay: 2e-9
+device: LFE5U-25F-6BG256C
+vendor: lattice
+toolchain: trellis
+# Core -------------------------------------------------------------------------
+clk_freq: 125e6
+core: udp
+
+mac_address: 0x10e2d5000000
+ip_address: 172.30.0.1
+
+tx_cdc_depth: 16
+tx_cdc_buffered: True
+rx_cdc_depth: 16
+rx_cdc_buffered: True
+# UDP Ports --------------------------------------------------------------------
+# mode `raw` vs `streamer` mode:
+# The streamer mode is a convenience wrapper around a `raw` UDP port. A raw UDP
+# port receives and requires the full UDP header information without filtering.
+# In addition, when transmitting packets, it's required to make sure the user
+# can burst a full packet without issuing a stall.
+# The `streamer` mode on the other hand, allows a port to be specified to
+# receive/transmit on. There is also a FIFO between the raw port and the
+# streamer port. This means the user is not required to be able to burst packet
+# into the core. But a limitation of this is that the user relinquishes
+# control of transmitted UDP packet sizes.
+udp_ports:
+  raw:
+    data_width: 32
+    mode: raw
+  streamer1:
+    data_width: 32
+    port: 1337
+    mode: streamer
+  streamer2:
+    data_width: 32
+    port: 6077
+    mode: streamer
