@@ -33,12 +33,13 @@ rx_cdc_buffered: True
 udp_ports:
   raw:
     data_width: 32
+    udp_port: 2000
     mode: raw
   streamer1:
     data_width: 32
-    port: 1337
+    udp_port: 1337
     mode: streamer
   streamer2:
     data_width: 32
-    port: 6077
+    udp_port: 6077
     mode: streamer
