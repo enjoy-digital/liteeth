@@ -186,7 +186,7 @@ class LiteEthARPTable(LiteXModule):
                 request_ip_address.eq(request.ip_address)
             )
 
-        request_timer = WaitTimer(clk_freq//10)
+        request_timer = WaitTimer(int(clk_freq//10))
         self.submodules += request_timer
         request_counter       = Signal(max=max_requests)
         request_counter_reset = Signal()
@@ -206,7 +206,7 @@ class LiteEthARPTable(LiteXModule):
         cached_valid       = Signal()
         cached_ip_address  = Signal(32, reset_less=True)
         cached_mac_address = Signal(48, reset_less=True)
-        cached_timer       = WaitTimer(clk_freq*10)
+        cached_timer       = WaitTimer(int(clk_freq*10))
         self.submodules += cached_timer
 
         self.fsm = fsm = FSM(reset_state="IDLE")
