@@ -166,7 +166,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         self.pll = pll = TRIONPLL(platform, n=1) # FIXME: Add Auto-Numbering.
         pll.register_clkin(None,          freq=125e6,           name="auto_eth_rx_clk")
         pll.create_clkout(None,           freq=125e6,           name="auto_eth_tx_clk")
-        pll.create_clkout(self.cd_eth_tx, freq=125e6,  phase=0, name="auto_eth_tx_clk_delayed")
+        pll.create_clkout(self.cd_eth_tx, freq=125e6,  phase=0, name="auto_eth_tx_clk_delayed", with_reset=False)
 
         cmd = "create_clock -period {} eth_tx_clk".format(1e9/125e6)
         platform.toolchain.additional_sdc_commands.append(cmd)
