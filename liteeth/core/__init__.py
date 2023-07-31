@@ -15,7 +15,7 @@ from liteeth.core.icmp import LiteEthICMP
 # IP Core ------------------------------------------------------------------------------------------
 
 class LiteEthIPCore(Module, AutoCSR):
-    def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
+    def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True,
         with_ip_broadcast = True,
         with_sys_datapath = False,
@@ -49,6 +49,7 @@ class LiteEthIPCore(Module, AutoCSR):
             mac_address = mac_address,
             ip_address  = ip_address,
             clk_freq    = clk_freq,
+            entries     = arp_entries,
             dw          = dw,
         )
 
@@ -74,7 +75,7 @@ class LiteEthIPCore(Module, AutoCSR):
 # UDP IP Core --------------------------------------------------------------------------------------
 
 class LiteEthUDPIPCore(LiteEthIPCore):
-    def __init__(self, phy, mac_address, ip_address, clk_freq, dw=8,
+    def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True,
         with_ip_broadcast = True,
         with_sys_datapath = False,
@@ -94,6 +95,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             mac_address       = mac_address,
             ip_address        = ip_address,
             clk_freq          = clk_freq,
+            arp_entries       = arp_entries,
             with_icmp         = with_icmp,
             dw                = dw,
             with_ip_broadcast = with_ip_broadcast,
