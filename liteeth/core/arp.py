@@ -154,6 +154,47 @@ class LiteEthARPRX(LiteXModule):
             )
         )
 
+# ARP Cache ----------------------------------------------------------------------------------------
+
+class LiteEthARPCache(LiteXModule):
+    def __init__(self, entries, clk_freq):
+        assert entries == 1
+        # Update interface.
+        self.update = stream.Endpoint([("ip_address", 32), ("mac_address", 48)])
+
+        # Request/Response interface.
+        self.request  = stream.Endpoint([("ip_address", 32)])
+        self.response = stream.Endpoint([("mac_address", 48), ("error", 1)])
+
+        # # #
+
+        # Note: Store only 1 IP/MAC couple, can be improved with a real
+        # table in the future to improve performance when packets are
+        # targeting multiple destinations.
+        cached_valid       = Signal()
+        cached_ip_address  = Signal(32, reset_less=True)
+        cached_mac_address = Signal(48, reset_less=True)
+        self.cached_timer  = WaitTimer(int(clk_freq*10))
+
+        self.comb += self.update.ready.eq(1)
+        self.sync += [
+            If(self.update.valid,
+                cached_valid.eq(1),
+                cached_ip_address.eq(self.update.ip_address),
+                cached_mac_address.eq(self.update.mac_address),
+            ).Else(
+                If(self.cached_timer.done,
+                    cached_valid.eq(0)
+                )
+            )
+        ]
+        self.comb += self.cached_timer.wait.eq(~self.update.valid)
+
+        self.comb += self.request.ready.eq(1)
+        self.comb += self.response.valid.eq(self.request.valid)
+        self.comb += self.response.error.eq(~cached_valid | (self.request.ip_address != cached_ip_address))
+        self.comb += self.response.mac_address.eq(cached_mac_address)
+
 # ARP Table ----------------------------------------------------------------------------------------
 
 class LiteEthARPTable(LiteXModule):
@@ -174,27 +215,7 @@ class LiteEthARPTable(LiteXModule):
         self.request_timer = WaitTimer(100e-3*clk_freq)
         self.comb += self.request_timer.wait.eq(request_pending & ~self.request_timer.done)
 
-        # Note: Store only 1 IP/MAC couple, can be improved with a real
-        # table in the future to improve performance when packets are
-        # targeting multiple destinations.
-        cached_update      = Signal()
-        cached_valid       = Signal()
-        cached_ip_address  = Signal(32, reset_less=True)
-        cached_mac_address = Signal(48, reset_less=True)
-        cached_timer       = WaitTimer(100e-3*clk_freq)
-        self.submodules += cached_timer
-        self.sync += [
-            If(cached_update,
-                cached_valid.eq(1),
-                cached_ip_address.eq(sink.ip_address),
-                cached_mac_address.eq(sink.mac_address),
-            ).Else(
-                If(cached_timer.done,
-                    cached_valid.eq(0)
-                )
-            )
-        ]
-        self.comb += cached_timer.wait.eq(~cached_update)
+        self.cache = cache = LiteEthARPCache(entries=1, clk_freq=clk_freq)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -221,9 +242,13 @@ class LiteEthARPTable(LiteXModule):
         )
         fsm.act("UPDATE_TABLE",
             If(request_pending & (request_ip_address == sink.ip_address),
-                cached_update.eq(1),
-                NextValue(request_pending, 0),
-                NextState("PRESENT_RESPONSE")
+                cache.update.valid.eq(1),
+                cache.update.ip_address.eq(sink.ip_address),
+                cache.update.mac_address.eq(sink.mac_address),
+                If(cache.update.ready,
+                    NextValue(request_pending, 0),
+                    NextState("PRESENT_RESPONSE")
+                )
             ).Else(
                 NextState("IDLE")
             )
@@ -239,15 +264,18 @@ class LiteEthARPTable(LiteXModule):
             )
         )
         fsm.act("CHECK_TABLE",
-            If(cached_valid & (request.ip_address == cached_ip_address),
-                request.ready.eq(request.valid),
-                NextState("PRESENT_RESPONSE"),
-            ).Else(
+            cache.request.valid.eq(1),
+            cache.request.ip_address.eq(request.ip_address),
+            If(cache.response.valid,
                 request.ready.eq(1),
-                NextValue(request_counter, 0),
-                NextValue(request_pending, 1),
-                NextValue(request_ip_address, request.ip_address),
-                NextState("SEND_REQUEST")
+                If(cache.response.error,
+                    NextValue(request_counter, 0),
+                    NextValue(request_pending, 1),
+                    NextValue(request_ip_address, request.ip_address),
+                    NextState("SEND_REQUEST")
+                ).Else(
+                    NextState("PRESENT_RESPONSE"),
+                )
             )
         )
         fsm.act("SEND_REQUEST",
@@ -261,7 +289,7 @@ class LiteEthARPTable(LiteXModule):
         )
         fsm.act("PRESENT_RESPONSE",
             response.valid.eq(1),
-            response.mac_address.eq(cached_mac_address),
+            response.mac_address.eq(cache.response.mac_address),
             If(response.ready,
                 NextValue(response.failed, 0),
                 NextState("IDLE")
