@@ -156,7 +156,7 @@ class LiteEthARPRX(LiteXModule):
 
 # ARP Cache ----------------------------------------------------------------------------------------
 
-class LiteEthARPCache(Module):
+class LiteEthARPCache(LiteXModule):
     def __init__(self, entries, clk_freq):
         # Update interface.
         self.update = stream.Endpoint([("ip_address", 32), ("mac_address", 48)])
@@ -167,27 +167,37 @@ class LiteEthARPCache(Module):
 
         # # #
 
-        entries = max(entries, 2)
+        # Parameters.
+        entries = max(entries, 2) # Minimal number of entries is 2.
 
+        # Signals.
+        update_count = Signal(max=entries)
+        search_count = Signal(max=entries)
+        error        = Signal()
+
+        # Memory
         mem_width   = 32 + 48 + 1 # IP + MAC + Valid.
         mem         = Memory(mem_width, entries)
         mem_wr_port = mem.get_port(write_capable=True)
         mem_rd_port = mem.get_port(async_read=True) # FIXME: Avoid async_read.
         self.specials += mem, mem_wr_port, mem_rd_port
 
-        update_count = Signal(max=entries)
-        search_count = Signal(max=entries)
-        error        = Signal()
-
+        # Memory wr_port aliases.
         mem_wr_port_valid       = mem_wr_port.dat_w[80]
         mem_wr_port_ip_address  = mem_wr_port.dat_w[0:32]
         mem_wr_port_mac_address = mem_wr_port.dat_w[32:80]
 
+        # Memory rd_port aliases.
         mem_rd_port_valid       = mem_rd_port.dat_r[80]
         mem_rd_port_ip_address  = mem_rd_port.dat_r[0:32]
         mem_rd_port_mac_address = mem_rd_port.dat_r[32:80]
 
-        self.submodules.fsm = fsm = FSM(reset_state="CLEAR")
+        # Clear Timer to clear table every 100ms.
+        self.clear_timer = WaitTimer(100e-3*clk_freq)
+        self.comb += self.clear_timer.wait.eq(~self.clear_timer.done)
+
+        # FSM.
+        self.fsm = fsm = FSM(reset_state="CLEAR")
         fsm.act("CLEAR",
             mem_wr_port.we.eq(1),
             mem_wr_port.adr.eq(update_count),
@@ -204,6 +214,10 @@ class LiteEthARPCache(Module):
             If(self.request.valid,
                 NextValue(search_count, 0),
                 NextState("MEM_SEARCH")
+            ),
+            If(self.clear_timer.done,
+                NextValue(update_count, 0),
+                NextState("CLEAR")
             )
         )
         fsm.act("MEM_UPDATE",
