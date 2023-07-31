@@ -176,15 +176,7 @@ class LiteEthARPTable(LiteXModule):
                 request_pending.eq(1)
             )
 
-        request_ip_address        = Signal(32, reset_less=True)
-        request_ip_address_reset  = Signal()
-        request_ip_address_update = Signal()
-        self.sync += \
-            If(request_ip_address_reset,
-                request_ip_address.eq(0)
-            ).Elif(request_ip_address_update,
-                request_ip_address.eq(request.ip_address)
-            )
+        request_ip_address = Signal(32, reset_less=True)
 
         request_timer = WaitTimer(int(clk_freq//10))
         self.submodules += request_timer
@@ -217,7 +209,7 @@ class LiteEthARPTable(LiteXModule):
                 NextState("SEND_REPLY")
             ).Elif(sink.valid & sink.reply & request_pending,
                 NextState("UPDATE_TABLE"),
-            ).Elif(request_counter == max_requests-1,
+            ).Elif(request_counter == (max_requests - 1),
                 NextState("PRESENT_RESPONSE")
             ).Elif(request.valid | (request_pending & request_timer.done),
                 NextState("CHECK_TABLE")
@@ -251,17 +243,21 @@ class LiteEthARPTable(LiteXModule):
         fsm.act("CHECK_TABLE",
             If(cached_valid,
                 If(request_ip_address == cached_ip_address,
-                    request_ip_address_reset.eq(1),
+                    NextValue(request_ip_address, 0),
                     NextState("PRESENT_RESPONSE"),
                 ).Elif(request.ip_address == cached_ip_address,
                     request.ready.eq(request.valid),
                     NextState("PRESENT_RESPONSE"),
                 ).Else(
-                    request_ip_address_update.eq(request.valid),
+                    If(request.valid,
+                        NextValue(request_ip_address, request.ip_address),
+                    ),
                     NextState("SEND_REQUEST")
                 )
             ).Else(
-                request_ip_address_update.eq(request.valid),
+                If(request.valid,
+                    NextValue(request_ip_address, request.ip_address),
+                ),
                 NextState("SEND_REQUEST")
             )
         )
@@ -278,15 +274,15 @@ class LiteEthARPTable(LiteXModule):
             )
         )
         self.comb += [
-            If(request_counter == max_requests - 1,
+            If(request_counter == (max_requests - 1),
                 response.failed.eq(1),
                 request_counter_reset.eq(1),
                 request_pending_clr.eq(1)
-            ),
-            response.mac_address.eq(cached_mac_address)
+            )
         ]
         fsm.act("PRESENT_RESPONSE",
             response.valid.eq(1),
+            response.mac_address.eq(cached_mac_address),
             If(response.ready,
                 NextState("IDLE")
             )
