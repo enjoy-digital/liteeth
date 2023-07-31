@@ -165,6 +165,10 @@ class LiteEthARPCache(LiteXModule):
         self.request  = stream.Endpoint([("ip_address", 32)])
         self.response = stream.Endpoint([("mac_address", 48), ("error", 1)])
 
+        # Enable.
+        self.enable       = Signal(reset=1)
+        self.clear_enable = Signal(reset=1)
+
         # # #
 
         # Parameters.
@@ -208,14 +212,14 @@ class LiteEthARPCache(LiteXModule):
             )
         )
         fsm.act("IDLE",
-            If(self.update.valid,
+            If(self.enable & self.update.valid,
                 NextState("MEM_UPDATE")
             ),
-            If(self.request.valid,
+            If(self.enable & self.request.valid,
                 NextValue(search_count, 0),
                 NextState("MEM_SEARCH")
             ),
-            If(self.clear_timer.done,
+            If(self.clear_enable & self.clear_timer.done,
                 NextValue(update_count, 0),
                 NextState("CLEAR")
             )
