@@ -176,20 +176,11 @@ class LiteEthARPTable(LiteXModule):
                 request_pending.eq(1)
             )
 
+        request_counter    = Signal(max=max_requests)
         request_ip_address = Signal(32, reset_less=True)
 
-        request_timer = WaitTimer(int(clk_freq//10))
-        self.submodules += request_timer
-        request_counter       = Signal(max=max_requests)
-        request_counter_reset = Signal()
-        request_counter_ce    = Signal()
-        self.sync += \
-            If(request_counter_reset,
-                request_counter.eq(0)
-            ).Elif(request_counter_ce,
-                request_counter.eq(request_counter + 1)
-            )
-        self.comb += request_timer.wait.eq(request_pending & ~request_counter_ce)
+        self.request_timer = WaitTimer(int(clk_freq//10))
+        self.comb += self.request_timer.wait.eq(request_pending)
 
         # Note: Store only 1 IP/MAC couple, can be improved with a real
         # table in the future to improve performance when packets are
@@ -211,7 +202,7 @@ class LiteEthARPTable(LiteXModule):
                 NextState("UPDATE_TABLE"),
             ).Elif(request_counter == (max_requests - 1),
                 NextState("PRESENT_RESPONSE")
-            ).Elif(request.valid | (request_pending & request_timer.done),
+            ).Elif(request.valid | (request_pending & self.request_timer.done),
                 NextState("CHECK_TABLE")
             )
         )
@@ -266,23 +257,25 @@ class LiteEthARPTable(LiteXModule):
             source.request.eq(1),
             source.ip_address.eq(request_ip_address),
             If(source.ready,
-                request_counter_reset.eq(request.valid),
-                request_counter_ce.eq(1),
+                If(request.valid,
+                    NextValue(request_counter, 0),
+                ).Else(
+                    self.request_timer.wait.eq(0),
+                    NextValue(request_counter, request_counter + 1),
+                ),
                 request_pending_set.eq(1),
                 request.ready.eq(1),
                 NextState("IDLE")
             )
         )
-        self.comb += [
-            If(request_counter == (max_requests - 1),
-                response.failed.eq(1),
-                request_counter_reset.eq(1),
-                request_pending_clr.eq(1)
-            )
-        ]
         fsm.act("PRESENT_RESPONSE",
             response.valid.eq(1),
             response.mac_address.eq(cached_mac_address),
+            If(request_counter == (max_requests - 1),
+                response.failed.eq(1),
+                NextValue(request_counter, 0),
+                request_pending_clr.eq(1)
+            ),
             If(response.ready,
                 NextState("IDLE")
             )
