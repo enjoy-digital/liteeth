@@ -204,7 +204,9 @@ class LiteEthARPTable(LiteXModule):
                 NextState("SEND_REPLY")
             ).Elif(sink.valid & sink.reply & request_pending,
                 NextState("UPDATE_TABLE"),
-            ).Elif(request.valid | self.request_timer.done,
+            ).Elif(request.valid,
+                NextState("CHECK_TABLE")
+            ).Elif(self.request_timer.done,
                 NextState("CHECK_REQUEST")
             )
         )
@@ -220,7 +222,7 @@ class LiteEthARPTable(LiteXModule):
         fsm.act("UPDATE_TABLE",
             NextValue(request_pending, 0),
             cached_update.eq(1),
-            NextState("CHECK_REQUEST")
+            NextState("CHECK_TABLE")
         )
         fsm.act("CHECK_REQUEST",
             If(request_counter == (max_requests - 1),
@@ -233,19 +235,12 @@ class LiteEthARPTable(LiteXModule):
             )
         )
         fsm.act("CHECK_TABLE",
-            If(cached_valid,
-                If(request_ip_address == cached_ip_address,
-                    NextValue(request_ip_address, 0),
-                    NextState("PRESENT_RESPONSE"),
-                ).Elif(request.ip_address == cached_ip_address,
-                    request.ready.eq(request.valid),
-                    NextState("PRESENT_RESPONSE"),
-                ).Else(
-                    If(request.valid,
-                        NextValue(request_ip_address, request.ip_address),
-                    ),
-                    NextState("SEND_REQUEST")
-                )
+            If(cached_valid & (request_ip_address == cached_ip_address),
+                NextValue(request_ip_address, 0),
+                NextState("PRESENT_RESPONSE"),
+            ).Elif(cached_valid & (request.ip_address == cached_ip_address),
+                request.ready.eq(request.valid),
+                NextState("PRESENT_RESPONSE"),
             ).Else(
                 If(request.valid,
                     NextValue(request_ip_address, request.ip_address),
