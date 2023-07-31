@@ -171,7 +171,7 @@ class LiteEthARPTable(LiteXModule):
         request_counter    = Signal(max=max_requests)
         request_ip_address = Signal(32, reset_less=True)
 
-        self.request_timer = WaitTimer(int(100e-3*clk_freq))
+        self.request_timer = WaitTimer(100e-3*clk_freq)
         self.comb += self.request_timer.wait.eq(request_pending)
 
         # Note: Store only 1 IP/MAC couple, can be improved with a real
@@ -181,7 +181,7 @@ class LiteEthARPTable(LiteXModule):
         cached_valid       = Signal()
         cached_ip_address  = Signal(32, reset_less=True)
         cached_mac_address = Signal(48, reset_less=True)
-        cached_timer       = WaitTimer(int(100e-3*clk_freq))
+        cached_timer       = WaitTimer(100e-3*clk_freq)
         self.submodules += cached_timer
         self.sync += [
             If(cached_update,
@@ -198,16 +198,14 @@ class LiteEthARPTable(LiteXModule):
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            # Note: for simplicicy, if ARP table is busy response from arp_rx
-            # is lost. This is compensated by the protocol (retries)
+            # Note: for simplicicy, if ARP table is busy response from arp_rx is lost. This is
+            # compensated by the protocol (retries)
             If(sink.valid & sink.request,
                 NextState("SEND_REPLY")
             ).Elif(sink.valid & sink.reply & request_pending,
                 NextState("UPDATE_TABLE"),
-            ).Elif(request_counter == (max_requests - 1),
-                NextState("PRESENT_RESPONSE")
             ).Elif(request.valid | self.request_timer.done,
-                NextState("CHECK_TABLE")
+                NextState("CHECK_REQUEST")
             )
         )
         fsm.act("SEND_REPLY",
@@ -222,7 +220,17 @@ class LiteEthARPTable(LiteXModule):
         fsm.act("UPDATE_TABLE",
             NextValue(request_pending, 0),
             cached_update.eq(1),
-            NextState("CHECK_TABLE")
+            NextState("CHECK_REQUEST")
+        )
+        fsm.act("CHECK_REQUEST",
+            If(request_counter == (max_requests - 1),
+                NextValue(response.failed, 1),
+                NextValue(request_counter, 0),
+                NextValue(request_pending, 0),
+                NextState("PRESENT_RESPONSE")
+            ).Else(
+                NextState("CHECK_TABLE")
+            )
         )
         fsm.act("CHECK_TABLE",
             If(cached_valid,
@@ -264,12 +272,8 @@ class LiteEthARPTable(LiteXModule):
         fsm.act("PRESENT_RESPONSE",
             response.valid.eq(1),
             response.mac_address.eq(cached_mac_address),
-            If(request_counter == (max_requests - 1),
-                response.failed.eq(1),
-                NextValue(request_counter, 0),
-                NextValue(request_pending, 0),
-            ),
             If(response.ready,
+                NextValue(response.failed, 0),
                 NextState("IDLE")
             )
         )
