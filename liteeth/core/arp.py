@@ -166,20 +166,11 @@ class LiteEthARPTable(LiteXModule):
 
         # # #
 
-        request_pending     = Signal()
-        request_pending_clr = Signal()
-        request_pending_set = Signal()
-        self.sync += \
-            If(request_pending_clr,
-                request_pending.eq(0)
-            ).Elif(request_pending_set,
-                request_pending.eq(1)
-            )
-
+        request_pending    = Signal()
         request_counter    = Signal(max=max_requests)
         request_ip_address = Signal(32, reset_less=True)
 
-        self.request_timer = WaitTimer(int(clk_freq//10))
+        self.request_timer = WaitTimer(int(100e-3*clk_freq))
         self.comb += self.request_timer.wait.eq(request_pending)
 
         # Note: Store only 1 IP/MAC couple, can be improved with a real
@@ -202,7 +193,7 @@ class LiteEthARPTable(LiteXModule):
                 NextState("UPDATE_TABLE"),
             ).Elif(request_counter == (max_requests - 1),
                 NextState("PRESENT_RESPONSE")
-            ).Elif(request.valid | (request_pending & self.request_timer.done),
+            ).Elif(request.valid | self.request_timer.done,
                 NextState("CHECK_TABLE")
             )
         )
@@ -216,7 +207,7 @@ class LiteEthARPTable(LiteXModule):
             )
         )
         fsm.act("UPDATE_TABLE",
-            request_pending_clr.eq(1),
+            NextValue(request_pending, 0),
             update.eq(1),
             NextState("CHECK_TABLE")
         )
@@ -263,7 +254,7 @@ class LiteEthARPTable(LiteXModule):
                     self.request_timer.wait.eq(0),
                     NextValue(request_counter, request_counter + 1),
                 ),
-                request_pending_set.eq(1),
+                NextValue(request_pending, 1),
                 request.ready.eq(1),
                 NextState("IDLE")
             )
@@ -274,7 +265,7 @@ class LiteEthARPTable(LiteXModule):
             If(request_counter == (max_requests - 1),
                 response.failed.eq(1),
                 NextValue(request_counter, 0),
-                request_pending_clr.eq(1)
+                NextValue(request_pending, 0),
             ),
             If(response.ready,
                 NextState("IDLE")
