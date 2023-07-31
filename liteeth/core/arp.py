@@ -53,8 +53,8 @@ class LiteEthARPTX(LiteXModule):
         self.comb += [
             packetizer.sink.last.eq(counter == (packet_words - 1)),
             If(packetizer.sink.last,
-                packetizer.sink.last_be.eq(
-                    1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length % (dw // 8) - 1)
+                packetizer.sink.last_be.eq(1 if len(packetizer.sink.last_be) == 1 else
+                                           2**(packet_length % (dw // 8) - 1)
                 ),
             ),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
@@ -97,7 +97,8 @@ class LiteEthARPDepacketizer(Depacketizer):
         Depacketizer.__init__(self,
             eth_mac_description(dw),
             eth_arp_description(dw),
-            arp_header)
+            arp_header
+        )
 
 
 class LiteEthARPRX(LiteXModule):
@@ -105,7 +106,7 @@ class LiteEthARPRX(LiteXModule):
         self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(_arp_table_layout)
 
-        # # #s
+        # # #
 
         self.depacketizer = depacketizer = LiteEthARPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
@@ -121,19 +122,19 @@ class LiteEthARPRX(LiteXModule):
         valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
-            (depacketizer.source.hwtype == arp_hwtype_ethernet) &
-            (depacketizer.source.proto == arp_proto_ip) &
-            (depacketizer.source.hwsize == 6) &
+            (depacketizer.source.hwtype    == arp_hwtype_ethernet) &
+            (depacketizer.source.proto     == arp_proto_ip) &
+            (depacketizer.source.hwsize    == 6) &
             (depacketizer.source.protosize == 4) &
             (depacketizer.source.target_ip == ip_address)
         )
-        reply = Signal()
+        reply   = Signal()
         request = Signal()
         self.comb += Case(depacketizer.source.opcode, {
-            arp_opcode_request: [request.eq(1)],
-            arp_opcode_reply:   [reply.eq(1)],
-            "default":          []
-            })
+            arp_opcode_request : [request.eq(1)],
+            arp_opcode_reply   : [reply.eq(1)],
+            "default"          : []
+        })
         self.comb += [
             source.ip_address.eq(depacketizer.source.sender_ip),
             source.mac_address.eq(depacketizer.source.sender_mac)
@@ -153,10 +154,114 @@ class LiteEthARPRX(LiteXModule):
             )
         )
 
+# ARP Cache ----------------------------------------------------------------------------------------
+
+class LiteEthARPCache(LiteXModule):
+    def __init__(self, entries, clk_freq):
+        # Update interface.
+        self.update = stream.Endpoint([("ip_address", 32), ("mac_address", 48)])
+
+        # Request/Response interface.
+        self.request  = stream.Endpoint([("ip_address", 32)])
+        self.response = stream.Endpoint([("mac_address", 48), ("error", 1)])
+
+        # Enable.
+        self.enable       = Signal(reset=1)
+        self.clear_enable = Signal(reset=1)
+
+        # # #
+
+        # Parameters.
+        entries = max(entries, 2) # Minimal number of entries is 2.
+
+        # Signals.
+        update_count = Signal(max=entries)
+        search_count = Signal(max=entries)
+        error        = Signal()
+
+        # Memory
+        mem_width   = 32 + 48 + 1 # IP + MAC + Valid.
+        mem         = Memory(mem_width, entries)
+        mem_wr_port = mem.get_port(write_capable=True)
+        mem_rd_port = mem.get_port(async_read=True) # FIXME: Avoid async_read.
+        self.specials += mem, mem_wr_port, mem_rd_port
+
+        # Memory wr_port aliases.
+        mem_wr_port_valid       = mem_wr_port.dat_w[80]
+        mem_wr_port_ip_address  = mem_wr_port.dat_w[0:32]
+        mem_wr_port_mac_address = mem_wr_port.dat_w[32:80]
+
+        # Memory rd_port aliases.
+        mem_rd_port_valid       = mem_rd_port.dat_r[80]
+        mem_rd_port_ip_address  = mem_rd_port.dat_r[0:32]
+        mem_rd_port_mac_address = mem_rd_port.dat_r[32:80]
+
+        # Clear Timer to clear table every 100ms.
+        self.clear_timer = WaitTimer(100e-3*clk_freq)
+        self.comb += self.clear_timer.wait.eq(~self.clear_timer.done)
+
+        # FSM.
+        self.fsm = fsm = FSM(reset_state="CLEAR")
+        fsm.act("CLEAR",
+            mem_wr_port.we.eq(1),
+            mem_wr_port.adr.eq(update_count),
+            mem_wr_port_valid.eq(0),
+            NextValue(update_count, update_count + 1),
+            If(update_count == (entries - 1),
+                NextState("IDLE")
+            )
+        )
+        fsm.act("IDLE",
+            If(self.enable & self.update.valid,
+                NextState("MEM_UPDATE")
+            ),
+            If(self.enable & self.request.valid,
+                NextValue(search_count, 0),
+                NextState("MEM_SEARCH")
+            ),
+            If(self.clear_enable & self.clear_timer.done,
+                NextValue(update_count, 0),
+                NextState("CLEAR")
+            )
+        )
+        fsm.act("MEM_UPDATE",
+            mem_wr_port.we.eq(1),
+            mem_wr_port.adr.eq(update_count),
+            mem_wr_port_valid.eq(1),
+            mem_wr_port_ip_address.eq( self.update.ip_address),
+            mem_wr_port_mac_address.eq(self.update.mac_address),
+            self.update.ready.eq(1),
+            If(update_count == (entries - 1),
+                NextValue(update_count, 0)
+            ).Else(
+                NextValue(update_count, update_count + 1)
+            ),
+            NextState("IDLE")
+        )
+        fsm.act("MEM_SEARCH",
+           mem_rd_port.adr.eq(search_count),
+           If(mem_rd_port_valid & (mem_rd_port_ip_address == self.request.ip_address),
+               NextValue(error, 0),
+               NextState("RESPONSE")
+           ).Elif(search_count == (entries - 1),
+               NextValue(error, 1),
+               NextState("RESPONSE")
+           ).Else(
+               NextValue(search_count, search_count + 1)
+           )
+        )
+        fsm.act("RESPONSE",
+           self.request.ready.eq(1),
+           self.response.valid.eq(1),
+           self.response.error.eq(error),
+           self.response.mac_address.eq(mem_rd_port_mac_address),
+           NextState("IDLE")
+       )
+
 # ARP Table ----------------------------------------------------------------------------------------
 
 class LiteEthARPTable(LiteXModule):
-    def __init__(self, clk_freq, max_requests=8):
+    def __init__(self, clk_freq, entries=1, max_requests=8):
         self.sink   = sink   = stream.Endpoint(_arp_table_layout)  # from arp_rx
         self.source = source = stream.Endpoint(_arp_table_layout)  # to arp_tx
 
@@ -166,61 +271,27 @@ class LiteEthARPTable(LiteXModule):
 
         # # #
 
-        request_pending     = Signal()
-        request_pending_clr = Signal()
-        request_pending_set = Signal()
-        self.sync += \
-            If(request_pending_clr,
-                request_pending.eq(0)
-            ).Elif(request_pending_set,
-                request_pending.eq(1)
-            )
+        request_pending    = Signal()
+        request_counter    = Signal(max=max_requests)
+        request_ip_address = Signal(32, reset_less=True)
 
-        request_ip_address        = Signal(32, reset_less=True)
-        request_ip_address_reset  = Signal()
-        request_ip_address_update = Signal()
-        self.sync += \
-            If(request_ip_address_reset,
-                request_ip_address.eq(0)
-            ).Elif(request_ip_address_update,
-                request_ip_address.eq(request.ip_address)
-            )
+        self.request_timer = WaitTimer(100e-3*clk_freq)
+        self.comb += self.request_timer.wait.eq(request_pending & ~self.request_timer.done)
 
-        request_timer = WaitTimer(int(clk_freq//10))
-        self.submodules += request_timer
-        request_counter       = Signal(max=max_requests)
-        request_counter_reset = Signal()
-        request_counter_ce    = Signal()
-        self.sync += \
-            If(request_counter_reset,
-                request_counter.eq(0)
-            ).Elif(request_counter_ce,
-                request_counter.eq(request_counter + 1)
-            )
-        self.comb += request_timer.wait.eq(request_pending & ~request_counter_ce)
-
-        # Note: Store only 1 IP/MAC couple, can be improved with a real
-        # table in the future to improve performance when packets are
-        # targeting multiple destinations.
-        update = Signal()
-        cached_valid       = Signal()
-        cached_ip_address  = Signal(32, reset_less=True)
-        cached_mac_address = Signal(48, reset_less=True)
-        cached_timer       = WaitTimer(int(clk_freq*10))
-        self.submodules += cached_timer
+        self.cache = cache = LiteEthARPCache(entries=entries, clk_freq=clk_freq)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            # Note: for simplicicy, if ARP table is busy response from arp_rx
-            # is lost. This is compensated by the protocol (retries)
+            # Note: for simplicicy, if ARP table is busy response from arp_rx is lost. This is
+            # compensated by the protocol (retries)
             If(sink.valid & sink.request,
                 NextState("SEND_REPLY")
-            ).Elif(sink.valid & sink.reply & request_pending,
+            ).Elif(sink.valid & sink.reply,
                 NextState("UPDATE_TABLE"),
-            ).Elif(request_counter == max_requests-1,
-                NextState("PRESENT_RESPONSE")
-            ).Elif(request.valid | (request_pending & request_timer.done),
+            ).Elif(request.valid,
                 NextState("CHECK_TABLE")
+            ).Elif(self.request_timer.done,
+                NextState("CHECK_REQUEST")
             )
         )
         fsm.act("SEND_REPLY",
@@ -233,36 +304,42 @@ class LiteEthARPTable(LiteXModule):
             )
         )
         fsm.act("UPDATE_TABLE",
-            request_pending_clr.eq(1),
-            update.eq(1),
-            NextState("CHECK_TABLE")
-        )
-        self.sync += \
-            If(update,
-                cached_valid.eq(1),
-                cached_ip_address.eq(sink.ip_address),
-                cached_mac_address.eq(sink.mac_address),
-            ).Else(
-                If(cached_timer.done,
-                    cached_valid.eq(0)
+            If(request_pending & (request_ip_address == sink.ip_address),
+                cache.update.valid.eq(1),
+                cache.update.ip_address.eq(sink.ip_address),
+                cache.update.mac_address.eq(sink.mac_address),
+                If(cache.update.ready,
+                    NextValue(request_pending, 0),
+                    NextState("PRESENT_RESPONSE")
                 )
+            ).Else(
+                NextState("IDLE")
             )
-        self.comb += cached_timer.wait.eq(~update)
-        fsm.act("CHECK_TABLE",
-            If(cached_valid,
-                If(request_ip_address == cached_ip_address,
-                    request_ip_address_reset.eq(1),
-                    NextState("PRESENT_RESPONSE"),
-                ).Elif(request.ip_address == cached_ip_address,
-                    request.ready.eq(request.valid),
-                    NextState("PRESENT_RESPONSE"),
-                ).Else(
-                    request_ip_address_update.eq(request.valid),
-                    NextState("SEND_REQUEST")
-                )
+        )
+        fsm.act("CHECK_REQUEST",
+            If(request_counter == (max_requests - 1),
+                NextValue(response.failed, 1),
+                NextValue(request_counter, 0),
+                NextValue(request_pending, 0),
+                NextState("PRESENT_RESPONSE")
             ).Else(
-                request_ip_address_update.eq(request.valid),
                 NextState("SEND_REQUEST")
+            )
+        )
+        fsm.act("CHECK_TABLE",
+            cache.request.valid.eq(1),
+            cache.request.ip_address.eq(request.ip_address),
+            If(cache.response.valid,
+                request.ready.eq(1),
+                If(cache.response.error,
+                    NextValue(request_counter, 0),
+                    NextValue(request_pending, 1),
+                    NextValue(request_ip_address, request.ip_address),
+                    NextState("SEND_REQUEST")
+                ).Else(
+                    NextValue(response.mac_address, cache.response.mac_address),
+                    NextState("PRESENT_RESPONSE"),
+                )
             )
         )
         fsm.act("SEND_REQUEST",
@@ -270,24 +347,14 @@ class LiteEthARPTable(LiteXModule):
             source.request.eq(1),
             source.ip_address.eq(request_ip_address),
             If(source.ready,
-                request_counter_reset.eq(request.valid),
-                request_counter_ce.eq(1),
-                request_pending_set.eq(1),
-                request.ready.eq(1),
+                NextValue(request_counter, request_counter + 1),
                 NextState("IDLE")
             )
         )
-        self.comb += [
-            If(request_counter == max_requests - 1,
-                response.failed.eq(1),
-                request_counter_reset.eq(1),
-                request_pending_clr.eq(1)
-            ),
-            response.mac_address.eq(cached_mac_address)
-        ]
         fsm.act("PRESENT_RESPONSE",
             response.valid.eq(1),
             If(response.ready,
+                NextValue(response.failed, 0),
                 NextState("IDLE")
             )
         )
@@ -295,10 +362,10 @@ class LiteEthARPTable(LiteXModule):
 # ARP ----------------------------------------------------------------------------------------------
 
 class LiteEthARP(LiteXModule):
-    def __init__(self, mac, mac_address, ip_address, clk_freq, dw=8):
+    def __init__(self, mac, mac_address, ip_address, clk_freq, entries=1, dw=8):
         self.tx    = tx    = LiteEthARPTX(mac_address, ip_address, dw)
         self.rx    = rx    = LiteEthARPRX(mac_address, ip_address, dw)
-        self.table = table = LiteEthARPTable(clk_freq)
+        self.table = table = LiteEthARPTable(clk_freq, entries=entries)
         self.comb += [
             rx.source.connect(table.sink),
             table.source.connect(tx.sink)
