@@ -53,8 +53,8 @@ class LiteEthARPTX(LiteXModule):
         self.comb += [
             packetizer.sink.last.eq(counter == (packet_words - 1)),
             If(packetizer.sink.last,
-                packetizer.sink.last_be.eq(
-                    1 if len(packetizer.sink.last_be) == 1 else 2**(packet_length % (dw // 8) - 1)
+                packetizer.sink.last_be.eq(1 if len(packetizer.sink.last_be) == 1 else
+                                           2**(packet_length % (dw // 8) - 1)
                 ),
             ),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
@@ -97,7 +97,8 @@ class LiteEthARPDepacketizer(Depacketizer):
         Depacketizer.__init__(self,
             eth_mac_description(dw),
             eth_arp_description(dw),
-            arp_header)
+            arp_header
+        )
 
 
 class LiteEthARPRX(LiteXModule):
@@ -105,7 +106,7 @@ class LiteEthARPRX(LiteXModule):
         self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(_arp_table_layout)
 
-        # # #s
+        # # #
 
         self.depacketizer = depacketizer = LiteEthARPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
@@ -121,19 +122,19 @@ class LiteEthARPRX(LiteXModule):
         valid = Signal(reset_less=True)
         self.sync += valid.eq(
             depacketizer.source.valid &
-            (depacketizer.source.hwtype == arp_hwtype_ethernet) &
-            (depacketizer.source.proto == arp_proto_ip) &
-            (depacketizer.source.hwsize == 6) &
+            (depacketizer.source.hwtype    == arp_hwtype_ethernet) &
+            (depacketizer.source.proto     == arp_proto_ip) &
+            (depacketizer.source.hwsize    == 6) &
             (depacketizer.source.protosize == 4) &
             (depacketizer.source.target_ip == ip_address)
         )
-        reply = Signal()
+        reply   = Signal()
         request = Signal()
         self.comb += Case(depacketizer.source.opcode, {
-            arp_opcode_request: [request.eq(1)],
-            arp_opcode_reply:   [reply.eq(1)],
-            "default":          []
-            })
+            arp_opcode_request : [request.eq(1)],
+            arp_opcode_reply   : [reply.eq(1)],
+            "default"          : []
+        })
         self.comb += [
             source.ip_address.eq(depacketizer.source.sender_ip),
             source.mac_address.eq(depacketizer.source.sender_mac)
@@ -176,12 +177,24 @@ class LiteEthARPTable(LiteXModule):
         # Note: Store only 1 IP/MAC couple, can be improved with a real
         # table in the future to improve performance when packets are
         # targeting multiple destinations.
-        update = Signal()
+        cached_update      = Signal()
         cached_valid       = Signal()
         cached_ip_address  = Signal(32, reset_less=True)
         cached_mac_address = Signal(48, reset_less=True)
-        cached_timer       = WaitTimer(int(clk_freq*10))
+        cached_timer       = WaitTimer(int(100e-3*clk_freq))
         self.submodules += cached_timer
+        self.sync += [
+            If(cached_update,
+                cached_valid.eq(1),
+                cached_ip_address.eq(sink.ip_address),
+                cached_mac_address.eq(sink.mac_address),
+            ).Else(
+                If(cached_timer.done,
+                    cached_valid.eq(0)
+                )
+            )
+        ]
+        self.comb += cached_timer.wait.eq(~cached_update)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -208,20 +221,9 @@ class LiteEthARPTable(LiteXModule):
         )
         fsm.act("UPDATE_TABLE",
             NextValue(request_pending, 0),
-            update.eq(1),
+            cached_update.eq(1),
             NextState("CHECK_TABLE")
         )
-        self.sync += \
-            If(update,
-                cached_valid.eq(1),
-                cached_ip_address.eq(sink.ip_address),
-                cached_mac_address.eq(sink.mac_address),
-            ).Else(
-                If(cached_timer.done,
-                    cached_valid.eq(0)
-                )
-            )
-        self.comb += cached_timer.wait.eq(~update)
         fsm.act("CHECK_TABLE",
             If(cached_valid,
                 If(request_ip_address == cached_ip_address,
