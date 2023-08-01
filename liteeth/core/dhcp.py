@@ -575,7 +575,7 @@ class LiteEthDHCP(LiteXModule):
         ]
 
         # DHCP Timeout.
-        self.timeout_timer = timeout_timer = WaitTimer(int(timeout*sys_clk_freq))
+        self.timeout_timer = timeout_timer = WaitTimer(timeout*sys_clk_freq)
         self.comb += [
             timeout_timer.wait.eq(~self.done),
             self.timeout.eq(timeout_timer.done),

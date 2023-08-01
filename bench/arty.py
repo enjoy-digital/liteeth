@@ -95,7 +95,7 @@ class BenchSoC(SoCCore):
             self.specials += MultiReg(switches_pads, switches)
 
             # Send Switches value on UDP Streamer TX every 500ms.
-            switches_timer = WaitTimer(int(500e-3*sys_clk_freq))
+            switches_timer = WaitTimer(500e-3*sys_clk_freq)
             switches_fsm   = FSM(reset_state="IDLE")
             self.submodules += switches_timer, switches_fsm
             switches_fsm.act("IDLE",
