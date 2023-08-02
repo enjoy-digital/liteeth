@@ -196,9 +196,8 @@ class LiteEthARPCache(LiteXModule):
         mem_rd_port_ip_address  = mem_rd_port.dat_r[0:32]
         mem_rd_port_mac_address = mem_rd_port.dat_r[32:80]
 
-        # Clear Timer to clear table every 100ms.
-        self.clear_timer = WaitTimer(100e-3*clk_freq)
-        self.comb += self.clear_timer.wait.eq(~self.clear_timer.done)
+        # Clear Timer to clear table every 1s.
+        self.clear_timer = WaitTimer(1e-0*clk_freq)
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="CLEAR")
@@ -219,7 +218,8 @@ class LiteEthARPCache(LiteXModule):
                 NextValue(search_count, 0),
                 NextState("MEM_SEARCH")
             ),
-            If(self.clear_enable & self.clear_timer.done,
+            self.clear_timer.wait.eq(self.clear_enable),
+            If(self.clear_timer.done,
                 NextValue(update_count, 0),
                 NextState("CLEAR")
             )
