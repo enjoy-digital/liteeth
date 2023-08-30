@@ -31,27 +31,28 @@ class LiteEthPHYRGMIITX(LiteXModule):
         tx_data_h = []
         tx_data_l = []
         for n in range(4):
-                name    = platform.get_pin_name(pads.tx_data[n])
-                pad     = platform.get_pin_location(pads.tx_data[n])
-                io_prop = platform.get_pin_properties(pads.tx_data[n])
-                name    = f"auto_{name}"
+            name    = platform.get_pin_name(pads.tx_data[n])
+            pad     = platform.get_pin_location(pads.tx_data[n])
+            io_prop = platform.get_pin_properties(pads.tx_data[n])
+            name    = f"auto_{name}"
 
-                tx_data_h.append(platform.add_iface_io(name + "_HI"))
-                tx_data_l.append(platform.add_iface_io(name + "_LO"))
+            tx_data_h.append(platform.add_iface_io(name + "_HI"))
+            tx_data_l.append(platform.add_iface_io(name + "_LO"))
 
-                block = {
-                    "type"              : "GPIO",
-                    "mode"              : "OUTPUT",
-                    "name"              : name,
-                    "location"          : pad,
-                    "properties"        : io_prop,
-                    "size"              : 1,
-                    "out_reg"           : "DDIO_RESYNC",
-                    "out_clk_pin"       : "auto_eth_tx_clk",
-                    "is_inclk_inverted" : False,
-                    "drive_strength"    : 4 # FIXME: Get it from constraints.
-                }
-                platform.toolchain.ifacewriter.blocks.append(block)
+            block = {
+                "type"              : "GPIO",
+                "mode"              : "OUTPUT",
+                "name"              : name,
+                "location"          : pad,
+                "properties"        : io_prop,
+                "size"              : 1,
+                "out_reg"           : "DDIO_RESYNC",
+                "out_clk_pin"       : "auto_eth_tx_clk",
+                "is_inclk_inverted" : False,
+                "drive_strength"    : 4 # FIXME: Get it from constraints.
+            }
+            platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(pads.tx_data)
 
         # TX Ctl IOs.
         # -----------
@@ -99,6 +100,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 "is_inclk_inverted" : False
             }
             platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(pads.rx_data)
 
         # RX Ctl IOs.
         # -----------
@@ -144,6 +146,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
             "mode"       : "INPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(clock_pads.rx)
         self.comb += self.cd_eth_rx.clk.eq(eth_rx_clk)
 
         cmd = "create_clock -period {} auto_eth_rx_clk".format(1e9/125e6)
@@ -160,6 +163,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
             "mode"       : "OUTPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(clock_pads.tx)
 
         # TX PLL.
         # -------

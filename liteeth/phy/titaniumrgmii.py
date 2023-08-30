@@ -52,6 +52,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
                 "drive_strength"    : 4 # FIXME: Get it from constraints.
             }
             platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(pads.tx_data)
 
         # TX Ctl IOs.
         # -----------
@@ -76,6 +77,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
             "drive_strength"    : 4 # FIXME: Get it from constraints.
         }
         platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(pads.tx_ctl)
 
         # Logic.
         # ------
@@ -123,6 +125,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 "is_inclk_inverted" : False
             }
             platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(pads.rx_data)
 
         # RX Ctl IOs.
         # -----------
@@ -168,6 +171,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
             "mode"       : "INPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(clock_pads.rx)
         self.comb += self.cd_eth_rx.clk.eq(eth_rx_clk)
 
         cmd = "create_clock -period {} auto_eth_rx_clk".format(1e9/125e6)
@@ -184,6 +188,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
             "mode"       : "OUTPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
+        platform.toolchain.excluded_ios.append(clock_pads.tx)
 
         # TX PLL.
         # -------
