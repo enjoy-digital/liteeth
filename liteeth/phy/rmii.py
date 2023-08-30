@@ -104,8 +104,8 @@ class LiteEthPHYRMIICRG(LiteXModule):
 
         # When no refclk_cd, use clock_pads.ref_clk as RMII reference clock.
         if refclk_cd is None:
-            self.comb += self.cd_eth_rx.clk.eq(clock_pads.ref_clk)
-            self.comb += self.cd_eth_tx.clk.eq(clock_pads.ref_clk)
+            self.cd_eth_rx.clk = clock_pads.ref_clk
+            self.cd_eth_tx.clk = self.cd_eth_rx.clk
 
         # Else use refclk_cd as RMII reference clock (provided by user design).
         else:
