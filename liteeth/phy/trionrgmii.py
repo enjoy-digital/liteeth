@@ -38,8 +38,6 @@ class LiteEthPHYRGMIITX(LiteXModule):
                 o   = pads.tx_data[n],
                 clk = "auto_eth_tx_clk", # FIXME.
             )
-        # FIXME: Integrate in EfinixDDROutputImpl.
-        platform.toolchain.excluded_ios.append(pads.tx_data)
 
         # TX Ctl IOs.
         # -----------
@@ -52,8 +50,6 @@ class LiteEthPHYRGMIITX(LiteXModule):
                 o   = pads.tx_ctl,
                 clk = "auto_eth_tx_clk", # FIXME.
             )
-            # FIXME: Integrate in EfinixDDROutputImpl.
-            platform.toolchain.excluded_ios.append(pads.tx_ctl)
         else:
             self.sync.eth_tx += pads.tx_ctl.eq(sink.valid)
 
@@ -90,8 +86,6 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 o2  = rx_data_l[n],
                 clk = "auto_eth_rx_clk", # FIXME.
             )
-        # FIXME: Integrate in EfinixDDROutputImpl.
-        platform.toolchain.excluded_ios.append(pads.rx_data)
 
         # RX Ctl IOs.
         # -----------
