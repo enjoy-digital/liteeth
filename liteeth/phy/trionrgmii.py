@@ -12,6 +12,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
 
+from litex.build.io import DDROutput, DDRInput
 from litex.build.generic_platform import *
 from litex.soc.cores.clock import *
 
@@ -21,50 +22,53 @@ from liteeth.phy.common import *
 # LiteEth PHY RGMII TX -----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIITX(LiteXModule):
-    def __init__(self, platform, pads):
+    def __init__(self, platform, pads, ddr_tx_ctl=False):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
         # TX Data IOs.
         # ------------
-        tx_data_h = []
-        tx_data_l = []
+        tx_data_h = Signal(4)
+        tx_data_l = Signal(4)
         for n in range(4):
-            name    = platform.get_pin_name(pads.tx_data[n])
-            pad     = platform.get_pin_location(pads.tx_data[n])
-            io_prop = platform.get_pin_properties(pads.tx_data[n])
-            name    = f"auto_{name}"
-
-            tx_data_h.append(platform.add_iface_io(name + "_HI"))
-            tx_data_l.append(platform.add_iface_io(name + "_LO"))
-
-            block = {
-                "type"              : "GPIO",
-                "mode"              : "OUTPUT",
-                "name"              : name,
-                "location"          : pad,
-                "properties"        : io_prop,
-                "size"              : 1,
-                "out_reg"           : "DDIO_RESYNC",
-                "out_clk_pin"       : "auto_eth_tx_clk",
-                "is_inclk_inverted" : False,
-                "drive_strength"    : 4 # FIXME: Get it from constraints.
-            }
-            platform.toolchain.ifacewriter.blocks.append(block)
+            self.specials += DDROutput(
+                i1  = tx_data_h[n],
+                i2  = tx_data_l[n],
+                o   = pads.tx_data[n],
+                clk = "auto_eth_tx_clk", # FIXME.
+            )
+        # FIXME: Integrate in EfinixDDROutputImpl.
         platform.toolchain.excluded_ios.append(pads.tx_data)
 
         # TX Ctl IOs.
         # -----------
-        self.sync.eth_tx += pads.tx_ctl.eq(sink.valid)
+        if ddr_tx_ctl:
+            tx_ctl_h = Signal()
+            tx_ctl_l = Signal()
+            self.specials += DDROutput(
+                i1  = tx_ctl_h,
+                i2  = tx_ctl_l,
+                o   = pads.tx_ctl,
+                clk = "auto_eth_tx_clk", # FIXME.
+            )
+            # FIXME: Integrate in EfinixDDROutputImpl.
+            platform.toolchain.excluded_ios.append(pads.tx_ctl)
+        else:
+            self.sync.eth_tx += pads.tx_ctl.eq(sink.valid)
 
         # Logic.
         # ------
         self.comb += sink.ready.eq(1)
+        if ddr_tx_ctl:
+            self.sync += [
+                tx_ctl_h.eq(sink.valid),
+                tx_ctl_l.eq(sink.valid),
+            ]
         for n in range(4):
             self.sync += [
                 tx_data_h[n].eq(sink.data[n + 0]),
-                tx_data_l[n].eq(sink.data[n + 4])
+                tx_data_l[n].eq(sink.data[n + 4]),
             ]
 
 # LiteEth PHY RGMII RX -----------------------------------------------------------------------------
@@ -77,29 +81,16 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 
         # RX Data IOs.
         # ------------
-        rx_data_h = []
-        rx_data_l = []
+        rx_data_h = Signal(4)
+        rx_data_l = Signal(4)
         for n in range(4):
-            name    = platform.get_pin_name(pads.rx_data[n])
-            pad     = platform.get_pin_location(pads.rx_data[n])
-            io_prop = platform.get_pin_properties(pads.rx_data[n])
-            name    = f"auto_{name}"
-
-            rx_data_h.append(platform.add_iface_io(name + "_HI"))
-            rx_data_l.append(platform.add_iface_io(name + "_LO"))
-
-            block = {
-                "type"              : "GPIO",
-                "mode"              : "INPUT",
-                "name"              : name,
-                "location"          : pad,
-                "properties"        : io_prop,
-                "size"              : 1,
-                "in_reg"            : "DDIO_RESYNC",
-                "in_clk_pin"        : "auto_eth_rx_clk",
-                "is_inclk_inverted" : False
-            }
-            platform.toolchain.ifacewriter.blocks.append(block)
+            self.specials += DDRInput(
+                i   = pads.rx_data[n],
+                o1  = rx_data_h[n],
+                o2  = rx_data_l[n],
+                clk = "auto_eth_rx_clk", # FIXME.
+            )
+        # FIXME: Integrate in EfinixDDROutputImpl.
         platform.toolchain.excluded_ios.append(pads.rx_data)
 
         # RX Ctl IOs.
@@ -117,7 +108,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         self.comb += last.eq(~pads.rx_ctl & rx_ctl_d)
         self.sync += [
             source.valid.eq(rx_ctl_d),
-            source.data.eq(rx_data)
+            source.data.eq(rx_data),
         ]
         self.comb += source.last.eq(last)
 
