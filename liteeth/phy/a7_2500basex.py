@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2023 Sergey Razumov <cyntem@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -750,8 +751,6 @@ class A7_2500BASEX(LiteXModule):
         cdr_lock_time = round(sys_clk_freq*50e3/(312.5e6))
         cdr_lock_counter = Signal(max=cdr_lock_time+1)
         cdr_locked = Signal()
-        
-        
         self.sync += [
             If(rx_reset,
                 cdr_locked.eq(0),
