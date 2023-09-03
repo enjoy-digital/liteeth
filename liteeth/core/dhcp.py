@@ -42,19 +42,19 @@ DHCP_TX_REQUEST  = 0b1
 DHCP_RX_OFFER = 0b0
 DHCP_RX_ACK   = 0b1
 
-DHCP_OPTTYP_MESSAGE_TYPE = 53
+DHCP_OPTTYP_MESSAGE_TYPE          = 53
 DHCP_OPTVAL_MESSAGE_TYPE_DISCOVER = 1
-DHCP_OPTVAL_MESSAGE_TYPE_OFFER = 2
-DHCP_OPTVAL_MESSAGE_TYPE_REQUEST = 3
-DHCP_OPTVAL_MESSAGE_TYPE_ACK = 5
-DHCP_OPTTYP_REQ_IP_ADDRESS = 50
-DHCP_OPTTYP_SRV_IP_ADDRESS = 54
-DHCP_OPTTYP_LEASE_TIME = 51
-DHCP_OPTTYP_CLIENT_IDENTIFIER = 61
-DHCP_OPTTYP_PARAM_REQUEST_LIST = 55
-DHCP_OPTVAL_PARAM_SUBNET_MASK = 3
-DHCP_OPTVAL_PARAM_ROUTER = 1
-DHCP_OPTTYP_END = 255
+DHCP_OPTVAL_MESSAGE_TYPE_OFFER    = 2
+DHCP_OPTVAL_MESSAGE_TYPE_REQUEST  = 3
+DHCP_OPTVAL_MESSAGE_TYPE_ACK      = 5
+DHCP_OPTTYP_REQ_IP_ADDRESS        = 50
+DHCP_OPTTYP_SRV_IP_ADDRESS        = 54
+DHCP_OPTTYP_LEASE_TIME            = 51
+DHCP_OPTTYP_CLIENT_IDENTIFIER     = 61
+DHCP_OPTTYP_PARAM_REQUEST_LIST    = 55
+DHCP_OPTVAL_PARAM_SUBNET_MASK     = 3
+DHCP_OPTVAL_PARAM_ROUTER          = 1
+DHCP_OPTTYP_END                   = 255
 
 # DHCP TX ------------------------------------------------------------------------------------------
 
@@ -76,17 +76,13 @@ class LiteEthDHCPTX(LiteXModule):
         # Signals.
         # --------
 
-        # We build a counter that underflows when it is finished
-        # This way we can just check the MSB of counter which saves
-        # a full cmp
-        padding_len = (8 + DHCP_SERVER_NAME_LENGTH + DHCP_BOOT_FILE_NAME_LENGTH) // 4
-        count = Signal(max=padding_len)
-
+        padding_len    = (8 + DHCP_SERVER_NAME_LENGTH + DHCP_BOOT_FILE_NAME_LENGTH) // 4
+        count          = Signal(max=padding_len)
         longest_packet = max(DHCP_FIXED_DISCOVER_LENGTH, DHCP_FIXED_REQUEST_LENGTH) // 4
-        length = Signal(max=longest_packet)
+        length         = Signal(max=longest_packet)
         self.comb += Case(self.type, {
             DHCP_TX_DISCOVER : length.eq(DHCP_FIXED_DISCOVER_LENGTH // 4),
-            DHCP_TX_REQUEST  : length.eq(DHCP_FIXED_REQUEST_LENGTH // 4),
+            DHCP_TX_REQUEST  : length.eq(DHCP_FIXED_REQUEST_LENGTH  // 4),
         })
 
         # Static Assign.
@@ -134,28 +130,28 @@ class LiteEthDHCPTX(LiteXModule):
         )
         fsm.act("CLIENT-IP-ADDRESS",
             udp_port.sink.valid.eq(1),
-            udp_port.sink.data.eq(0x00000000), # Client IP: 0.0.0.0
+            udp_port.sink.data.eq(0x00000000), # Client IP: 0.0.0.0.
             If(udp_port.sink.ready,
                 NextState("YOUR-IP-ADDRESS")
             )
         )
         fsm.act("YOUR-IP-ADDRESS",
             udp_port.sink.valid.eq(1),
-            udp_port.sink.data.eq(0x00000000), # Your IP: 0.0.0.0
+            udp_port.sink.data.eq(0x00000000), # Your IP: 0.0.0.0.
             If(udp_port.sink.ready,
                 NextState("SERVER-IP-ADDRESS")
             )
         )
         fsm.act("SERVER-IP-ADDRESS",
             udp_port.sink.valid.eq(1),
-            udp_port.sink.data.eq(0x00000000), # Server IP: 0.0.0.0
+            udp_port.sink.data.eq(0x00000000), # Server IP: 0.0.0.0.
             If(udp_port.sink.ready,
                 NextState("GATEWAY-IP-ADDRESS")
             )
         )
         fsm.act("GATEWAY-IP-ADDRESS",
             udp_port.sink.valid.eq(1),
-            udp_port.sink.data.eq(0x00000000), # Gateway IP: 0.0.0.0
+            udp_port.sink.data.eq(0x00000000), # Gateway IP: 0.0.0.0.
             If(udp_port.sink.ready,
                 NextState("CLIENT-MAC-ADDRESS-MSB")
             )
@@ -181,10 +177,10 @@ class LiteEthDHCPTX(LiteXModule):
                 NextState("PADDING")
             )
         )
-        # Includes
-        #   - Client MAC padding
-        #   - Server name
-        #   - BOOT-FILE-NAME
+        # Padding, includes:
+        #  - Client MAC padding.
+        #  - Server name (Unused).
+        #  - BOOT-FILE-NAME (Unused).
         fsm.act("PADDING",
             udp_port.sink.valid.eq(1),
             udp_port.sink.data.eq(0x00000000),
@@ -206,10 +202,10 @@ class LiteEthDHCPTX(LiteXModule):
             )
         )
         # Options.
-        # -----------------
+        # --------
         fsm.act("OPTIONS-0",
             udp_port.sink.valid.eq(1),
-            # DHCP Message Type: Discover
+            # DHCP Message Type: Discover.
             udp_port.sink.data[ 0: 8].eq(DHCP_OPTTYP_MESSAGE_TYPE),
             udp_port.sink.data[ 8:16].eq(0x01),
             If(self.type == DHCP_TX_DISCOVER,
@@ -217,7 +213,7 @@ class LiteEthDHCPTX(LiteXModule):
             ).Elif(self.type == DHCP_TX_REQUEST,
                 udp_port.sink.data[16:24].eq(DHCP_OPTVAL_MESSAGE_TYPE_REQUEST),
             ),
-            # Client Identifier
+            # Client Identifier.
             udp_port.sink.data[24:32].eq(DHCP_OPTTYP_CLIENT_IDENTIFIER),
             If(udp_port.sink.ready,
                 NextState("OPTIONS-1")
@@ -225,7 +221,7 @@ class LiteEthDHCPTX(LiteXModule):
         )
         fsm.act("OPTIONS-1",
             udp_port.sink.valid.eq(1),
-            # Client Identifier
+            # Client Identifier.
             udp_port.sink.data[ 0: 8].eq(0x06),
             udp_port.sink.data[ 8:16].eq(self.mac_address[40:48]),
             udp_port.sink.data[16:24].eq(self.mac_address[32:40]),
@@ -236,11 +232,11 @@ class LiteEthDHCPTX(LiteXModule):
         )
         fsm.act("OPTIONS-2",
             udp_port.sink.valid.eq(1),
-            # Client Identifier
+            # Client Identifier.
             udp_port.sink.data[ 0: 8].eq(self.mac_address[16:24]),
             udp_port.sink.data[ 8:16].eq(self.mac_address[ 8:16]),
             udp_port.sink.data[16:24].eq(self.mac_address[ 0: 8]),
-            # Parameter Request List: Subnet Mask, Router
+            # Parameter Request List: Subnet Mask, Router.
             udp_port.sink.data[24:32].eq(DHCP_OPTTYP_PARAM_REQUEST_LIST),
             If(udp_port.sink.ready,
                 NextState("OPTIONS-3")
@@ -248,7 +244,7 @@ class LiteEthDHCPTX(LiteXModule):
         )
         fsm.act("OPTIONS-3",
             udp_port.sink.valid.eq(1),
-            # Parameter Request List: Subnet Mask, Router
+            # Parameter Request List: Subnet Mask, Router.
             udp_port.sink.data[ 0: 8].eq(0x02),
             udp_port.sink.data[ 8:16].eq(DHCP_OPTVAL_PARAM_SUBNET_MASK),
             udp_port.sink.data[16:24].eq(DHCP_OPTVAL_PARAM_ROUTER),
@@ -262,10 +258,10 @@ class LiteEthDHCPTX(LiteXModule):
                 If(udp_port.sink.ready, NextState("OPTIONS-4"))
             )
         )
-        # These options are only transmitted for DHCP REQUEST
+        # These options are only transmitted for DHCP REQUEST.
         fsm.act("OPTIONS-4",
             udp_port.sink.valid.eq(1),
-            # Requested IP Address
+            # Requested IP Address.
             udp_port.sink.data[ 0: 8].eq(0x04),
             udp_port.sink.data[ 8:16].eq(self.offered_ip_address[24:32]),
             udp_port.sink.data[16:24].eq(self.offered_ip_address[16:24]),
@@ -276,9 +272,9 @@ class LiteEthDHCPTX(LiteXModule):
         )
         fsm.act("OPTIONS-5",
             udp_port.sink.valid.eq(1),
-            # Requested IP Address
+            # Requested IP Address.
             udp_port.sink.data[ 0: 8].eq(self.offered_ip_address[0:8]),
-            # Server IP Address
+            # Server IP Address.
             udp_port.sink.data[ 8:16].eq(DHCP_OPTTYP_SRV_IP_ADDRESS),
             udp_port.sink.data[16:24].eq(0x04),
             udp_port.sink.data[24:32].eq(self.server_ip_address[24:32]),
@@ -289,11 +285,11 @@ class LiteEthDHCPTX(LiteXModule):
         fsm.act("OPTIONS-6",
             udp_port.sink.last.eq(1),
             udp_port.sink.valid.eq(1),
-            # Server IP Address
+            # Server IP Address.
             udp_port.sink.data[ 0: 8].eq(self.server_ip_address[16:24]),
             udp_port.sink.data[ 8:16].eq(self.server_ip_address[ 8:16]),
             udp_port.sink.data[16:24].eq(self.server_ip_address[ 0: 8]),
-            # Client Identifier
+            # Client Identifier.
             udp_port.sink.data[24:32].eq(DHCP_OPTTYP_END),
             If(udp_port.sink.ready,
                 NextState("DONE")
@@ -322,14 +318,13 @@ class LiteEthDHCPRX(LiteXModule):
         self.server_ip_address  = Signal(32) # o
         self.offered_ip_address = Signal(48) # o
 
-        # TODO: Parse DHCP Options
+        # TODO: Parse DHCP Options.
         # self.gateway_ip_address = Signal(32)
         # self.subnet_mask        = Signal(32)
         # self.router             = Signal(32)
         # self.lease_time         = Signal(32)
 
         # # #
-
 
         # Common FSM.
         # -----------
