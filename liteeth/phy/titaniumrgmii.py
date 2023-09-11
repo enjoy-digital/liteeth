@@ -22,7 +22,7 @@ from liteeth.phy.common import *
 # LiteEth PHY RGMII TX -----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIITX(LiteXModule):
-    def __init__(self, platform, pads):
+    def __init__(self, platform, pads, n=0):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -36,7 +36,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
                 i1  = tx_data_h[n],
                 i2  = tx_data_l[n],
                 o   = pads.tx_data[n],
-                clk = "auto_eth_tx_clk", # FIXME: Use Clk Signal.
+                clk = f"auto_eth{n}_tx_clk", # FIXME: Use Clk Signal.
             )
 
         # TX Ctl IOs.
@@ -47,7 +47,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
             i1  = tx_ctl_h,
             i2  = tx_ctl_l,
             o   = pads.tx_ctl,
-            clk = "auto_eth_tx_clk", # FIXME: Use Clk Signal.
+            clk = f"auto_eth{n}_tx_clk", # FIXME: Use Clk Signal.
         )
 
         # Logic.
@@ -66,7 +66,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
 # LiteEth PHY RGMII RX -----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIIRX(LiteXModule):
-    def __init__(self, platform, pads):
+    def __init__(self, platform, pads, n=0):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -80,7 +80,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 i   = pads.rx_data[n],
                 o1  = rx_data_h[n],
                 o2  = rx_data_l[n],
-                clk = "auto_eth_rx_clk", # FIXME: Use Clk Signal.
+                clk = f"auto_eth{n}_rx_clk", # FIXME: Use Clk Signal.
             )
 
         # RX Ctl IOs.
@@ -91,7 +91,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
             i   = pads.rx_ctl,
             o1  = rx_ctl_h,
             o2  = rx_ctl_l,
-            clk = "auto_eth_rx_clk", # FIXME: Use Clk Signal.
+            clk = f"auto_eth{n}_rx_clk", # FIXME: Use Clk Signal.
         )
 
         rx_ctl   = rx_ctl_h
@@ -116,7 +116,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 # LiteEth PHY RGMII CRG ----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIICRG(LiteXModule):
-    def __init__(self, platform, clock_pads, with_hw_init_reset, hw_reset_cycles=256):
+    def __init__(self, platform, clock_pads, with_hw_init_reset, hw_reset_cycles=256, n=0):
         self._reset = CSRStorage()
 
         # # #
@@ -128,7 +128,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         # RX Clk.
         # -------
-        eth_rx_clk = platform.add_iface_io("auto_eth_rx_clk_in")
+        eth_rx_clk = platform.add_iface_io(f"auto_eth{n}_rx_clk_in")
         block = {
             "type"       : "GPIO",
             "size"       : 1,
@@ -147,7 +147,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
             "size"       : 1,
             "location"   : platform.get_pin_location(clock_pads.tx)[0],
             "properties" : platform.get_pin_properties(clock_pads.tx),
-            "name"       : "auto_eth_tx_clk_delayed",
+            "name"       : f"auto_eth{n}_tx_clk_delayed",
             "mode"       : "OUTPUT_CLK"
         }
         platform.toolchain.ifacewriter.blocks.append(block)
@@ -155,11 +155,11 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         # TX PLL.
         # -------
-        self.pll = pll = TITANIUMPLL(platform, n=1) # FIXME: Add Auto-Numbering.
-        pll.register_clkin(None,          freq=125e6,           name="auto_eth_rx_clk_in")
-        pll.create_clkout(self.cd_eth_rx, freq=125e6, phase=0,  name="auto_eth_rx_clk", with_reset=False)
-        pll.create_clkout(self.cd_eth_tx, freq=125e6, phase=0,  name="auto_eth_tx_clk", with_reset=False)
-        pll.create_clkout(None,           freq=125e6, phase=90, name="auto_eth_tx_clk_delayed")
+        self.pll = pll = TITANIUMPLL(platform)
+        pll.register_clkin(None,          freq=125e6,           name=f"auto_eth{n}_rx_clk_in")
+        pll.create_clkout(self.cd_eth_rx, freq=125e6, phase=0,  name=f"auto_eth{n}_rx_clk", with_reset=False)
+        pll.create_clkout(self.cd_eth_tx, freq=125e6, phase=0,  name=f"auto_eth{n}_tx_clk", with_reset=False)
+        pll.create_clkout(None,           freq=125e6, phase=90, name=f"auto_eth{n}_tx_clk_delayed")
 
         # Reset.
         # ------
@@ -179,14 +179,16 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 # LiteEth PHY RGMII --------------------------------------------------------------------------------
 
 class LiteEthPHYRGMII(LiteXModule):
+    n           = 0
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
     def __init__(self, platform, clock_pads, pads, with_hw_init_reset=True, hw_reset_cycles=256):
-        self.crg = LiteEthPHYRGMIICRG(platform, clock_pads, with_hw_init_reset, hw_reset_cycles)
-        self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(platform, pads))
-        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(platform, pads))
+        self.crg = LiteEthPHYRGMIICRG(platform, clock_pads, with_hw_init_reset, hw_reset_cycles, n=self.n)
+        self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(platform, pads, n=self.n))
+        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(platform, pads, n=self.n))
         self.sink, self.source = self.tx.sink, self.rx.source
+        LiteEthPHYRGMII.n += 1 # FIXME: Improve.
 
         if hasattr(pads, "mdc"):
             self.mdio = LiteEthPHYMDIO(pads)
