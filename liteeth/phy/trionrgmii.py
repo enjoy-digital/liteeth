@@ -31,11 +31,11 @@ class LiteEthPHYRGMIITX(LiteXModule):
         # ------------
         tx_data_h = Signal(4)
         tx_data_l = Signal(4)
-        for n in range(4):
+        for i in range(4):
             self.specials += DDROutput(
-                i1  = tx_data_h[n],
-                i2  = tx_data_l[n],
-                o   = pads.tx_data[n],
+                i1  = tx_data_h[i],
+                i2  = tx_data_l[i],
+                o   = pads.tx_data[i],
                 clk = f"auto_eth{n}_tx_clk", # FIXME: Use Clk Signal.
             )
 
@@ -57,10 +57,10 @@ class LiteEthPHYRGMIITX(LiteXModule):
             tx_ctl_h.eq(sink.valid),
             tx_ctl_l.eq(sink.valid),
         ]
-        for n in range(4):
+        for i in range(4):
             self.sync += [
-                tx_data_h[n].eq(sink.data[n + 0]),
-                tx_data_l[n].eq(sink.data[n + 4]),
+                tx_data_h[i].eq(sink.data[i + 0]),
+                tx_data_l[i].eq(sink.data[i + 4]),
             ]
 
 # LiteEth PHY RGMII RX -----------------------------------------------------------------------------
@@ -75,11 +75,11 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         # ------------
         rx_data_h = Signal(4)
         rx_data_l = Signal(4)
-        for n in range(4):
+        for i in range(4):
             self.specials += DDRInput(
-                i   = pads.rx_data[n],
-                o1  = rx_data_h[n],
-                o2  = rx_data_l[n],
+                i   = pads.rx_data[i],
+                o1  = rx_data_h[i],
+                o2  = rx_data_l[i],
                 clk = f"auto_eth{n}_rx_clk", # FIXME: Use Clk Signal.
             )
 
@@ -103,9 +103,9 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         last    = Signal()
         rx_data_lsb = Signal(4)
         rx_data_msb = Signal(4)
-        for n in range(4):
-            self.comb += rx_data_msb[n + 0].eq(rx_data_l[n])
-            self.sync += rx_data_lsb[n + 0].eq(rx_data_h[n])
+        for i in range(4):
+            self.comb += rx_data_msb[i + 0].eq(rx_data_l[i])
+            self.sync += rx_data_lsb[i + 0].eq(rx_data_h[i])
         self.sync += [
             last.eq(~rx_ctl & rx_ctl_d),
             source.valid.eq(rx_ctl_d),
