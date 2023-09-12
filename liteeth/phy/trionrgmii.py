@@ -12,7 +12,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
 
-from litex.build.io import DDROutput, DDRInput
+from litex.build.io import ClkInput, ClkOutput, DDROutput, DDRInput
 from litex.build.generic_platform import *
 from litex.soc.cores.clock import *
 
@@ -128,30 +128,17 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         # RX Clk.
         # -------
-        eth_rx_clk = platform.add_iface_io(f"auto_eth{n}_rx_clk_in")
-        block = {
-            "type"       : "GPIO",
-            "size"       : 1,
-            "location"   : platform.get_pin_location(clock_pads.rx)[0],
-            "properties" : platform.get_pin_properties(clock_pads.rx),
-            "name"       : platform.get_pin_name(eth_rx_clk),
-            "mode"       : "INPUT_CLK"
-        }
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(clock_pads.rx)
+        self.specials += ClkInput(
+            i = clock_pads.rx,
+            o = f"auto_eth{n}_rx_clk_in", # FIXME: Use Clk Signal.
+        )
 
         # TX Clk.
         # -------
-        block = {
-            "type"       : "GPIO",
-            "size"       : 1,
-            "location"   : platform.get_pin_location(clock_pads.tx)[0],
-            "properties" : platform.get_pin_properties(clock_pads.tx),
-            "name"       : f"auto_eth{n}_tx_clk_delayed",
-            "mode"       : "OUTPUT_CLK"
-        }
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(clock_pads.tx)
+        self.specials += ClkOutput(
+            i = f"auto_eth{n}_tx_clk_delayed", # FIXME: Use Clk Signal.
+            o = clock_pads.tx
+        )
 
         # TX PLL.
         # -------
