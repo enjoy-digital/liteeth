@@ -9,11 +9,11 @@ device: LFE5U-25F-6BG256C
 vendor: lattice
 toolchain: trellis
 # Core -------------------------------------------------------------------------
-clk_freq: 125e6
+clk_freq: 50e6
 core: udp
 
 mac_address: 0x10e2d5000000
-ip_address: 172.30.0.1
+dhcp: True
 
 tx_cdc_depth: 16
 tx_cdc_buffered: True

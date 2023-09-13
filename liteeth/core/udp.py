@@ -11,6 +11,7 @@ from litex.soc.interconnect import stream
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 from liteeth.packet import Depacketizer, Packetizer
+from liteeth.core.dhcp import DHCP_CLIENT_PORT, LiteEthDHCP
 
 # UDP Crossbar -------------------------------------------------------------------------------------
 
@@ -231,7 +232,7 @@ class LiteEthUDPRX(LiteXModule):
 # UDP ----------------------------------------------------------------------------------------------
 
 class LiteEthUDP(LiteXModule):
-    def __init__(self, ip, ip_address, dw=8):
+    def __init__(self, ip, ip_address, mac_address, clk_freq, with_dhcp = False, dw=8):
         self.tx = tx = LiteEthUDPTX(ip_address, dw)
         self.rx = rx = LiteEthUDPRX(ip_address, dw)
         ip_port = ip.crossbar.get_port(udp_protocol, dw)
@@ -244,3 +245,11 @@ class LiteEthUDP(LiteXModule):
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)
         ]
+
+        if with_dhcp:
+            dhcp_udp_port = self.crossbar.get_port(DHCP_CLIENT_PORT, dw=32, cd="sys")
+            self.dhcp = dhcp = LiteEthDHCP(dhcp_udp_port, clk_freq)
+            self.comb += [
+                dhcp.mac_address.eq(mac_address),
+                ip_address.eq(dhcp.ip_address),
+            ]

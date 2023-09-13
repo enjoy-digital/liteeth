@@ -81,6 +81,7 @@ class LiteEthIPCore(Module, AutoCSR):
 class LiteEthUDPIPCore(LiteEthIPCore):
     def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True,
+        with_dhcp         = False,
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
@@ -90,9 +91,15 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         interface         = "crossbar",
         endianness        = "big",
     ):
+        # Ensure either IP is external or DHCP is used
+        assert((ip_address is None) == with_dhcp)
+
         # Parameters.
         # -----------
-        ip_address = convert_ip(ip_address)
+        if ip_address is not None:
+            ip_address = convert_ip(ip_address)
+        else:
+            ip_address = Signal(32)
 
         # Core: MAC + ARP + IP + (ICMP).
         # ------------------------------
@@ -113,10 +120,13 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
         )
-        # UDP.
-        # ----
+        # UDP + (DHCP).
+        # -------------
         self.submodules.udp = LiteEthUDP(
-            ip         = self.ip,
-            ip_address = ip_address,
-            dw         = dw,
+            ip          = self.ip,
+            mac_address = mac_address,
+            ip_address  = ip_address,
+            clk_freq    = clk_freq,
+            with_dhcp   = with_dhcp,
+            dw          = dw,
         )
