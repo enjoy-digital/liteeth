@@ -3,19 +3,17 @@
 #
 # Copyright (c) 2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V.
+# Copyright (c) 2023 Rowan Goemans <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 """
 DHCP
 
-Minimal DHCP (IPV4) support for LiteEth.
+DHCP (IPV4) support for LiteEth.
 
 Limitations/TODOs:
-- No lease time parsing/support, user logic should consider it short (or known from server) and
-issue a DHCP request regularly. Limitations is due to 32-bit data-path and parsing. Switching to a
-8-bit data-path for DHCP options would allow supporting it more easily.
+- Router(gateway) and subnet mask are parsed out of the DHCP options but as of now unused.
 - Additional checks could be made on RX (see FIXMEs, but cost logic on FPGA).
-- Define more DHCP constants and use them in the code.
 """
 
 from migen import *
@@ -30,9 +28,10 @@ from liteeth.common import *
 DHCP_SERVER_PORT = 67
 DHCP_CLIENT_PORT = 68
 
-DHCP_FIXED_HEADER_LENGTH   = 236
-DHCP_FIXED_DISCOVER_LENGTH = DHCP_FIXED_HEADER_LENGTH + 20
-DHCP_FIXED_REQUEST_LENGTH  = DHCP_FIXED_HEADER_LENGTH + 32
+DHCP_MAX_PACKET_LENGTH     = 574
+DHCP_FIXED_HEADER_LENGTH   = 240
+DHCP_FIXED_DISCOVER_LENGTH = DHCP_FIXED_HEADER_LENGTH + 16
+DHCP_FIXED_REQUEST_LENGTH  = DHCP_FIXED_HEADER_LENGTH + 28
 DHCP_SERVER_NAME_LENGTH    = 64
 DHCP_BOOT_FILE_NAME_LENGTH = 128
 
@@ -54,6 +53,7 @@ DHCP_OPTTYP_CLIENT_IDENTIFIER     = 61
 DHCP_OPTTYP_PARAM_REQUEST_LIST    = 55
 DHCP_OPTVAL_PARAM_SUBNET_MASK     = 3
 DHCP_OPTVAL_PARAM_ROUTER          = 1
+DHCP_OPTTYP_PAD                   = 0
 DHCP_OPTTYP_END                   = 255
 
 # DHCP TX ------------------------------------------------------------------------------------------
@@ -304,11 +304,223 @@ class LiteEthDHCPTX(LiteXModule):
 
 # DHCP Response/ACK --------------------------------------------------------------------------------
 
+def eth_dhcp_opt_description(dw):
+    assert(dw % 8 == 0)
+
+    payload_layout = [("data", dw),]
+    byte_count = dw // 8
+    if byte_count > 1:
+        payload_layout.append(("last_be", byte_count))
+
+    return EndpointDescription(payload_layout)
+
+# When downconverting from 32-bit to 8-bit we need to remove the last_be signal
+# and set the last signal on the correct byte
+class LiteEthDHCPOptDownConverter(LiteXModule):
+    def __init__(self):
+        self.source  = source = stream.Endpoint(eth_dhcp_opt_description(8))
+        self.sink    = sink   = stream.Endpoint(eth_dhcp_opt_description(32))
+
+        data         = Signal(32)
+        byte_en      = Signal(4)
+        latched_be   = Signal(4)
+        latched_last = Signal()
+        last_byte    = Signal()
+
+        self.comb += [
+            # @Florent: Is this necessary? Can we assume last_be is 0b1000 For non-last words?
+            If(sink.last,
+                byte_en.eq(sink.last_be),
+            ).Else(
+                byte_en.eq(0b1000),
+            ),
+            last_byte.eq(latched_be[0]),
+            source.data.eq(data[0:8]),
+            source.last.eq(last_byte & latched_last),
+        ]
+
+        self.fsm = fsm = FSM(reset_state="AWAIT-WORD")
+        fsm.act("AWAIT-WORD",
+            sink.ready.eq(1),
+            source.valid.eq(0),
+            NextValue(data, sink.data),
+            NextValue(latched_last, sink.last),
+            NextValue(latched_be, byte_en),
+            If(sink.valid,
+                NextState("COPY")
+            )
+        )
+
+        fsm.act("COPY",
+            sink.ready.eq(source.ready & last_byte),
+            source.valid.eq(1),
+            If(source.ready,
+                NextValue(data, Cat(data[8:32], 0)),
+                NextValue(latched_be, Cat(latched_be[1:4], 0)),
+                If(last_byte,
+                    NextValue(data, sink.data),
+                    NextValue(latched_last, sink.last),
+                    NextValue(latched_be, byte_en),
+                    NextState("AWAIT-WORD"),
+                    If(sink.valid,
+                        NextState("COPY"),
+                    )
+                )
+            )
+        )
+
+class LiteEthDHCPOptEngine(LiteXModule):
+    def __init__(self):
+        self.sink   = sink = stream.Endpoint(eth_udp_user_description(32))
+
+        self.done              = Signal() # o
+        self.error             = Signal() # o
+        # DHCP Options outputs we care about
+        # The gateway, subnet and lease_time are resetless
+        # This is done because when Idling you don't
+        # want to lose the old state
+        self.type              = Signal()
+        self.gateway           = Signal(32, reset_less=True)
+        self.subnet_mask       = Signal(32, reset_less=True)
+        self.lease_time        = Signal(32, reset_less=True)
+        type_valid             = Signal()
+        gateway_valid          = Signal()
+        subnet_mask_valid      = Signal()
+        lease_time_valid       = Signal()
+
+        # this ensure we can hold the entire DHCP Options in FIFO
+        depth     = (DHCP_MAX_PACKET_LENGTH - DHCP_FIXED_HEADER_LENGTH) // 4
+        self.fifo = fifo = stream.SyncFIFO(eth_dhcp_opt_description(32), depth=depth, buffered=True)
+        self.conv = conv = LiteEthDHCPOptDownConverter()
+
+        self.comb += [
+            self.sink.connect(fifo.sink, omit = {
+                "error",
+                "src_port",
+                "dst_port",
+                "ip_address",
+                "length",
+            }),
+            fifo.source.connect(conv.sink),
+        ]
+
+        self.comb += conv.source.ready.eq(1)
+        byte_stream = conv.source
+
+        found_last    = Signal()
+        found_end     = Signal()
+
+        current_opt   = Signal(8)
+        payload       = Signal(32)
+        payload_valid = Signal()
+
+        length        = Signal(8)
+        payload_done  = Signal()
+
+        self.comb += [
+            self.done.eq(found_last | found_end),
+            self.error.eq(~(found_end & type_valid & lease_time_valid & gateway_valid & subnet_mask_valid)),
+            payload_done.eq(length == 1)
+        ]
+
+        self.sync += If(byte_stream.valid,
+            found_last.eq(found_last | byte_stream.last)
+        )
+
+        self.sync += If(payload_valid,
+            Case(current_opt, {
+                DHCP_OPTTYP_MESSAGE_TYPE: [
+                    type_valid.eq(0),
+                    If(payload[24:32] == DHCP_OPTVAL_MESSAGE_TYPE_OFFER,
+                        type_valid.eq(1),
+                        self.type.eq(DHCP_RX_OFFER),
+                    ).Elif(payload[24:32] == DHCP_OPTVAL_MESSAGE_TYPE_ACK,
+                        type_valid.eq(1),
+                        self.type.eq(DHCP_RX_ACK),
+                    )
+                ],
+                DHCP_OPTVAL_PARAM_SUBNET_MASK: [
+                    subnet_mask_valid.eq(1),
+                    self.subnet_mask[24:32].eq(payload[ 0: 8]),
+                    self.subnet_mask[16:24].eq(payload[ 8:16]),
+                    self.subnet_mask[ 8:16].eq(payload[16:24]),
+                    self.subnet_mask[ 0: 8].eq(payload[24:32]),
+                ],
+                DHCP_OPTVAL_PARAM_ROUTER: [
+                    gateway_valid.eq(1),
+                    self.gateway[24:32].eq(payload[ 0: 8]),
+                    self.gateway[16:24].eq(payload[ 8:16]),
+                    self.gateway[ 8:16].eq(payload[16:24]),
+                    self.gateway[ 0: 8].eq(payload[24:32]),
+                ],
+                DHCP_OPTTYP_LEASE_TIME: [
+                    lease_time_valid.eq(1),
+                    self.lease_time[24:32].eq(payload[ 0: 8]),
+                    self.lease_time[16:24].eq(payload[ 8:16]),
+                    self.lease_time[ 8:16].eq(payload[16:24]),
+                    self.lease_time[ 0: 8].eq(payload[24:32]),
+                ],
+            }),
+        )
+
+        self.fsm = fsm = FSM(reset_state="HEADER")
+        fsm.act("HEADER",
+            NextValue(payload_valid, 0),
+            NextValue(current_opt, byte_stream.data),
+            If(byte_stream.valid,
+                Case(byte_stream.data, {
+                    DHCP_OPTTYP_PAD: [
+                        NextState("HEADER"),
+                    ],
+                    DHCP_OPTTYP_END: [
+                        NextValue(found_end, 1),
+                        NextState("END"),
+                    ],
+                    "default": [
+                        NextState("LEN"),
+                    ]
+                })
+            )
+        )
+        fsm.act("LEN",
+            If(byte_stream.valid,
+                NextValue(length, byte_stream.data),
+                NextValue(payload, 0b00000001_00000000_00000000_00000000),
+                If(byte_stream.data == 0,
+                    NextState("HEADER")
+                ).Else(
+                    NextState("PAYLOAD")
+                )
+            )
+        )
+        fsm.act("PAYLOAD",
+            If(byte_stream.valid,
+                NextValue(payload, Cat(payload[8:32], byte_stream.data)),
+                NextValue(length, length - 1),
+                NextValue(payload_valid, payload_done | payload[0]),
+                If(payload_done,
+                    NextState("HEADER")
+                ).Elif(payload[0],
+                    NextState("SKIP")
+                )
+            )
+        )
+        fsm.act("SKIP",
+            If(byte_stream.valid,
+                NextValue(length, length - 1),
+                If(payload_done,
+                    NextState("HEADER")
+                )
+            )
+        )
+        # Do nothing end state
+        fsm.act("END", NextState("END"))
+
 class LiteEthDHCPRX(LiteXModule):
     def __init__(self, udp_port):
         # Control/Status.
         self.present = Signal() # o
-        self.ack     = Signal() # i
+        self.capture = Signal() # i
         self.type    = Signal() # o
         self.error   = Signal() # o
 
@@ -318,45 +530,57 @@ class LiteEthDHCPRX(LiteXModule):
         self.server_ip_address  = Signal(32) # o
         self.offered_ip_address = Signal(48) # o
 
-        # TODO: Parse DHCP Options.
-        # self.gateway_ip_address = Signal(32)
-        # self.subnet_mask        = Signal(32)
-        # self.router             = Signal(32)
-        # self.lease_time         = Signal(32)
+        self.opt_engine  = opt_engine = ResetInserter()(LiteEthDHCPOptEngine())
+
+        self.type        = opt_engine.type              # o
+        self.gateway     = opt_engine.gateway           # o
+        self.subnet_mask = opt_engine.subnet_mask       # o
+        self.lease_time  = opt_engine.lease_time        # o
 
         # # #
+
+        do_present = Signal()
 
         # Common FSM.
         # -----------
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            udp_port.source.ready.eq(1),
+            NextValue(self.present, 0),
+            NextValue(self.error, 0),
+            NextValue(opt_engine.reset, 1),
+            udp_port.source.ready.eq(0),
+
             If(udp_port.source.valid,
-                If((udp_port.source.dst_port == DHCP_CLIENT_PORT) &
-                   (udp_port.source.src_port == DHCP_SERVER_PORT) &
-                   # Fixed header + magic_cookie + message_type.
-                   (udp_port.source.length > DHCP_FIXED_HEADER_LENGTH + 4 + 4),
-                    udp_port.source.ready.eq(0),
-                    NextState("HEADER")
+                If((udp_port.source.src_port == DHCP_SERVER_PORT) &
+                   # Fixed header + message_type.
+                   (udp_port.source.length > DHCP_FIXED_HEADER_LENGTH + 4),
+                    NextState("HEADER"),
                 ).Else(
-                    NextState("DROP")
+                    NextValue(do_present, 0),
+                    NextState("DROP"),
                 )
             )
         )
         fsm.act("HEADER",
+            NextValue(opt_engine.reset, 0),
             # FIXME: Add Check?
             udp_port.source.ready.eq(1),
-            If(udp_port.source.valid,
-                NextState("TRANSACTION-ID")
+            # drop if capture is not set
+            If(~self.capture,
+                NextValue(do_present, 0),
+                NextState("DROP"),
+            ).Elif(udp_port.source.valid,
+                NextState("TRANSACTION-ID"),
             )
         )
         fsm.act("TRANSACTION-ID",
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid,
                 If(udp_port.source.data == self.transaction_id,
-                    NextState("SECONDS-FLAGS")
+                    NextState("SECONDS-FLAGS"),
                 ).Else(
-                    NextState("DROP")
+                    NextValue(do_present, 0),
+                    NextState("DROP"),
                 )
             )
         )
@@ -364,14 +588,14 @@ class LiteEthDHCPRX(LiteXModule):
             # FIXME: Add Check?
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid,
-                NextState("CLIENT-IP-ADDRESS")
+                NextState("CLIENT-IP-ADDRESS"),
             )
         )
         fsm.act("CLIENT-IP-ADDRESS",
             # FIXME: Add Check?
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid,
-                NextState("YOUR-IP-ADDRESS")
+                NextState("YOUR-IP-ADDRESS"),
             )
         )
         fsm.act("YOUR-IP-ADDRESS",
@@ -381,7 +605,7 @@ class LiteEthDHCPRX(LiteXModule):
                 NextValue(self.offered_ip_address[16:24], udp_port.source.data[ 8:16]),
                 NextValue(self.offered_ip_address[ 8:16], udp_port.source.data[16:24]),
                 NextValue(self.offered_ip_address[ 0: 8], udp_port.source.data[24:32]),
-                NextState("SERVER-IP-ADDRESS")
+                NextState("SERVER-IP-ADDRESS"),
             ),
         )
         fsm.act("SERVER-IP-ADDRESS",
@@ -391,14 +615,14 @@ class LiteEthDHCPRX(LiteXModule):
                 NextValue(self.server_ip_address[16:24], udp_port.source.data[ 8:16]),
                 NextValue(self.server_ip_address[ 8:16], udp_port.source.data[16:24]),
                 NextValue(self.server_ip_address[ 0: 8], udp_port.source.data[24:32]),
-                NextState("GATEWAY-IP-ADDRESS")
+                NextState("GATEWAY-IP-ADDRESS"),
             )
         )
         fsm.act("GATEWAY-IP-ADDRESS",
             # FIXME: Add Check?
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid,
-                NextState("CLIENT-MAC-ADDRESS-MSB")
+                NextState("CLIENT-MAC-ADDRESS-MSB"),
             )
         )
         fsm.act("CLIENT-MAC-ADDRESS-MSB", # Client MAC address MSBs.
@@ -410,18 +634,21 @@ class LiteEthDHCPRX(LiteXModule):
                    (udp_port.source.data[24:32] == self.mac_address[16:24]),
                     NextState("CLIENT-MAC-ADDRESS-LSB"),
                 ).Else(
-                    NextState("DROP")
+                    NextValue(do_present, 0),
+                    NextState("DROP"),
                 )
             )
         )
         fsm.act("CLIENT-MAC-ADDRESS-LSB", # Client MAC address LSBs.
             udp_port.source.ready.eq(1),
+
             If(udp_port.source.valid,
                 If((udp_port.source.data[ 0: 8] == self.mac_address[ 8:16]) &
                    (udp_port.source.data[ 8:16] == self.mac_address[ 0: 8]),
                     NextState("MAGIC-COOKIE"),
                 ).Else(
-                    NextState("DROP")
+                    NextValue(do_present, 0),
+                    NextState("DROP"),
                 )
             )
         )
@@ -432,61 +659,104 @@ class LiteEthDHCPRX(LiteXModule):
                    (udp_port.source.data[ 8:16] == 0x82) &
                    (udp_port.source.data[16:24] == 0x53) &
                    (udp_port.source.data[24:32] == 0x63),
-                   NextState("MESSAGE-TYPE")
+                   NextState("OPTIONS"),
                 )
             )
         )
-        fsm.act("MESSAGE-TYPE",
+        fsm.act("OPTIONS",
+            udp_port.source.connect(opt_engine.sink),
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid,
-                # DHCP Message Type.
-                If((udp_port.source.data[ 0: 8] == 53) &
-                   (udp_port.source.data[ 8:16] ==  1),
-                    # DHCP Offer.
-                    If(udp_port.source.data[16:24] == 2,
-                        NextValue(self.type, DHCP_RX_OFFER),
-                        NextState("END")
-                    # DHCP Ack.
-                    ).Elif(udp_port.source.data[16:24] == 5,
-                        NextValue(self.type, DHCP_RX_ACK),
-                        NextState("END")
+                # Drop the packet if OPTIONS engine cannot accept more
+                # Any well formed DHCP packet should never overflow OPTIONS engine
+                If(~opt_engine.sink.ready,
+                    NextValue(self.error, 1),
+                    If(udp_port.source.last,
+                        NextValue(self.present, 1),
+                        NextState("IDLE"),
                     ).Else(
-                        NextState("DROP")
+                        NextValue(do_present, 1),
+                        NextState("DROP"),
                     )
+                ).Elif(udp_port.source.last,
+                    NextState("AWAIT-OPT-ENGINE"),
                 )
             )
         )
-        fsm.act("END",
+        # If we receive new data here it means a new packet has started and
+        # we have to drop it
+        prev_drop = Signal()
+        drop = Signal()
+        fsm.act("AWAIT-OPT-ENGINE",
             udp_port.source.ready.eq(1),
-            If(udp_port.source.valid & udp_port.source.last,
-                NextState("PRESENT")
+            drop.eq(~(udp_port.source.valid & udp_port.source.last) & (prev_drop | udp_port.source.valid)),
+            NextValue(prev_drop, drop),
+            If(opt_engine.done,
+                NextValue(self.error, opt_engine.error),
+                If(drop,
+                    NextValue(do_present, 1),
+                    NextState("DROP"),
+                ).Else(
+                    NextValue(self.present, 1),
+                    NextState("IDLE"),
+                )
             )
         )
         fsm.act("DROP",
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid & udp_port.source.last,
-                NextValue(self.error, 1),
-                NextState("PRESENT")
+                NextValue(self.present, do_present),
+                NextState("IDLE"),
             )
         )
-        fsm.act("PRESENT",
-            self.present.eq(1),
-            If(self.ack,
-                NextValue(self.error, 0),
-                NextState("IDLE")
+
+# TODO:
+# Remove once: https://github.com/enjoy-digital/litex/pull/1775/files
+# is merged in litex
+class WaitTimer2(Module):
+    def __init__(self, t, has_ce=False):
+        self.wait = Signal() # i
+        self.ce   = Signal() # i
+        self.done = Signal() # o
+
+        # # #
+
+        # Cast t to int.
+        t     = int(t)
+
+        count = Signal(bits_for(t), reset=t)
+
+        tick = Signal()
+        if has_ce:
+            self.comb += tick.eq(~self.done & self.ce)
+        else:
+            self.comb += tick.eq(~self.done)
+
+        self.comb += self.done.eq(count == 0)
+        self.sync += [
+            If(self.wait,
+                If(tick,
+                    count.eq(count - 1)
+                )
+            ).Else(
+                count.eq(count.reset)
             )
-        )
+        ]
 
 # DHCP ---------------------------------------------------------------------------------------------
 
 class LiteEthDHCP(LiteXModule):
-    def __init__(self, udp_port, sys_clk_freq, timeout=1e0):
+    def __init__(
+        self,
+        udp_port,
+        clk_freq,
+        timeout=1.0,
+        retry_interval=4.0
+    ):
         assert len(udp_port.sink.data) == 32 # Only supports 32-bit UDP port.
 
-        # Control/Status.
-        self.start   = Signal() # i
-        self.done    = Signal() # o
-        self.timeout = Signal() # o
+        # Status.
+        self.valid       = Signal() # o
 
         # Parameters
         self.mac_address = Signal(48) # i
@@ -502,7 +772,6 @@ class LiteEthDHCP(LiteXModule):
         # DHCP TX.
         self.tx = tx = ResetInserter()(LiteEthDHCPTX(udp_port))
         self.comb += [
-            tx.reset.eq(self.timeout),
             tx.mac_address.eq(self.mac_address),
             tx.transaction_id.eq(transaction_id),
         ]
@@ -510,24 +779,72 @@ class LiteEthDHCP(LiteXModule):
         # DHCP RX.
         self.rx = rx = ResetInserter()(LiteEthDHCPRX(udp_port))
         self.comb += [
-            rx.reset.eq(self.timeout),
             rx.mac_address.eq(self.mac_address),
             rx.transaction_id.eq(transaction_id),
         ]
 
-        # DHCP Timeout.
-        self.timeout_timer = timeout_timer = WaitTimer(int(timeout*sys_clk_freq))
-        self.comb += [
-            timeout_timer.wait.eq(~self.done),
-            self.timeout.eq(timeout_timer.done),
-        ]
-
         # DHCP FSM.
         self.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
-        self.comb += fsm.reset.eq(self.timeout)
+
+        # Common 1/16th second and second counter
+        frac = 16.0
+        frac_tick = Signal()
+        sec_tick = Signal()
+        self.frac_timer = frac_timer = WaitTimer2(round(clk_freq / frac))
+        self.sec_timer = sec_timer = WaitTimer2(int(frac), has_ce=True)
+        self.comb += [
+            frac_timer.wait.eq(~frac_timer.done),
+            sec_timer.ce.eq(frac_tick),
+            sec_timer.wait.eq(~sec_timer.done),
+        ]
+        self.sync += [
+            frac_tick.eq(frac_timer.done),
+            sec_tick.eq(sec_timer.done),
+        ]
+
+        # DHCP Timeout
+
+        self.timeout_timer = timeout_timer = WaitTimer2(round(timeout * frac), has_ce=True)
+        rst = Signal()
+        self.comb += [
+            timeout_timer.wait.eq(~fsm.ongoing("IDLE")),
+            fsm.reset.eq(rst),
+            tx.reset.eq(rst),
+            rx.reset.eq(rst),
+        ]
+        self.sync += [
+            timeout_timer.ce.eq(frac_tick),
+            rst.eq(timeout_timer.done),
+            If(rst,
+                self.valid.eq(0),
+            ),
+        ]
+
+        # DHCP Retry interval
+        self.retry_timer = retry_timer = WaitTimer2(round(retry_interval * frac), has_ce=True)
+        self.comb += [
+            retry_timer.wait.eq(fsm.ongoing("IDLE")),
+            retry_timer.ce.eq(frac_tick),
+        ]
+
+        # DHCP lease timer
+        lease_load = Signal()
+        lease_expired = Signal()
+        lease_time = Signal(32)
+
+        # Expire the lease at 87.5% of total seconds elapsed before the real
+        # expiration. This is the suggest T2 Time(Rebinding).
+        self.sync += If(lease_load,
+            lease_time.eq(rx.lease_time - rx.lease_time[3:]),
+        ).Elif(sec_tick & ~lease_expired,
+            lease_time.eq(lease_time - 1)
+        )
+
+        self.comb += lease_expired.eq(lease_time[-1])
+
+        # DHCP FSM Transitions
         fsm.act("IDLE",
-            self.done.eq(1),
-            If(self.start,
+            If((~self.valid & retry_timer.done) | (self.valid & lease_expired),
                 NextValue(transaction_id, transaction_id + 1),
                 NextState("SEND-DISCOVER")
             )
@@ -540,10 +857,10 @@ class LiteEthDHCP(LiteXModule):
             )
         )
         fsm.act("RECEIVE-OFFER",
-            rx.ack.eq(1),
-            If(rx.present & (rx.type == DHCP_RX_OFFER),
-                NextValue(offered_ip_address, rx.offered_ip_address),
-                NextValue(server_ip_address,  rx.server_ip_address),
+            rx.capture.eq(1),
+            NextValue(offered_ip_address, rx.offered_ip_address),
+            NextValue(server_ip_address,  rx.server_ip_address),
+            If(rx.present & ~rx.error & (rx.type == DHCP_RX_OFFER),
                 NextState("SEND-REQUEST")
             )
         )
@@ -557,9 +874,11 @@ class LiteEthDHCP(LiteXModule):
             )
         )
         fsm.act("RECEIVE-ACK",
-            rx.ack.eq(1),
-            If(rx.present & (rx.type == DHCP_RX_ACK),
+            rx.capture.eq(1),
+            If(rx.present & ~rx.error & (rx.type == DHCP_RX_ACK),
+                lease_load.eq(1),
                 NextValue(self.ip_address, offered_ip_address),
+                NextValue(self.valid, 1),
                 NextState("IDLE")
             )
         )
