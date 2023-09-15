@@ -93,6 +93,8 @@ class LiteEthUDPIPCore(LiteEthIPCore):
     ):
         # Ensure either IP is external or DHCP is used
         assert((ip_address is None) == with_dhcp)
+        # DHCP requres IP broadcast
+        assert(not with_dhcp or with_ip_broadcast)
 
         # Parameters.
         # -----------
