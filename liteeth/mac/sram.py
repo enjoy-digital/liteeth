@@ -289,8 +289,8 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
-            self.comb += ports[n].re.eq(read)
-            self.comb += ports[n].adr.eq(length[int(math.log2(dw//8)):])
+            self.comb += port.re.eq(read)
+            self.comb += port.adr.eq(length[int(math.log2(dw//8)):])
             cases[n] = [rd_data.eq(port.dat_r)]
 
         self.comb += Case(rd_slot, cases)
