@@ -282,7 +282,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         ports   = [None]*nslots
         for n in range(nslots):
             mems[n]  = Memory(dw, depth)
-            ports[n] = mems[n].get_port(has_re=True)
+            ports[n] = mems[n].get_port(has_re=True, mode=READ_FIRST)
             self.specials += ports[n]
         self.mems = mems
 
