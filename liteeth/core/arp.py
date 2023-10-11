@@ -217,6 +217,7 @@ class LiteEthARPCache(LiteXModule):
             mem_wr_port_valid.eq(0),
             NextValue(update_count, update_count + 1),
             If(update_count == (entries - 1),
+                NextValue(update_count, 0),
                 NextState("IDLE")
             )
         )
@@ -320,6 +321,7 @@ class LiteEthARPTable(LiteXModule):
                 cache.update.mac_address.eq(sink.mac_address),
                 If(cache.update.ready,
                     NextValue(request_pending, 0),
+                    NextValue(response.mac_address, sink.mac_address),
                     NextState("PRESENT_RESPONSE")
                 )
             ).Else(
