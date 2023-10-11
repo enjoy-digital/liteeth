@@ -187,14 +187,24 @@ class LiteEthARPCache(LiteXModule):
         self.specials += mem, mem_wr_port, mem_rd_port
 
         # Memory wr_port aliases.
-        mem_wr_port_valid       = mem_wr_port.dat_w[80]
-        mem_wr_port_ip_address  = mem_wr_port.dat_w[0:32]
-        mem_wr_port_mac_address = mem_wr_port.dat_w[32:80]
+        mem_wr_port_valid       = Signal()
+        mem_wr_port_ip_address  = Signal(32)
+        mem_wr_port_mac_address = Signal(48)
+        self.comb += [
+            mem_wr_port_valid.eq(mem_wr_port.dat_w[80]),
+            mem_wr_port_ip_address.eq(mem_wr_port.dat_w[0:32]),
+            mem_wr_port_mac_address.eq(mem_wr_port.dat_w[32:80]),
+        ]
 
         # Memory rd_port aliases.
-        mem_rd_port_valid       = mem_rd_port.dat_r[80]
-        mem_rd_port_ip_address  = mem_rd_port.dat_r[0:32]
-        mem_rd_port_mac_address = mem_rd_port.dat_r[32:80]
+        mem_rd_port_valid       = Signal()
+        mem_rd_port_ip_address  = Signal(32)
+        mem_rd_port_mac_address = Signal(48)
+        self.comb += [
+            mem_rd_port_valid.eq(mem_rd_port.dat_r[80]),
+            mem_rd_port_ip_address.eq(mem_rd_port.dat_r[0:32]),
+            mem_rd_port_mac_address.eq(mem_rd_port.dat_r[32:80]),
+        ]
 
         # Clear Timer to clear table every 1s.
         self.clear_timer = WaitTimer(1e-0*clk_freq)
