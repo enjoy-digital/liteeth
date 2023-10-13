@@ -191,9 +191,9 @@ class LiteEthARPCache(LiteXModule):
         mem_wr_port_ip_address  = Signal(32)
         mem_wr_port_mac_address = Signal(48)
         self.comb += [
-            mem_wr_port_valid.eq(mem_wr_port.dat_w[80]),
-            mem_wr_port_ip_address.eq(mem_wr_port.dat_w[0:32]),
-            mem_wr_port_mac_address.eq(mem_wr_port.dat_w[32:80]),
+            mem_wr_port.dat_w[80].eq(mem_wr_port_valid),
+            mem_wr_port.dat_w[0:32].eq(mem_wr_port_ip_address),
+            mem_wr_port.dat_w[32:80].eq(mem_wr_port_mac_address),
         ]
 
         # Memory rd_port aliases.
