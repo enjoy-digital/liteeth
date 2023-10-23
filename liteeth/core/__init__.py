@@ -23,6 +23,8 @@ class LiteEthIPCore(Module, AutoCSR):
         tx_cdc_buffered   = True,
         rx_cdc_depth      = 32,
         rx_cdc_buffered   = True,
+        interface         = "crossbar",
+        endianness        = "big",
     ):
         # Parameters.
         # -----------
@@ -33,7 +35,9 @@ class LiteEthIPCore(Module, AutoCSR):
         self.submodules.mac = LiteEthMAC(
             phy               = phy,
             dw                = dw,
-            interface         = "crossbar",
+            interface         = interface,
+            endianness        = endianness,
+            hw_mac            = mac_address,
             with_preamble_crc = True,
             with_sys_datapath = with_sys_datapath,
             tx_cdc_depth      = tx_cdc_depth,
@@ -83,6 +87,8 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         tx_cdc_buffered   = True,
         rx_cdc_depth      = 32,
         rx_cdc_buffered   = True,
+        interface         = "crossbar",
+        endianness        = "big",
     ):
         # Parameters.
         # -----------
@@ -98,6 +104,8 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             arp_entries       = arp_entries,
             with_icmp         = with_icmp,
             dw                = dw,
+            interface         = interface,
+            endianness        = endianness,
             with_ip_broadcast = with_ip_broadcast,
             with_sys_datapath = with_sys_datapath,
             tx_cdc_depth      = tx_cdc_depth,
