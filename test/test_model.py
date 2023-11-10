@@ -165,7 +165,7 @@ class TestModel(unittest.TestCase):
         #sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         #sock.sendto(bytes(packet), ("192.168.1.1", 20000))
 
-        packet = EtherbonePacket(packet)
+        packet = EtherbonePacket(init=packet)
         packet.encoded = True
         packet.decode()
         print(packet)
