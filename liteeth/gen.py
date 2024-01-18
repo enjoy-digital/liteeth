@@ -284,15 +284,36 @@ class PHYCore(SoCMini):
             liteeth_phys.USP_GTY_1000BASEX,
         ]:
             ethphy_pads = platform.request("sgmii")
-            ethphy = phy(
-                refclk_or_clk_pads = ethphy_pads.refclk,
-                data_pads          = ethphy_pads,
-                sys_clk_freq       = self.clk_freq,
-                refclk_freq        = core_config.get("refclk_freq", 200e6),
-                with_csr           = False,
-                rx_polarity        = 0, # Add support to liteeth_gen if useful.
-                tx_polarity        = 0, # Add support to liteeth_gen if useful.
-            )
+            # Artix7.
+            if phy in [liteeth_phys.A7_1000BASEX]:
+                assert core_config.get("refclk_freq", 0) == 200e6
+                from liteeth.phy.a7_gtp import QPLLSettings, QPLL
+                qpll_settings = QPLLSettings(
+                    refclksel  = 0b001,
+                    fbdiv      = 4,
+                    fbdiv_45   = 5,
+                    refclk_div = 1
+                )
+                qpll = QPLL(ethphy_pads.refclk, qpll_settings)
+                ethphy = phy(
+                    qpll_channel = qpll.channels[0],
+                    data_pads    = ethphy_pads,
+                    sys_clk_freq = self.clk_freq,
+                    with_csr     = False,
+                    rx_polarity  = 0, # Add support to liteeth_gen if useful.
+                    tx_polarity  = 0, # Add support to liteeth_gen if useful.
+                )
+            # Other 7-Series/Ultrascale(+).
+            else:
+                ethphy = phy(
+                    refclk_or_clk_pads = ethphy_pads.refclk,
+                    data_pads          = ethphy_pads,
+                    sys_clk_freq       = self.clk_freq,
+                    refclk_freq        = core_config.get("refclk_freq", 200e6),
+                    with_csr           = False,
+                    rx_polarity        = 0, # Add support to liteeth_gen if useful.
+                    tx_polarity        = 0, # Add support to liteeth_gen if useful.
+                )
             self.comb += [
                 ethphy.reset.eq(ethphy_pads.rst),
                 ethphy_pads.link_up.eq(ethphy.link_up),
