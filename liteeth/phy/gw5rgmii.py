@@ -148,14 +148,14 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         # RX Clock
         self.cd_eth_rx = ClockDomain()
-        self.comb += self.cd_eth_rx.clk.eq(clock_pads.rx)
+        self.cd_eth_rx.clk = clock_pads.rx
 
         # TX Clock
         self.cd_eth_tx = ClockDomain()
         if isinstance(tx_clk, Signal):
             self.comb += self.cd_eth_tx.clk.eq(tx_clk)
         else:
-            self.comb += self.cd_eth_tx.clk.eq(self.cd_eth_rx.clk)
+            self.cd_eth_tx.clk = self.cd_eth_rx.clk
 
         tx_delay_taps = int(tx_delay/12.5e-12) # 12.5ps per tap
         assert tx_delay_taps < 256
