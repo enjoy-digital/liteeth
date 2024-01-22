@@ -286,15 +286,17 @@ class PHYCore(SoCMini):
             ethphy_pads = platform.request("sgmii")
             # Artix7.
             if phy in [liteeth_phys.A7_1000BASEX]:
-                assert core_config.get("refclk_freq", 0) in [125e6, 156.25e6]
+                refclk_freq = core_config.get("refclk_freq", 0)
+                assert refclk_freq in [125e6, 156.25e6]
                 from liteeth.phy.a7_gtp import QPLLSettings, QPLL
                 qpll_settings = QPLLSettings(
                     refclksel  = 0b001,
                     fbdiv      = 4,
-                    fbdiv_45   = {125e6:5, 156.25e6:4},
+                    fbdiv_45   = {125e6:5, 156.25e6:4}[refclk_freq],
                     refclk_div = 1
                 )
                 qpll = QPLL(ethphy_pads.refclk, qpll_settings)
+                self.submodules += qpll
                 ethphy = phy(
                     qpll_channel = qpll.channels[0],
                     data_pads    = ethphy_pads,
