@@ -19,8 +19,9 @@ from liteeth.phy.pcs_1000basex import *
 class USP_GTY_1000BASEX(LiteXModule):
     # Configured for 200MHz or 156.25MHz transceiver reference clock
     dw          = 8
-    tx_clk_freq = 125e6
+    linerate    = 1.25e9
     rx_clk_freq = 125e6
+    tx_clk_freq = 125e6
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
         assert refclk_freq in [200e6, 156.25e6]
         pcs = PCS(lsb_first=True)
@@ -354,7 +355,7 @@ class USP_GTY_1000BASEX(LiteXModule):
             p_RXOOB_CFG                    = 0b000000110,
             p_RXOOB_CLK_CFG                = "PMA",
             p_RXOSCALRESET_TIME            = 0b00011,
-            p_RXOUT_DIV                    = 4,
+            p_RXOUT_DIV                    = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
             p_RXPCSRESET_TIME              = 0b00011,
             p_RXPHBEACON_CFG               = 0b0000000000000000,
             p_RXPHDLY_CFG                  = 0b0010000001110000,
@@ -466,7 +467,7 @@ class USP_GTY_1000BASEX(LiteXModule):
             p_TXFIFO_ADDR_CFG              = "LOW",
             p_TXGBOX_FIFO_INIT_RD_ADDR     = 4,
             p_TXGEARBOX_EN                 = "FALSE",
-            p_TXOUT_DIV                    = 4,
+            p_TXOUT_DIV                    = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
             p_TXPCSRESET_TIME              = 0b00011,
             p_TXPHDLY_CFG0                 = 0b0110000001110000,
             p_TXPHDLY_CFG1                 = 0b0000000000001111,
@@ -960,6 +961,14 @@ class USP_GTY_1000BASEX(LiteXModule):
             pcs.tbi_rx.eq(gearbox.rx_data)
         ]
 
+
     def add_csr(self):
         self._reset = CSRStorage()
         self.comb += self.reset.eq(self._reset.storage)
+
+# USP_GTY_2500BASEX PHY ----------------------------------------------------------------------------
+
+class USP_GTY_2500BASEX(USP_GTY_1000BASEX):
+    linerate    = 3.125e9
+    rx_clk_freq = 312.5e6
+    tx_clk_freq = 312.5e6
