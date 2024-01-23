@@ -1,7 +1,7 @@
 #
 # This file is part of MiSoC and has been adapted/modified for LiteEth.
 #
-# Copyright (c) 2018-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2018-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -22,9 +22,11 @@ from liteeth.phy.pcs_1000basex import *
 class K7_1000BASEX(LiteXModule):
     # Configured for 200MHz transceiver reference clock.
     dw          = 8
-    tx_clk_freq = 125e6
+    linerate    = 1.25e9
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
+    tx_clk_freq = 125e6
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
+        assert refclk_freq in [200e6]
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -71,7 +73,7 @@ class K7_1000BASEX(LiteXModule):
         rx_data           = Signal(20)
         rx_reset_done     = Signal()
 
-        pll = GTXChannelPLL(refclk, 200e6, 1.25e9)
+        pll = GTXChannelPLL(refclk, 200e6, self.linerate)
         self.submodules.pll = pll
 
         # Work around Python's 255 argument limitation.
@@ -207,7 +209,7 @@ class K7_1000BASEX(LiteXModule):
             p_RX_DEFER_RESET_BUF_EN        = "TRUE",
 
             # CDR Attributes
-            p_RXCDR_CFG                    = 0x03000023ff10100020,
+            p_RXCDR_CFG                    = 0x03000023ff10100020, # FIXME: Add 2.5Gbps config.
             p_RXCDR_FR_RESET_ON_EIDLE      = 0b0,
             p_RXCDR_HOLD_DURING_EIDLE      = 0b0,
             p_RXCDR_PH_RESET_ON_EIDLE      = 0b0,
@@ -723,17 +725,17 @@ class K7_1000BASEX(LiteXModule):
 
         # TX MMCM.
         self.tx_mmcm = tx_mmcm = S7MMCM()
-        tx_mmcm.register_clkin(txoutclk_rebuffer,   62.5e6)
-        tx_mmcm.create_clkout(self.cd_eth_tx_half,  62.5e6, buf="bufh", with_reset=False)
-        tx_mmcm.create_clkout(self.cd_eth_tx,      125.0e6, buf="bufh", with_reset=True)
+        tx_mmcm.register_clkin(txoutclk_rebuffer,  self.tx_clk_freq/2)
+        tx_mmcm.create_clkout(self.cd_eth_tx_half, self.tx_clk_freq/2, buf="bufh", with_reset=False)
+        tx_mmcm.create_clkout(self.cd_eth_tx,      self.tx_clk_freq,   buf="bufh", with_reset=True)
         self.comb += tx_mmcm.reset.eq(tx_mmcm_reset)
         self.comb += tx_mmcm_locked.eq(tx_mmcm.locked)
 
         # RX MMCM.
         self.rx_mmcm = rx_mmcm = S7MMCM()
-        rx_mmcm.register_clkin(rxoutclk_rebuffer,   62.5e6)
-        rx_mmcm.create_clkout(self.cd_eth_rx_half,  62.5e6, buf="bufg", with_reset=False)
-        rx_mmcm.create_clkout(self.cd_eth_rx,      125.0e6, buf="bufg", with_reset=True)
+        rx_mmcm.register_clkin(rxoutclk_rebuffer,  self.rx_clk_freq/2)
+        rx_mmcm.create_clkout(self.cd_eth_rx_half, self.rx_clk_freq/2, buf="bufg", with_reset=False)
+        rx_mmcm.create_clkout(self.cd_eth_rx,      self.rx_clk_freq,   buf="bufg", with_reset=True)
         self.comb += rx_mmcm.reset.eq(rx_mmcm_reset)
         self.comb += rx_mmcm_locked.eq(rx_mmcm.locked)
 
@@ -796,3 +798,10 @@ class K7_1000BASEX(LiteXModule):
     def add_csr(self):
         self._reset = CSRStorage()
         self.comb += self.reset.eq(self._reset.storage)
+
+# K7_2500BASEX PHY ---------------------------------------------------------------------------------
+
+class K7_2500BASEX(K7_1000BASEX):
+    linerate    = 2.5e9
+    rx_clk_freq = 312.5e6
+    tx_clk_freq = 312.5e6

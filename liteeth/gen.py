@@ -280,6 +280,7 @@ class PHYCore(SoCMini):
             liteeth_phys.A7_1000BASEX,
             liteeth_phys.A7_2500BASEX,
             liteeth_phys.K7_1000BASEX,
+            liteeth_phys.K7_2500BASEX,
             liteeth_phys.KU_1000BASEX,
             liteeth_phys.USP_GTH_1000BASEX,
             liteeth_phys.USP_GTY_1000BASEX,
