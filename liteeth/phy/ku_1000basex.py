@@ -291,7 +291,7 @@ class KU_1000BASEX(LiteXModule):
             p_RXOOB_CFG                    = 0b000000110,
             p_RXOOB_CLK_CFG                = "PMA",
             p_RXOSCALRESET_TIME            = 0b00011,
-            p_RXOUT_DIV                    = {1.25e9 : 4, 2.5e9 : 2}[self.linerate],
+            p_RXOUT_DIV                    = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
             p_RXPCSRESET_TIME              = 0b00011,
             p_RXPHBEACON_CFG               = 0b0000000000000000,
             p_RXPHDLY_CFG                  = 0b0010000000100000,
@@ -396,7 +396,7 @@ class KU_1000BASEX(LiteXModule):
             p_TXFIFO_ADDR_CFG            = "LOW",
             p_TXGBOX_FIFO_INIT_RD_ADDR   = 4,
             p_TXGEARBOX_EN               = "FALSE",
-            p_TXOUT_DIV                  = {1.25e9 : 4, 2.5e9 : 2}[self.linerate],
+            p_TXOUT_DIV                  = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
             p_TXPCSRESET_TIME            = 0b00011,
             p_TXPHDLY_CFG0               = 0b0010000000100000,
             p_TXPHDLY_CFG1               = 0b0000000001110101,
@@ -860,6 +860,6 @@ class KU_1000BASEX(LiteXModule):
 # KU_2500BASEX PHY ---------------------------------------------------------------------------------
 
 class KU_2500BASEX(KU_1000BASEX):
-    linerate    = 2.5e9
+    linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6

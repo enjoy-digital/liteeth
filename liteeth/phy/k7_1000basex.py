@@ -802,6 +802,6 @@ class K7_1000BASEX(LiteXModule):
 # K7_2500BASEX PHY ---------------------------------------------------------------------------------
 
 class K7_2500BASEX(K7_1000BASEX):
-    linerate    = 2.5e9
+    linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6

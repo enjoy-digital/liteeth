@@ -203,8 +203,8 @@ class A7_1000BASEX(LiteXModule):
 
             # CDR Attributes
             p_RXCDR_CFG                  = {
-                1.25e9 : 0x0001107FE086021101010,
-                2.5e9  : 0x0000107FE206001041010,
+                1.25e9  : 0x0001107FE086021101010,
+                3.125e9 : 0x0000107FE206001041010,
             }[self.linerate],
             p_RXCDR_FR_RESET_ON_EIDLE    = 0b0,
             p_RXCDR_HOLD_DURING_EIDLE    = 0b0,
@@ -323,10 +323,10 @@ class A7_1000BASEX(LiteXModule):
             p_SATA_PLL_CFG               = "VCO_3000MHZ",
 
             # RX Fabric Clock Output Control Attributes
-            p_RXOUT_DIV                  = {1.25e9 : 4, 2.5e9 : 2}[self.linerate],
+            p_RXOUT_DIV                  = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
 
             # TX Fabric Clock Output Control Attributes
-            p_TXOUT_DIV                  = {1.25e9 : 4, 2.5e9 : 2}[self.linerate],
+            p_TXOUT_DIV                  = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
 
             # RX Phase Interpolator Attributes
             p_RXPI_CFG0                  = 0b000,
@@ -785,6 +785,6 @@ class A7_1000BASEX(LiteXModule):
 # A7_2500BASEX PHY ---------------------------------------------------------------------------------
 
 class A7_2500BASEX(A7_1000BASEX):
-    linerate    = 2.5e9
+    linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6
