@@ -302,8 +302,8 @@ class PHYCore(SoCMini):
                     data_pads    = ethphy_pads,
                     sys_clk_freq = self.clk_freq,
                     with_csr     = False,
-                    rx_polarity  = 0, # Add support to liteeth_gen if useful.
-                    tx_polarity  = 0, # Add support to liteeth_gen if useful.
+                    rx_polarity  = core_config.get("phy_rx_polarity", 0),
+                    tx_polarity  = core_config.get("phy_tx_polarity", 0),
                 )
             # Other 7-Series/Ultrascale(+).
             else:
@@ -313,8 +313,8 @@ class PHYCore(SoCMini):
                     sys_clk_freq       = self.clk_freq,
                     refclk_freq        = core_config.get("refclk_freq", 200e6),
                     with_csr           = False,
-                    rx_polarity        = 0, # Add support to liteeth_gen if useful.
-                    tx_polarity        = 0, # Add support to liteeth_gen if useful.
+                    rx_polarity        = core_config.get("phy_rx_polarity", 0),
+                    tx_polarity        = core_config.get("phy_tx_polarity", 0),
                 )
             self.comb += [
                 ethphy.reset.eq(ethphy_pads.rst),

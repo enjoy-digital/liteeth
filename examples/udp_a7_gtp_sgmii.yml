@@ -5,9 +5,11 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 # PHY ----------------------------------------------------------------------
-phy       : A7_1000BASEX
-vendor    : xilinx
-toolchain : vivado
+phy             : A7_1000BASEX
+phy_tx_polarity : 0
+phy_rx_polarity : 0
+vendor          : xilinx
+toolchain       : vivado
 
 # Core ---------------------------------------------------------------------
 refclk_freq : 156.25e6
