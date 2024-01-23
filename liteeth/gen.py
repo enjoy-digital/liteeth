@@ -278,6 +278,7 @@ class PHYCore(SoCMini):
         # SGMII.
         elif phy in [
             liteeth_phys.A7_1000BASEX,
+            liteeth_phys.A7_2500BASEX,
             liteeth_phys.K7_1000BASEX,
             liteeth_phys.KU_1000BASEX,
             liteeth_phys.USP_GTH_1000BASEX,
@@ -285,7 +286,7 @@ class PHYCore(SoCMini):
         ]:
             ethphy_pads = platform.request("sgmii")
             # Artix7.
-            if phy in [liteeth_phys.A7_1000BASEX]:
+            if phy in [liteeth_phys.A7_1000BASEX, liteeth_phys.A7_2500BASEX]:
                 refclk_freq = core_config.get("refclk_freq", 0)
                 assert refclk_freq in [125e6, 156.25e6]
                 from liteeth.phy.a7_gtp import QPLLSettings, QPLL
