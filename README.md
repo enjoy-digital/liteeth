@@ -31,6 +31,7 @@ design flow by generating the verilog rtl that you will use as a standard core.
 PHY:
   - MII, RMII 100Mbps PHYs.
   - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
+  - SGMII / 2500BaseX 3.125Gbps PHYs.
 
 | -     | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
 |-------|-----|------|----------|-------|----------|----------|---------------|
