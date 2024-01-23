@@ -2,7 +2,7 @@
 # This file is part of LiteEth.
 #
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
-# Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2019-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -19,9 +19,11 @@ from liteeth.phy.pcs_1000basex import *
 class KU_1000BASEX(LiteXModule):
 	# Configured for 200MHz transceiver reference clock
     dw          = 8
-    tx_clk_freq = 125e6
+    linerate    = 1.25e9
     rx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
+    tx_clk_freq = 125e6
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
+        assert refclk_freq in [200e6]
         pcs = PCS(lsb_first=True)
         self.submodules += pcs
 
@@ -289,7 +291,7 @@ class KU_1000BASEX(LiteXModule):
             p_RXOOB_CFG                    = 0b000000110,
             p_RXOOB_CLK_CFG                = "PMA",
             p_RXOSCALRESET_TIME            = 0b00011,
-            p_RXOUT_DIV                    = 4,
+            p_RXOUT_DIV                    = {1.25e9 : 4, 2.5e9 : 2}[self.linerate],
             p_RXPCSRESET_TIME              = 0b00011,
             p_RXPHBEACON_CFG               = 0b0000000000000000,
             p_RXPHDLY_CFG                  = 0b0010000000100000,
@@ -394,7 +396,7 @@ class KU_1000BASEX(LiteXModule):
             p_TXFIFO_ADDR_CFG            = "LOW",
             p_TXGBOX_FIFO_INIT_RD_ADDR   = 4,
             p_TXGEARBOX_EN               = "FALSE",
-            p_TXOUT_DIV                  = 4,
+            p_TXOUT_DIV                  = {1.25e9 : 4, 2.5e9 : 2}[self.linerate],
             p_TXPCSRESET_TIME            = 0b00011,
             p_TXPHDLY_CFG0               = 0b0010000000100000,
             p_TXPHDLY_CFG1               = 0b0000000001110101,
@@ -854,3 +856,10 @@ class KU_1000BASEX(LiteXModule):
     def add_csr(self):
         self._reset = CSRStorage()
         self.comb += self.reset.eq(self._reset.storage)
+
+# KU_2500BASEX PHY ---------------------------------------------------------------------------------
+
+class KU_2500BASEX(KU_1000BASEX):
+    linerate    = 2.5e9
+    rx_clk_freq = 312.5e6
+    tx_clk_freq = 312.5e6
