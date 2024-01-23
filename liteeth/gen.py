@@ -284,6 +284,7 @@ class PHYCore(SoCMini):
             liteeth_phys.KU_1000BASEX,
             liteeth_phys.KU_2500BASEX,
             liteeth_phys.USP_GTH_1000BASEX,
+            liteeth_phys.USP_GTH_2500BASEX,
             liteeth_phys.USP_GTY_1000BASEX,
         ]:
             ethphy_pads = platform.request("sgmii")

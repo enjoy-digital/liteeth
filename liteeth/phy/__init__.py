@@ -40,4 +40,5 @@ from liteeth.phy.k7_1000basex      import K7_2500BASEX
 from liteeth.phy.ku_1000basex      import KU_1000BASEX
 from liteeth.phy.ku_1000basex      import KU_2500BASEX
 from liteeth.phy.usp_gth_1000basex import USP_GTH_1000BASEX
+from liteeth.phy.usp_gth_1000basex import USP_GTH_2500BASEX
 from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
