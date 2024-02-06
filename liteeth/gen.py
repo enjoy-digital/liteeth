@@ -296,8 +296,14 @@ class PHYCore(SoCMini):
                 from liteeth.phy.a7_gtp import QPLLSettings, QPLL
                 qpll_settings = QPLLSettings(
                     refclksel  = 0b001,
-                    fbdiv      = 4,
-                    fbdiv_45   = {125e6:5, 156.25e6:4}[refclk_freq],
+                    fbdiv      = {
+                        liteeth_phys.A7_1000BASEX : 4,
+                        liteeth_phys.A7_2500BASEX : 5,
+                    }[phy],
+                    fbdiv_45   = {
+                        125e6    : 5,
+                        156.25e6 : 4,
+                    }[refclk_freq],
                     refclk_div = 1
                 )
                 qpll = QPLL(ethphy_pads.refclk, qpll_settings)
