@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2019-2023 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2019-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # SPDX-License-Identifier: BSD-2-Clause
 
@@ -10,6 +10,8 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
 from litex.gen import *
+
+from liteiclink.serdes.gth4_ultrascale import GTHChannelPLL
 
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
@@ -68,6 +70,10 @@ class USP_GTH_1000BASEX(LiteXModule):
         rx_reset      = Signal()
         rx_data       = Signal(20)
         rx_reset_done = Signal()
+
+        pll = GTHChannelPLL(refclk, refclk_freq, self.linerate)
+        self.submodules.pll = pll
+        print(pll)
 
         gth_params = dict(
             p_ACJTAG_DEBUG_MODE            = 0b0,
@@ -136,11 +142,11 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_CPLL_CFG1                    = 0b0000000000100011,
             p_CPLL_CFG2                    = 0b0000000000000010,
             p_CPLL_CFG3                    = 0b000000,
-            p_CPLL_FBDIV                   = {200e6: 5, 156.25e6: 4}[refclk_freq],
-            p_CPLL_FBDIV_45                = {200e6: 5, 156.25e6: 4}[refclk_freq],
+            p_CPLL_FBDIV                   = pll.config["n2"],
+            p_CPLL_FBDIV_45                = pll.config["n1"],
             p_CPLL_INIT_CFG0               = 0b0000001010110010,
             p_CPLL_LOCK_CFG                = 0b0000000111101000,
-            p_CPLL_REFCLK_DIV              = {200e6: 2, 156.25e6: 1}[refclk_freq],
+            p_CPLL_REFCLK_DIV              = pll.config["m"],
             p_CTLE3_OCAP_EXT_CTRL          = 0b000,
             p_CTLE3_OCAP_EXT_EN            = 0b0,
             p_DDI_REALIGN_WAIT             = 15,
@@ -332,7 +338,7 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_RXOOB_CFG                    = 0b000000110,
             p_RXOOB_CLK_CFG                = "PMA",
             p_RXOSCALRESET_TIME            = 0b00011,
-            p_RXOUT_DIV                    = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
+            p_RXOUT_DIV                    = pll.config["d"],
             p_RXPCSRESET_TIME              = 0b00011,
             p_RXPHBEACON_CFG               = 0b0000000000000000,
             p_RXPHDLY_CFG                  = 0b0010000001110000,
@@ -443,7 +449,7 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_TXFIFO_ADDR_CFG              = "LOW",
             p_TXGBOX_FIFO_INIT_RD_ADDR     = 4,
             p_TXGEARBOX_EN                 = "FALSE",
-            p_TXOUT_DIV                    = {1.25e9 : 4, 3.125e9 : 2}[self.linerate],
+            p_TXOUT_DIV                    = pll.config["d"],
             p_TXPCSRESET_TIME              = 0b00011,
             p_TXPHDLY_CFG0                 = 0b0110000001110000,
             p_TXPHDLY_CFG1                 = 0b0000000000001111,
