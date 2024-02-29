@@ -579,7 +579,7 @@ class UDPCore(PHYCore):
             self.comb += axil_bus.connect_to_pads(platform.request("mmap"), mode="master")
 
         # UDP Ports --------------------------------------------------------------------------------
-        for name, port_cfg in core_config["udp_ports"].items():
+        for name, port_cfg in core_config.get("udp_ports", {}).items():
             # mode either `raw` or `stream`, default to streamer to be backwards compatible
             mode = port_cfg.get("mode", "streamer")
             assert mode == "raw" or mode == "streamer"
