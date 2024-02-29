@@ -567,7 +567,6 @@ class UDPCore(PHYCore):
         etherbone_buffer_depth = core_config.get("etherbone_buffer_depth", 16)
 
         if etherbone:
-            assert (data_width == 32)
             self.etherbone = LiteEthEtherbone(
                 udp          =  self.core.udp,
                 udp_port     = etherbone_port,
