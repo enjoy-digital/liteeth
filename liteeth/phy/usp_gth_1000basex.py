@@ -26,8 +26,7 @@ class USP_GTH_1000BASEX(LiteXModule):
     tx_clk_freq = 125e6
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
         assert refclk_freq in [200e6, 156.25e6]
-        pcs = PCS(lsb_first=True)
-        self.submodules += pcs
+        self.pcs = pcs = PCS(lsb_first=True)
 
         self.sink    = pcs.sink
         self.source  = pcs.source

@@ -27,8 +27,7 @@ class K7_1000BASEX(LiteXModule):
     tx_clk_freq = 125e6
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
         assert refclk_freq in [200e6]
-        pcs = PCS(lsb_first=True)
-        self.submodules += pcs
+        self.pcs = pcs = PCS(lsb_first=True)
 
         self.sink    = pcs.sink
         self.source  = pcs.source
@@ -740,8 +739,7 @@ class K7_1000BASEX(LiteXModule):
         self.comb += rx_mmcm_locked.eq(rx_mmcm.locked)
 
         # Transceiver init
-        tx_init = ResetInserter()(GTXTXInit(sys_clk_freq, buffer_enable=True))
-        self.submodules += tx_init
+        self.tx_init = tx_init = ResetInserter()(GTXTXInit(sys_clk_freq, buffer_enable=True))
         self.comb += [
             tx_init.reset.eq(self.reset),
             pll.reset.eq(tx_init.pllreset),
@@ -752,9 +750,7 @@ class K7_1000BASEX(LiteXModule):
         self.sync += tx_mmcm_reset.eq(~pll.lock)
         tx_mmcm_reset.attr.add("no_retiming")
 
-
-        rx_init = ResetInserter()(GTXRXInit(sys_clk_freq, buffer_enable=True))
-        self.submodules += rx_init
+        self.rx_init = rx_init = ResetInserter()(GTXRXInit(sys_clk_freq, buffer_enable=True))
         self.comb += [
             rx_init.reset.eq(~tx_init.done | self.reset),
             rx_init.plllock.eq(pll.lock),

@@ -26,8 +26,7 @@ class A7_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     def __init__(self, qpll_channel, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
-        pcs = PCS(lsb_first=True)
-        self.submodules += pcs
+        self.pcs = pcs = PCS(lsb_first=True)
 
         self.sink    = pcs.sink
         self.source  = pcs.source
@@ -720,8 +719,7 @@ class A7_1000BASEX(LiteXModule):
         self.comb += rx_mmcm_locked.eq(rx_mmcm.locked)
 
         # Transceiver init
-        tx_init = GTPTxInit(sys_clk_freq)
-        self.submodules += tx_init
+        self.tx_init = tx_init = GTPTxInit(sys_clk_freq)
         self.comb += [
             qpll_channel.reset.eq(tx_init.qpll_reset),
             tx_init.qpll_lock.eq(qpll_channel.lock),
@@ -730,8 +728,7 @@ class A7_1000BASEX(LiteXModule):
         self.sync += tx_mmcm_reset.eq(~qpll_channel.lock)
         tx_mmcm_reset.attr.add("no_retiming")
 
-        rx_init = GTPRxInit(sys_clk_freq)
-        self.submodules += rx_init
+        self.rx_init = rx_init = GTPRxInit(sys_clk_freq)
         self.comb += [
             rx_init.enable.eq(tx_init.done),
             rx_reset.eq(rx_init.rx_reset | self.reset),
