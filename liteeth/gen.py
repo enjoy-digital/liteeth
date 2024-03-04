@@ -67,14 +67,6 @@ _io = [
     # Interrupt
     ("interrupt", 0, Pins(1)),
 
-    # DHCP.
-    ("dhcp", 0,
-        Subsignal("start",      Pins(1)),
-        Subsignal("done",       Pins(1)),
-        Subsignal("timeout",    Pins(1)),
-        Subsignal("ip_address", Pins(32)),
-    ),
-
     # MII PHY Pads
     ("mii_clocks", 0,
         Subsignal("tx", Pins(1)),
@@ -520,11 +512,9 @@ class UDPCore(PHYCore):
         # IP Address.
         dhcp       = core_config.get("dhcp", False)
         ip_address = core_config.get("ip_address", None)
-        # Get IP Address from IOs when not specified.
-        if ip_address is None:
+        # Get IP Address from IOs when not specified and DHCP is not used
+        if ip_address is None and not dhcp:
             ip_address = platform.request("ip_address")
-        else:
-            assert not dhcp
 
         # PHY --------------------------------------------------------------------------------------
         PHYCore.__init__(self, platform, core_config)
@@ -534,6 +524,7 @@ class UDPCore(PHYCore):
         self.core = LiteEthUDPIPCore(self.ethphy,
             mac_address       = mac_address,
             ip_address        = ip_address,
+            with_dhcp         = dhcp,
             clk_freq          = core_config["clk_freq"],
             dw                = data_width,
             with_sys_datapath = (data_width == 32),
@@ -542,23 +533,6 @@ class UDPCore(PHYCore):
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
         )
-
-        # DHCP -------------------------------------------------------------------------------------
-
-        if dhcp:
-            dhcp_pads = platform.request("dhcp")
-            dhcp_port = self.core.udp.crossbar.get_port(68, dw=32, cd="sys")
-            if isinstance(mac_address, Signal):
-                dhcp_mac_address = mac_address
-            else:
-                dhcp_mac_address = Signal(48, reset=0x10e2d5000001)
-            self.dhcp = LiteEthDHCP(udp_port=dhcp_port, sys_clk_freq=self.sys_clk_freq)
-            self.comb += [
-                self.dhcp.start.eq(dhcp_pads.start),
-                dhcp_pads.done.eq(self.dhcp.done),
-                dhcp_pads.timeout.eq(self.dhcp.timeout),
-                dhcp_pads.ip_address.eq(self.dhcp.ip_address),
-            ]
 
         # Etherbone --------------------------------------------------------------------------------
 
