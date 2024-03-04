@@ -375,10 +375,9 @@ class PCS(LiteXModule):
         rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
         self.submodules += rx_config_reg_abi, rx_config_reg_ack
 
-        more_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(more_ack_time*125e6)))
+        self.more_ack_timer = more_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(more_ack_time*125e6)))
         # SGMII: use 1.6ms link_timer
-        sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(1.6e-3*125e6)))
-        self.submodules += more_ack_timer, sgmii_ack_timer
+        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(1.6e-3*125e6)))
 
         self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
         # AN_ENABLE
