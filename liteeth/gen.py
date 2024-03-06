@@ -180,9 +180,13 @@ def get_udp_port_ios(name, data_width, dynamic_params=False):
         ),
     ]
 
-def get_udp_raw_port_ios(name, data_width):
+def get_udp_raw_port_ios(name, data_width, dynamic_params=False):
     return [
         (f"{name}", 0,
+             # Parameters.
+            *([
+                Subsignal("udp_listen_port",   Pins(16)),
+            ] if dynamic_params else []),
 
             # Sink.
             Subsignal("sink_ip_address", Pins(32)),
@@ -465,15 +469,26 @@ class UDPCore(PHYCore):
         # Use default Data-Width of 8-bit when not specified.
         data_width = port_cfg.get("data_width", 8)
 
+        # Used dynamic UDP-Port when not specified.
+        udp_listen_port = port_cfg.get("udp_port", None)
+        dynamic_params = udp_listen_port is None
+
+        if dynamic_params:
+            udp_listen_port = port_ios.udp_listen_port
+
+        if port_cfg.get("ip_address", None) is not None:
+            raise RuntimeWarning("\"ip_address\" config not supported on \"udpraw\" port")
+
         # Create/Add IOs.
          # ---------------
         platform.add_extension(get_udp_raw_port_ios(name,
             data_width     = data_width,
+            dynamic_params = dynamic_params
          ))
 
         port_ios = platform.request(name)
 
-        raw_port = self.core.udp.crossbar.get_port(port_ios.sink_dst_port, dw=data_width)
+        raw_port = self.core.udp.crossbar.get_port(udp_listen_port, dw=data_width)
 
         # Connect IOs.
         # ------------
