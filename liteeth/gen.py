@@ -145,6 +145,12 @@ _io = [
     ),
 
     # SGMII PHY Pads
+    ("sgmii_qpll", 0,
+        Subsignal("clk",     Pins(1)),
+        Subsignal("refclk",  Pins(1)),
+        Subsignal("reset",   Pins(1)),
+        Subsignal("lock",    Pins(1)),
+    ),
     ("sgmii", 0,
         Subsignal("refclk",  Pins(1)),
         Subsignal("rst",     Pins(1)),
@@ -293,23 +299,30 @@ class PHYCore(SoCMini):
             if phy in [liteeth_phys.A7_1000BASEX, liteeth_phys.A7_2500BASEX]:
                 refclk_freq = core_config.get("refclk_freq", 0)
                 assert refclk_freq in [125e6, 156.25e6]
-                from liteeth.phy.a7_gtp import QPLLSettings, QPLL
-                qpll_settings = QPLLSettings(
-                    refclksel  = 0b001,
-                    fbdiv      = {
-                        liteeth_phys.A7_1000BASEX : 4,
-                        liteeth_phys.A7_2500BASEX : 5,
-                    }[phy],
-                    fbdiv_45   = {
-                        125e6    : 5,
-                        156.25e6 : 4,
-                    }[refclk_freq],
-                    refclk_div = 1
-                )
-                qpll = QPLL(ethphy_pads.refclk, qpll_settings)
-                self.submodules += qpll
+                # QPLL.
+                if core_config.get("qpll", True):
+                    from liteeth.phy.a7_gtp import QPLLSettings, QPLL
+                    qpll_settings = QPLLSettings(
+                        refclksel  = 0b001,
+                        fbdiv      = {
+                            liteeth_phys.A7_1000BASEX : 4,
+                            liteeth_phys.A7_2500BASEX : 5,
+                        }[phy],
+                        fbdiv_45   = {
+                            125e6    : 5,
+                            156.25e6 : 4,
+                        }[refclk_freq],
+                        refclk_div = 1
+                    )
+                    qpll = QPLL(ethphy_pads.refclk, qpll_settings)
+                    self.submodules += qpll
+                    qpll_channel = qpll.channels[0] # FIXME: Allow 1?
+                else:
+                    qpll_channel = platform.request("sgmii_qpll")
+                    qpll_channel.index = 0 # FIXME: Allow 1?
+                # PHY.
                 ethphy = phy(
-                    qpll_channel = qpll.channels[0],
+                    qpll_channel = qpll_channel,
                     data_pads    = ethphy_pads,
                     sys_clk_freq = self.clk_freq,
                     with_csr     = False,
