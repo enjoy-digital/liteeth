@@ -597,6 +597,7 @@ def main():
     builder_args(parser)
     parser.set_defaults(output_dir="build")
     parser.add_argument("config", help="YAML config file")
+    parser.add_argument("--name", default="liteeth_core", help="Standalone core/module name")
     args = parser.parse_args()
     core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
 
@@ -639,7 +640,7 @@ def main():
         builder_arguments["csr_csv"] = os.path.join(builder_arguments["output_dir"], "csr.csv")
 
     builder = Builder(soc, **builder_arguments)
-    builder.build(build_name="liteeth_core")
+    builder.build(build_name=args.name)
 
 if __name__ == "__main__":
     main()
