@@ -1,24 +1,29 @@
---- # PHY ----------------------------------------------------------------------
+#
+# This file is part of LiteEth.
+#
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
-# License: BSD
+# SPDX-License-Identifier: BSD-2-Clause
 
-phy: LiteEthECP5PHYRGMII
-phy_tx_delay: 0e-9
-phy_rx_delay: 2e-9
-device: LFE5U-25F-6BG256C
-vendor: lattice
-toolchain: trellis
+# PHY --------------------------------------------------------------------------
+phy          : LiteEthECP5PHYRGMII
+phy_tx_delay : 0e-9
+phy_rx_delay : 2e-9
+device       : LFE5U-25F-6BG256C
+vendor       : lattice
+toolchain    : trellis
+
 # Core -------------------------------------------------------------------------
-clk_freq: 125e6
-core: udp
+clk_freq        : 125e6
+core            : udp
 
-mac_address: 0x10e2d5000000
-ip_address: 172.30.0.1
+mac_address     : 0x10e2d5000000
+ip_address      : 172.30.0.1
 
-tx_cdc_depth: 16
-tx_cdc_buffered: True
-rx_cdc_depth: 16
-rx_cdc_buffered: True
+tx_cdc_depth    : 16
+tx_cdc_buffered : True
+rx_cdc_depth    : 16
+rx_cdc_buffered : True
+
 # UDP Ports --------------------------------------------------------------------
 # mode `raw` vs `streamer` mode:
 # The streamer mode is a convenience wrapper around a `raw` UDP port. A raw UDP
@@ -32,13 +37,13 @@ rx_cdc_buffered: True
 # control of transmitted UDP packet sizes.
 udp_ports:
   raw:
-    data_width: 32
-    mode: raw
+    data_width : 32
+    mode       : raw
   streamer1:
-    data_width: 32
-    port: 1337
-    mode: streamer
+    data_width : 32
+    port       : 1337
+    mode       : streamer
   streamer2:
-    data_width: 32
-    port: 6077
-    mode: streamer
+    data_width : 32
+    port       : 6077
+    mode       : streamer

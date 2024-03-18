@@ -6,14 +6,16 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 # PHY ----------------------------------------------------------------------
-phy:        LiteEthPHYMII
-vendor:     xilinx
-toolchain:  vivado
-# Core ---------------------------------------------------------------------
-clk_freq:   100e6
-core:       axi-lite
-endianness: big
+phy       : LiteEthPHYMII
+vendor    : xilinx
+toolchain : vivado
 
+# Core ---------------------------------------------------------------------
+clk_freq   : 100e6
+core       : axi-lite
+endianness : big
+
+# SoC ---------------------------------------------------------------------
 soc:
     mem_map:
         ethmac: 0x50000000

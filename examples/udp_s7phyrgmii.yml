@@ -5,27 +5,27 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 # PHY --------------------------------------------------------------------------
-phy:         LiteEthS7PHYRGMII
-vendor:      xilinx
-toolchain:   vivado
+phy       : LiteEthS7PHYRGMII
+vendor    : xilinx
+toolchain : vivado
 
 # Core -------------------------------------------------------------------------
-clk_freq:    125e6
-core:        udp
-mac_address: 0x10e2d5000000
-ip_address:  192.168.1.50
-data_width:  8
+clk_freq    : 125e6
+core        : udp
+mac_address : 0x10e2d5000000
+ip_address  : 192.168.1.50
+data_width  : 8
 
 # UDP Ports --------------------------------------------------------------------
-udp_ports:   {
-  "udp0": {
+udp_ports : {
+  "udp0" : {
     "udp_port"      : 2000,            # Static Params.
     "ip_address"    : "192.168.1.100", # Static Params.
     "data_width"    : 32,
     "tx_fifo_depth" : 64,
     "rx_fifo_depth" : 64,
   },
-  "udp1": {
+  "udp1" : {
     #"udp_port"      : , # Dynamic Params.
     #"ip_address"    : , # Dynamic Params.
     "data_width"    : 32,
