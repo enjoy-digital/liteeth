@@ -300,6 +300,8 @@ class PHYCore(SoCMini):
                 refclk_freq = core_config.get("refclk_freq", 0)
                 assert refclk_freq in [125e6, 156.25e6]
                 # QPLL.
+                qpll_channel_index = core_config.get("qpll_channel", 0)
+                assert qpll_channel_index in [0, 1]
                 if core_config.get("qpll", True):
                     from liteeth.phy.a7_gtp import QPLLSettings, QPLL
                     qpll_settings = QPLLSettings(
@@ -316,10 +318,10 @@ class PHYCore(SoCMini):
                     )
                     qpll = QPLL(ethphy_pads.refclk, qpll_settings)
                     self.submodules += qpll
-                    qpll_channel = qpll.channels[0] # FIXME: Allow 1?
+                    qpll_channel = qpll.channels[qpll_channel_index]
                 else:
                     qpll_channel = platform.request("sgmii_qpll")
-                    qpll_channel.index = 0 # FIXME: Allow 1?
+                    qpll_channel.index = qpll_channel_index
                 # PHY.
                 ethphy = phy(
                     qpll_channel = qpll_channel,
