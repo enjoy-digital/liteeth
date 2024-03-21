@@ -92,10 +92,10 @@ class LiteEthMACCRCEngine(Module):
 
 @ResetInserter()
 @CEInserter()
-class LiteEthMACCRC32(Module):
+class LiteEthMACCRC32Generator(Module):
     """IEEE 802.3 CRC
 
-    Implement an IEEE 802.3 CRC generator/checker.
+    Implement an IEEE 802.3 CRC generator.
 
     Parameters
     ----------
@@ -110,13 +110,10 @@ class LiteEthMACCRC32(Module):
         Valid byte in data input (optional).
     value : out
         CRC value (used for generator).
-    error : out
-        CRC error (used for checker).
     """
     width   = 32
     polynom = 0x04C11DB7
     init    = 2**width-1
-    check   = 0xC704DD7B
     def __init__(self, data_width):
         dw = data_width//8
 
@@ -145,8 +142,96 @@ class LiteEthMACCRC32(Module):
         self.comb += [engines[e].data.eq(self.data[:(e+1)*8]) for e in range(dw)],
         self.comb += [engines[e].last.eq(reg) for e in range(dw)]
         self.comb += [If(last_be[e],
-                        self.value.eq(reverse_bits(~engines[e].next)),
-                        self.error.eq(engines[e].next != self.check))
+                        self.value.eq(reverse_bits(~engines[e].next)))
+                            for e in range(dw)]
+
+@ResetInserter()
+@CEInserter()
+class LiteEthMACCRC32Validator(Module):
+    """IEEE 802.3 CRC
+
+    Implement an IEEE 802.3 CRC checker.
+
+    Parameters
+    ----------
+    data_width : int
+        Width of the data bus.
+
+    Attributes
+    ----------
+    data : in
+        Data input.
+    last_be : in
+        Valid byte in data input (optional).
+    value : out
+        CRC value (used for generator).
+    """
+    width   = 32
+    polynom = 0x04C11DB7
+    init    = 2**width-1
+
+    check = [
+        0xc704dd7b, # all valid
+        0x4710bb9c, #  1 zero byte
+        0x3a7abc72, #  2 zero byte
+        0x8104c946, #  3 zero byte
+        0x6904bb59, #  4 zero byte
+        0x8ad76f98, #  5 zero byte
+        0x91e9ae38, #  6 zero byte
+        0xc8721e29, #  7 zero byte
+        0x099c5421, #  8 zero byte
+        0xbe9dd10f, #  9 zero byte
+        0x1c612274, # 10 zero byte
+        0x183f3414, # 11 zero byte
+        0x552d22c8, # 12 zero byte
+        0x4270086c, # 13 zero byte
+        0x4d0c2719, # 14 zero byte
+        0x096cefa4, # 15 zero byte
+    ]
+
+    def __init__(self, data_width):
+        dw = data_width//8
+
+        # We only have check values for upto 16
+        assert dw <= 16
+
+        check_values = list(reversed(self.check[0:dw]))
+
+        self.data  = Signal(data_width)
+        self.last_be = Signal(dw)
+        self.error = Signal()
+        # Add a separate last_be signal, to maintain backwards compatability
+        last_be = Signal(data_width//8)
+
+        # Ensure non-valid words are 0
+        data = Signal(self.width)
+
+        # # #
+
+        self.comb += [
+            If(self.last_be != 0,
+                last_be.eq(self.last_be)
+            ).Else(
+                last_be.eq(2**(dw-1)))
+        ]
+
+        def mk_mask(dw, bytes_valid):
+            return ~((2**(8*dw) - 1) >> (8*bytes_valid))
+
+        self.comb += [If(last_be[e],
+                        data.eq(self.data & mk_mask(dw, e + 1)))
+                            for e in range(dw)]
+
+        # Since the data can end at any byte end, indicated by `last_be`
+        engine = LiteEthMACCRCEngine(dw*8, self.width, self.polynom)
+        self.submodules += engine
+
+        reg = Signal(self.width, reset=self.init)
+        self.sync += reg.eq(engine.next)
+        self.comb += engine.data.eq(data)
+        self.comb += engine.last.eq(reg)
+        self.comb += [If(last_be[e],
+                        self.error.eq(engine.next != check_values[e]))
                             for e in range(dw)]
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
@@ -262,7 +347,7 @@ class LiteEthMACCRCInserter(Module):
 
 class LiteEthMACCRC32Inserter(LiteEthMACCRCInserter):
     def __init__(self, description):
-        LiteEthMACCRCInserter.__init__(self, LiteEthMACCRC32, description)
+        LiteEthMACCRCInserter.__init__(self, LiteEthMACCRC32Generator, description)
 
 # MAC CRC Checker ----------------------------------------------------------------------------------
 
@@ -388,4 +473,4 @@ class LiteEthMACCRCChecker(Module):
 
 class LiteEthMACCRC32Checker(LiteEthMACCRCChecker):
     def __init__(self, description):
-        LiteEthMACCRCChecker.__init__(self, LiteEthMACCRC32, description)
+        LiteEthMACCRCChecker.__init__(self, LiteEthMACCRC32Validator, description)
