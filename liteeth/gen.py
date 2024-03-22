@@ -324,12 +324,20 @@ class PHYCore(SoCMini):
                     qpll_channel.index = qpll_channel_index
                 # PHY.
                 ethphy = phy(
-                    qpll_channel = qpll_channel,
-                    data_pads    = ethphy_pads,
-                    sys_clk_freq = self.clk_freq,
-                    with_csr     = False,
-                    rx_polarity  = core_config.get("phy_rx_polarity", 0),
-                    tx_polarity  = core_config.get("phy_tx_polarity", 0),
+                    # General.
+                    data_pads      = ethphy_pads,
+                    sys_clk_freq   = self.clk_freq,
+                    with_csr       = False,
+                    # QPLL.
+                    qpll_channel   = qpll_channel,
+                    # TX.
+                    tx_cm_type     = core_config.get("phy_tx_cm_type",     "MMCM"),
+                    tx_cm_buf_type = core_config.get("phy_tx_cm_buf_type", "BUFH"),
+                    tx_polarity    = core_config.get("phy_tx_polarity",         0),
+                    # RX.
+                    rx_cm_type     = core_config.get("phy_rx_cm_type",     "MMCM"),
+                    rx_cm_buf_type = core_config.get("phy_rx_cm_buf_type", "BUFG"),
+                    rx_polarity    = core_config.get("phy_rx_polarity",         0),
                 )
             # Other 7-Series/Ultrascale(+).
             else:

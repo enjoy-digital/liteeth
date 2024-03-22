@@ -12,7 +12,7 @@ from migen.genlib.cdc import PulseSynchronizer
 
 from litex.gen import *
 
-from litex.soc.cores.clock import S7MMCM
+from litex.soc.cores.clock import S7PLL, S7MMCM
 
 from liteeth.common import *
 from liteeth.phy.a7_gtp import *
@@ -25,7 +25,17 @@ class A7_1000BASEX(LiteXModule):
     linerate    = 1.25e9
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
-    def __init__(self, qpll_channel, data_pads, sys_clk_freq, with_csr=True, rx_polarity=0, tx_polarity=0):
+    def __init__(self, qpll_channel, data_pads, sys_clk_freq, with_csr=True,
+        # TX Parameters.
+        tx_cm_type     = "PLL",
+        tx_cm_buf_type = "BUFH",
+        tx_polarity    = 0,
+
+        # RX Parameters.
+        rx_cm_type     = "PLL",
+        rx_cm_buf_type = "BUFG",
+        rx_polarity    = 0,
+    ):
         self.pcs = pcs = PCS(lsb_first=True)
 
         self.sink    = pcs.sink
@@ -47,16 +57,16 @@ class A7_1000BASEX(LiteXModule):
 
         # # #
 
-        # GTP transceiver
-        tx_reset       = Signal()
-        tx_mmcm_locked = Signal()
-        tx_mmcm_reset  = Signal(reset=1)
-        tx_data        = Signal(20)
-        tx_reset_done  = Signal()
+        # GTP transceiver.
+        tx_reset      = Signal()
+        tx_cm_locked  = Signal()
+        tx_cm_reset   = Signal(reset=1)
+        tx_data       = Signal(20)
+        tx_reset_done = Signal()
 
         rx_reset          = Signal()
-        rx_mmcm_locked    = Signal()
-        rx_mmcm_reset     = Signal(reset=1)
+        rx_cm_locked      = Signal()
+        rx_cm_reset       = Signal(reset=1)
         rx_data           = Signal(20)
         rx_reset_done     = Signal()
         rx_pma_reset_done = Signal()
@@ -415,7 +425,7 @@ class A7_1000BASEX(LiteXModule):
             i_SETERRSTATUS         = 0,
             # RX Initialization and Reset Ports
             i_EYESCANRESET         = 0,
-            i_RXUSERRDY            = rx_mmcm_locked,
+            i_RXUSERRDY            = rx_cm_locked,
             # RX Margin Analysis Ports
             o_EYESCANDATAERROR     = Open(),
             i_EYESCANMODE          = 0,
@@ -571,7 +581,7 @@ class A7_1000BASEX(LiteXModule):
             i_CFGRESET             = 0,
             i_GTTXRESET            = tx_reset,
             o_PCSRSVDOUT           = Open(),
-            i_TXUSERRDY            = tx_mmcm_locked,
+            i_TXUSERRDY            = tx_cm_locked,
             # TX Phase Interpolator PPM Controller Ports
             i_TXPIPPMEN            = 0,
             i_TXPIPPMOVRDEN        = 0,
@@ -702,21 +712,21 @@ class A7_1000BASEX(LiteXModule):
             o_O = rxoutclk_rebuffer
         )
 
-        # TX MMCM.
-        self.tx_mmcm = tx_mmcm = S7MMCM()
-        tx_mmcm.register_clkin(txoutclk_rebuffer,  self.tx_clk_freq/2)
-        tx_mmcm.create_clkout(self.cd_eth_tx_half, self.tx_clk_freq/2, buf="bufh", with_reset=False)
-        tx_mmcm.create_clkout(self.cd_eth_tx,      self.tx_clk_freq,   buf="bufh", with_reset=True)
-        self.comb += tx_mmcm.reset.eq(tx_mmcm_reset)
-        self.comb += tx_mmcm_locked.eq(tx_mmcm.locked)
+        # TX CM.
+        self.tx_cm = tx_cm = {"PLL": S7PLL, "MMCM": S7MMCM}[tx_cm_type]()
+        tx_cm.register_clkin(txoutclk_rebuffer,  self.tx_clk_freq/2)
+        tx_cm.create_clkout(self.cd_eth_tx_half, self.tx_clk_freq/2, buf=tx_cm_buf_type, with_reset=False)
+        tx_cm.create_clkout(self.cd_eth_tx,      self.tx_clk_freq,   buf=tx_cm_buf_type, with_reset=True)
+        self.comb += tx_cm.reset.eq(tx_cm_reset)
+        self.comb += tx_cm_locked.eq(tx_cm.locked)
 
-        # RX MMCM.
-        self.rx_mmcm = rx_mmcm = S7MMCM()
-        rx_mmcm.register_clkin(rxoutclk_rebuffer,  self.rx_clk_freq/2)
-        rx_mmcm.create_clkout(self.cd_eth_rx_half, self.rx_clk_freq/2, buf="bufg", with_reset=False)
-        rx_mmcm.create_clkout(self.cd_eth_rx,      self.rx_clk_freq,   buf="bufg", with_reset=True)
-        self.comb += rx_mmcm.reset.eq(rx_mmcm_reset)
-        self.comb += rx_mmcm_locked.eq(rx_mmcm.locked)
+        # RX CM.
+        self.rx_cm = rx_cm = {"PLL": S7PLL, "MMCM": S7MMCM}[rx_cm_type]()
+        rx_cm.register_clkin(rxoutclk_rebuffer,  self.rx_clk_freq/2)
+        rx_cm.create_clkout(self.cd_eth_rx_half, self.rx_clk_freq/2, buf=rx_cm_buf_type, with_reset=False)
+        rx_cm.create_clkout(self.cd_eth_rx,      self.rx_clk_freq,   buf=rx_cm_buf_type, with_reset=True)
+        self.comb += rx_cm.reset.eq(rx_cm_reset)
+        self.comb += rx_cm_locked.eq(rx_cm.locked)
 
         # Transceiver init
         self.tx_init = tx_init = GTPTxInit(sys_clk_freq)
@@ -725,8 +735,8 @@ class A7_1000BASEX(LiteXModule):
             tx_init.qpll_lock.eq(qpll_channel.lock),
             tx_reset.eq(tx_init.tx_reset | self.reset)
         ]
-        self.sync += tx_mmcm_reset.eq(~qpll_channel.lock)
-        tx_mmcm_reset.attr.add("no_retiming")
+        self.sync += tx_cm_reset.eq(~qpll_channel.lock)
+        tx_cm_reset.attr.add("no_retiming")
 
         self.rx_init = rx_init = GTPRxInit(sys_clk_freq)
         self.comb += [
@@ -761,9 +771,9 @@ class A7_1000BASEX(LiteXModule):
             ).Else(
                 cdr_locked.eq(1)
             ),
-            rx_mmcm_reset.eq(~cdr_locked)
+            rx_cm_reset.eq(~cdr_locked)
         ]
-        rx_mmcm_reset.attr.add("no_retiming")
+        rx_cm_reset.attr.add("no_retiming")
 
         # Gearbox and PCS connection
         self.gearbox = gearbox = PCSGearbox()
