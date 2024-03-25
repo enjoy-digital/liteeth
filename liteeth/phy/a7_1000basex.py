@@ -702,7 +702,7 @@ class A7_1000BASEX(LiteXModule):
 
         # Get 125MHz clocks back - the GTP is outputting 62.5MHz.
         txoutclk_rebuffer = Signal()
-        self.specials += Instance("BUFH",
+        self.specials += Instance("BUFG",
             i_I = self.txoutclk,
             o_O = txoutclk_rebuffer
         )
