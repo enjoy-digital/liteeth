@@ -147,14 +147,14 @@ class LiteEthMACCRCInserter(LiteXModule):
         Packet data with CRC.
     """
     def __init__(self, crc_class, description):
-        self.sink   = sink = stream.Endpoint(description)
+        self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
         # # #
 
-        dw  = len(sink.data)
-        assert dw in [8, 32, 64]
-        crc = crc_class(dw)
+        data_width  = len(sink.data)
+        assert data_width in [8, 32, 64]
+        crc = crc_class(data_width)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
 
@@ -182,23 +182,23 @@ class LiteEthMACCRCInserter(LiteXModule):
                 # beginning of the crc value
                 [If(sink.last_be[e],
                     source.data.eq(Cat(sink.data[:(e+1)*8],
-                        crc.value)[:dw])) for e in range(dw//8)],
+                        crc.value)[:data_width])) for e in range(data_width//8)],
                 # If the whole crc value fits in the last sink paket, signal the
                 # end. This also means the next state is idle
-                If((dw == 64) & (sink.last_be <= 0xF),
+                If((data_width == 64) & (sink.last_be <= 0xF),
                     source.last.eq(1),
-                    source.last_be.eq(sink.last_be << (dw//8 - 4))
+                    source.last_be.eq(sink.last_be << (data_width//8 - 4))
                 ),
             ).Else(
                 crc.ce.eq(sink.valid & source.ready),
             ),
 
             If(sink.valid & sink.last & source.ready,
-                If((dw == 64) & (sink.last_be <= 0xF),
+                If((data_width == 64) & (sink.last_be <= 0xF),
                     NextState("IDLE"),
                 ).Else(
                     NextValue(crc_packet, crc.value),
-                    If(dw == 64,
+                    If(data_width == 64,
                         NextValue(last_be, sink.last_be >> 4),
                     ).Else (
                         NextValue(last_be, sink.last_be),
@@ -207,7 +207,7 @@ class LiteEthMACCRCInserter(LiteXModule):
                 )
             )
         )
-        ratio = crc.width//dw
+        ratio = crc.width//data_width
         if ratio > 1:
             cnt = Signal(max=ratio, reset=ratio-1)
             cnt_done = Signal()
@@ -233,7 +233,7 @@ class LiteEthMACCRCInserter(LiteXModule):
                 source.data.eq(crc.value),
                 source.last_be.eq(last_be),
                 [If(last_be[e],
-                    source.data.eq(crc_packet[-(e+1)*8:])) for e in range(dw//8)],
+                    source.data.eq(crc_packet[-(e+1)*8:])) for e in range(data_width//8)],
                 If(source.ready, NextState("IDLE"))
             )
 
@@ -272,11 +272,11 @@ class LiteEthMACCRCChecker(LiteXModule):
 
         # # #
 
-        dw  = len(sink.data)
-        assert dw in [8, 32, 64]
-        crc = crc_class(dw)
+        data_width  = len(sink.data)
+        assert data_width in [8, 32, 64]
+        crc = crc_class(data_width)
         self.submodules += crc
-        ratio = ceil(crc.width/dw)
+        ratio = ceil(crc.width/data_width)
 
         fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
         self.submodules += fifo
@@ -320,30 +320,30 @@ class LiteEthMACCRCChecker(LiteXModule):
             source.valid.eq(sink.valid & fifo_full),
             source.payload.eq(fifo.source.payload),
 
-            If(dw <= 32,
+            If(data_width <= 32,
                 source.last.eq(sink.last),
                 source.last_be.eq(sink.last_be),
-            # For dw == 64 bit, we need to look wether the last word contains only the crc value or both crc and data
+            # For data_width == 64 bit, we need to look wether the last word contains only the crc value or both crc and data
             # In the latter case, the last word also needs to be output
             # In both cases, last_be needs to be adjusted for the new end position
             ).Elif(sink.last_be & 0xF,
                 source.last.eq(sink.last),
-                source.last_be.eq(sink.last_be << (dw//8 - 4)),
+                source.last_be.eq(sink.last_be << (data_width//8 - 4)),
             ).Else(
                 NextValue(last_be, sink.last_be >> 4),
                 NextValue(crc_error, crc.error),
             ),
 
-            # `source.error` has a width > 1 for dw > 8, but since the crc error
+            # `source.error` has a width > 1 for data_width > 8, but since the crc error
             # applies to the whole ethernet packet, all the bytes are marked as
             # containing an error. This way later reducing the data width
             # doesn't run into issues with missing the error
-            source.error.eq(sink.error | Replicate(crc.error & sink.last, dw//8)),
+            source.error.eq(sink.error | Replicate(crc.error & sink.last, data_width//8)),
             self.error.eq(sink.valid & sink.last & crc.error),
 
             If(sink.valid & sink.ready,
                 crc.ce.eq(1),
-                # Can only happen for dw == 64
+                # Can only happen for data_width == 64
                 If(sink.last & (sink.last_be > 0xF),
                    NextState("COPY_LAST"),
                 ).Elif(sink.last,
@@ -353,10 +353,10 @@ class LiteEthMACCRCChecker(LiteXModule):
         )
 
         # If the last sink word contains both data and the crc value, shift out
-        # the last value here. Can only happen for dw == 64
+        # the last value here. Can only happen for data_width == 64
         fsm.act("COPY_LAST",
             fifo.source.connect(source),
-            source.error.eq(fifo.source.error | Replicate(crc_error, dw//8)),
+            source.error.eq(fifo.source.error | Replicate(crc_error, data_width//8)),
             source.last_be.eq(last_be),
             If(source.valid & source.ready,
                 NextState("RESET")
