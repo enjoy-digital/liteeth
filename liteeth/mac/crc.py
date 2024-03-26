@@ -19,52 +19,25 @@ from litex.gen.genlib.misc import chooser, WaitTimer
 # MAC CRC Engine -----------------------------------------------------------------------------------
 
 class LiteEthMACCRCEngine(LiteXModule):
-    """Cyclic Redundancy Check Engine
+    """
+    Cyclic Redundancy Check (CRC) Engine using an asynchronous LFSR.
 
-    Compute next CRC value from last CRC value and data input using
-    an optimized asynchronous LFSR.
+    This module calculates the next CRC value based on the previous CRC value and the current data input.
+    The CRC calculation is optimized for speed and resource efficiency.
 
     Parameters
     ----------
-    data_width : int
-        Width of the data bus.
     width : int
-        Width of the CRC.
+        The bit width of the data bus and CRC value.
     polynom : int
-        Polynom of the CRC (ex: 0x04C11DB7 for IEEE 802.3 CRC)
-
-    Attributes
-    ----------
-    data : in
-        Data input.
-    last : in
-        last CRC value.
-    next :
-        next CRC value.
+        The polynomial used for the CRC calculation, specified as an integer (e.g., 0x04C11DB7 for IEEE 802.3).
     """
     def __init__(self, data_width, width, polynom):
-        self.data = Signal(data_width)
-        self.last = Signal(width)
-        self.next = Signal(width)
+        self.data     = Signal(data_width)
+        self.crc_prev = Signal(width)
+        self.crc_next = Signal(width)
 
         # # #
-
-        def _optimize_eq(l):
-            """
-            remove an even numbers of XORs with the same bit
-            replace an odd number of XORs with a single XOR
-            """
-            d = {}
-            for e in l:
-                if e in d:
-                    d[e] += 1
-                else:
-                    d[e] = 1
-            r = []
-            for key, value in d.items():
-                if value%2 != 0:
-                    r.append(key)
-            return r
 
         # compute and optimize the parallel implementation of the CRC's LFSR
         taps = [x for x in range(width) if (1 << x) & polynom]
@@ -74,7 +47,7 @@ class LiteEthMACCRCEngine(LiteXModule):
             for j in range(width-1):
                 if j+1 in taps:
                     curval[j] += feedback
-                curval[j] = _optimize_eq(curval[j])
+                curval[j] = self.optimize_xors(curval[j])
             curval.insert(0, feedback)
 
         # implement logic
@@ -82,10 +55,16 @@ class LiteEthMACCRCEngine(LiteXModule):
             xors = []
             for t, n in curval[i]:
                 if t == "state":
-                    xors += [self.last[n]]
+                    xors += [self.crc_prev[n]]
                 elif t == "din":
                     xors += [self.data[n]]
-            self.comb += self.next[i].eq(Reduce("XOR", xors))
+            self.comb += self.crc_next[i].eq(Reduce("XOR", xors))
+
+    @staticmethod
+    def optimize_xors(bits):
+        """Return items with odd occurrences for XOR optimization."""
+        from collections import Counter
+        return [bit for bit, count in Counter(bits).items() if count % 2 == 1]
 
 # MAC CRC32 ----------------------------------------------------------------------------------------
 
@@ -140,12 +119,12 @@ class LiteEthMACCRC32(LiteXModule):
         self.submodules += engines
 
         reg = Signal(self.width, reset=self.init)
-        self.sync += reg.eq(engines[-1].next)
+        self.sync += reg.eq(engines[-1].crc_next)
         self.comb += [engines[e].data.eq(self.data[:(e+1)*8]) for e in range(dw)],
-        self.comb += [engines[e].last.eq(reg) for e in range(dw)]
+        self.comb += [engines[e].crc_prev.eq(reg) for e in range(dw)]
         self.comb += [If(last_be[e],
-                        self.value.eq(reverse_bits(~engines[e].next)),
-                        self.error.eq(engines[e].next != self.check))
+                        self.value.eq(reverse_bits(~engines[e].crc_next)),
+                        self.error.eq(engines[e].crc_next != self.check))
                             for e in range(dw)]
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
