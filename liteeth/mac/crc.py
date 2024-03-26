@@ -127,9 +127,9 @@ class LiteEthMACCRC32(LiteXModule):
                 )
             ]
 
-# MAC CRC Inserter ---------------------------------------------------------------------------------
+# MAC CRC32 Inserter -------------------------------------------------------------------------------
 
-class LiteEthMACCRCInserter(LiteXModule):
+class LiteEthMACCRC32Inserter(LiteXModule):
     """CRC Inserter
 
     Append a CRC at the end of each packet.
@@ -146,7 +146,7 @@ class LiteEthMACCRCInserter(LiteXModule):
     source : out
         Packet data with CRC.
     """
-    def __init__(self, crc_class, description):
+    def __init__(self, description):
         self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
@@ -154,7 +154,7 @@ class LiteEthMACCRCInserter(LiteXModule):
 
         data_width  = len(sink.data)
         assert data_width in [8, 32, 64]
-        crc = crc_class(data_width)
+        crc = LiteEthMACCRC32(data_width)
         fsm = FSM(reset_state="IDLE")
         self.submodules += crc, fsm
 
@@ -237,14 +237,9 @@ class LiteEthMACCRCInserter(LiteXModule):
                 If(source.ready, NextState("IDLE"))
             )
 
+# MAC CRC32 Checker --------------------------------------------------------------------------------
 
-class LiteEthMACCRC32Inserter(LiteEthMACCRCInserter):
-    def __init__(self, description):
-        LiteEthMACCRCInserter.__init__(self, LiteEthMACCRC32, description)
-
-# MAC CRC Checker ----------------------------------------------------------------------------------
-
-class LiteEthMACCRCChecker(LiteXModule):
+class LiteEthMACCRC32Checker(LiteXModule):
     """CRC Checker
 
     Check CRC at the end of each packet.
@@ -264,7 +259,7 @@ class LiteEthMACCRCChecker(LiteXModule):
     error : out
         Pulses every time a CRC error is detected.
     """
-    def __init__(self, crc_class, description):
+    def __init__(self, description):
         self.sink   = sink   = stream.Endpoint(description)
         self.source = source = stream.Endpoint(description)
 
@@ -274,7 +269,7 @@ class LiteEthMACCRCChecker(LiteXModule):
 
         data_width  = len(sink.data)
         assert data_width in [8, 32, 64]
-        crc = crc_class(data_width)
+        crc = LiteEthMACCRC32(data_width)
         self.submodules += crc
         ratio = ceil(crc.width/data_width)
 
@@ -362,8 +357,3 @@ class LiteEthMACCRCChecker(LiteXModule):
                 NextState("RESET")
             )
         )
-
-
-class LiteEthMACCRC32Checker(LiteEthMACCRCChecker):
-    def __init__(self, description):
-        LiteEthMACCRCChecker.__init__(self, LiteEthMACCRC32, description)
