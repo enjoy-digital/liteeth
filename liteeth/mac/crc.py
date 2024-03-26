@@ -86,41 +86,44 @@ class LiteEthMACCRC32(LiteXModule):
     ----------
     data : in
         Data input.
-    last_be : in
-        Valid byte in data input (optional).
+    be : in
+        Data byte enable (optional, defaults to full word).
     value : out
         CRC value (used for generator).
     error : out
         CRC error (used for checker).
     """
     width   = 32
-    polynom = 0x04C11DB7
+    polynom = 0x04c11db7
     init    = 2**width-1
-    check   = 0xC704DD7B
+    check   = 0xc704dd7b
     def __init__(self, data_width):
         self.data    = Signal(data_width)
-        self.last_be = Signal(data_width//8, reset=2**(data_width//8 - 1))
+        self.be      = Signal(data_width//8, reset=2**data_width//8 - 1)
         self.value   = Signal(self.width)
         self.error   = Signal()
 
         # # #
 
-        # Since the data can end at any byte end, indicated by `last_be`
-        # maintain separate engines for each 8 byte increment in the data word
+        # Create a CRC Engine for each byte segment.
+        # Ex for a 32-bit Data-Path, we create 4 engines: 8, 16, 24 and 32-bit engines.
         engines = []
-        for e in range(data_width//8):
-            engines.append(LiteEthMACCRCEngine((e+1)*8, self.width, self.polynom))
+        for n in range(data_width//8):
+            engines.append(LiteEthMACCRCEngine((n + 1)*8, self.width, self.polynom))
         self.submodules += engines
 
+        # Register Full-Word CRC Engine (last one).
         reg = Signal(self.width, reset=self.init)
         self.sync += reg.eq(engines[-1].crc_next)
-        for e in range(data_width//8):
+
+        # Select CRC Engine/Result.
+        for n in range(data_width//8):
             self.comb += [
-                engines[e].data.eq(self.data[:(e+1)*8]),
-                engines[e].crc_prev.eq(reg),
-                If(self.last_be[e],
-                    self.value.eq(reverse_bits(~engines[e].crc_next)),
-                    self.error.eq(engines[e].crc_next != self.check),
+                engines[n].data.eq(self.data[:(n + 1)*8]),
+                engines[n].crc_prev.eq(reg),
+                If(self.be[n],
+                    self.value.eq(reverse_bits(~engines[n].crc_next)),
+                    self.error.eq(engines[n].crc_next != self.check),
                 )
             ]
 
@@ -170,7 +173,7 @@ class LiteEthMACCRCInserter(LiteXModule):
         fsm.act("COPY",
             crc.ce.eq(sink.valid & source.ready),
             crc.data.eq(sink.data),
-            crc.last_be.eq(sink.last_be),
+            crc.be.eq(sink.last_be),
             sink.connect(source),
             source.last.eq(0),
             source.last_be.eq(0),
@@ -302,7 +305,7 @@ class LiteEthMACCRCChecker(LiteXModule):
         )
         self.comb += [
             crc.data.eq(sink.data),
-            crc.last_be.eq(sink.last_be),
+            crc.be.eq(sink.last_be),
         ]
         fsm.act("IDLE",
             If(sink.valid & sink.ready,
