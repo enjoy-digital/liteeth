@@ -1,17 +1,16 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2021 David Sawatzke <d-git@sawatzke.dev>
 # Copyright (c) 2017 whitequark <whitequark@whitequark.org>
 # Copyright (c) 2018 Felix Held <felix-github@felixheld.de>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from functools import reduce
-from operator import xor
-from collections import OrderedDict
 from math import ceil
+
+from litex.gen import *
 
 from liteeth.common import *
 
@@ -19,7 +18,7 @@ from litex.gen.genlib.misc import chooser, WaitTimer
 
 # MAC CRC Engine -----------------------------------------------------------------------------------
 
-class LiteEthMACCRCEngine(Module):
+class LiteEthMACCRCEngine(LiteXModule):
     """Cyclic Redundancy Check Engine
 
     Compute next CRC value from last CRC value and data input using
@@ -55,7 +54,7 @@ class LiteEthMACCRCEngine(Module):
             remove an even numbers of XORs with the same bit
             replace an odd number of XORs with a single XOR
             """
-            d = OrderedDict()
+            d = {}
             for e in l:
                 if e in d:
                     d[e] += 1
@@ -86,13 +85,13 @@ class LiteEthMACCRCEngine(Module):
                     xors += [self.last[n]]
                 elif t == "din":
                     xors += [self.data[n]]
-            self.comb += self.next[i].eq(reduce(xor, xors))
+            self.comb += self.next[i].eq(Reduce("XOR", xors))
 
 # MAC CRC32 ----------------------------------------------------------------------------------------
 
 @ResetInserter()
 @CEInserter()
-class LiteEthMACCRC32(Module):
+class LiteEthMACCRC32(LiteXModule):
     """IEEE 802.3 CRC
 
     Implement an IEEE 802.3 CRC generator/checker.
@@ -151,7 +150,7 @@ class LiteEthMACCRC32(Module):
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
 
-class LiteEthMACCRCInserter(Module):
+class LiteEthMACCRCInserter(LiteXModule):
     """CRC Inserter
 
     Append a CRC at the end of each packet.
@@ -266,7 +265,7 @@ class LiteEthMACCRC32Inserter(LiteEthMACCRCInserter):
 
 # MAC CRC Checker ----------------------------------------------------------------------------------
 
-class LiteEthMACCRCChecker(Module):
+class LiteEthMACCRCChecker(LiteXModule):
     """CRC Checker
 
     Check CRC at the end of each packet.
