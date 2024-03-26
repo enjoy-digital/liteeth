@@ -152,16 +152,20 @@ class LiteEthMACCRC32Inserter(LiteXModule):
 
         # # #
 
+        # Parameters.
         data_width  = len(sink.data)
+        ratio       = 32//data_width
         assert data_width in [8, 32, 64]
-        crc = LiteEthMACCRC32(data_width)
-        fsm = FSM(reset_state="IDLE")
-        self.submodules += crc, fsm
 
-        # crc packet checksum
-        crc_packet = Signal(crc.width)
-        last_be = Signal().like(sink.last_be)
+        # Signals.
+        crc_packet = Signal(32)
+        last_be    = Signal(data_width//8)
 
+        # CRC32 Generator.
+        self.crc = crc = LiteEthMACCRC32(data_width)
+
+        # FSM.
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             crc.reset.eq(1),
             sink.ready.eq(1),
@@ -170,22 +174,23 @@ class LiteEthMACCRC32Inserter(LiteXModule):
                 NextState("COPY"),
             )
         )
-        fsm.act("COPY",
-            crc.ce.eq(sink.valid & source.ready),
+        self.comb += [
             crc.data.eq(sink.data),
             crc.be.eq(sink.last_be),
+        ]
+        fsm.act("COPY",
+            crc.ce.eq(sink.valid & source.ready),
             sink.connect(source),
             source.last.eq(0),
             source.last_be.eq(0),
             If(sink.last,
-                # Fill the empty space of the last data word with the
-                # beginning of the crc value
+                # Fill the empty space of the last data word with the beginning of the CRC value.
                 [If(sink.last_be[e],
                     source.data.eq(Cat(sink.data[:(e+1)*8],
                         crc.value)[:data_width])) for e in range(data_width//8)],
-                # If the whole crc value fits in the last sink paket, signal the
-                # end. This also means the next state is idle
-                If((data_width == 64) & (sink.last_be <= 0xF),
+                # If the whole crc value fits in the last sink packet, signal the end. This also
+                # means the next state is idle
+                If((data_width == 64) & (sink.last_be <= 0xf),
                     source.last.eq(1),
                     source.last_be.eq(sink.last_be << (data_width//8 - 4))
                 ),
@@ -194,7 +199,7 @@ class LiteEthMACCRC32Inserter(LiteXModule):
             ),
 
             If(sink.valid & sink.last & source.ready,
-                If((data_width == 64) & (sink.last_be <= 0xF),
+                If((data_width == 64) & (sink.last_be <= 0xf),
                     NextState("IDLE"),
                 ).Else(
                     NextValue(crc_packet, crc.value),
@@ -207,16 +212,17 @@ class LiteEthMACCRC32Inserter(LiteXModule):
                 )
             )
         )
-        ratio = crc.width//data_width
         if ratio > 1:
-            cnt = Signal(max=ratio, reset=ratio-1)
+            cnt      = Signal(max=ratio, reset=ratio-1)
             cnt_done = Signal()
             fsm.act("CRC",
                 source.valid.eq(1),
                 chooser(crc_packet, cnt, source.data, reverse=True),
                 If(cnt_done,
                     source.last.eq(1),
-                    If(source.ready, NextState("IDLE"))
+                    If(source.ready,
+                        NextState("IDLE")
+                    )
                 )
             )
             self.comb += cnt_done.eq(cnt == 0)
@@ -234,7 +240,9 @@ class LiteEthMACCRC32Inserter(LiteXModule):
                 source.last_be.eq(last_be),
                 [If(last_be[e],
                     source.data.eq(crc_packet[-(e+1)*8:])) for e in range(data_width//8)],
-                If(source.ready, NextState("IDLE"))
+                If(source.ready,
+                    NextState("IDLE")
+                )
             )
 
 # MAC CRC32 Checker --------------------------------------------------------------------------------
@@ -267,17 +275,16 @@ class LiteEthMACCRC32Checker(LiteXModule):
 
         # # #
 
+        # Parameters.
         data_width  = len(sink.data)
+        ratio       = ceil(32/data_width)
         assert data_width in [8, 32, 64]
-        crc = LiteEthMACCRC32(data_width)
-        self.submodules += crc
-        ratio = ceil(crc.width/data_width)
 
-        fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
-        self.submodules += fifo
+        # CRC32 Checker.
+        self.crc = crc = LiteEthMACCRC32(data_width)
 
-        fsm = FSM(reset_state="RESET")
-        self.submodules += fsm
+        # FIFO.
+        self.fifo = fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
 
         fifo_in   = Signal()
         fifo_out  = Signal()
@@ -293,6 +300,8 @@ class LiteEthMACCRC32Checker(LiteXModule):
             self.sink.ready.eq(fifo_in),
         ]
 
+        # FSM.
+        self.fsm = fsm = FSM(reset_state="RESET")
         fsm.act("RESET",
             crc.reset.eq(1),
             fifo.reset.eq(1),
@@ -308,12 +317,12 @@ class LiteEthMACCRC32Checker(LiteXModule):
                 NextState("COPY")
             )
         )
-        last_be = Signal().like(sink.last_be)
+        last_be   = Signal().like(sink.last_be)
         crc_error = Signal()
+        self.comb += fifo.source.connect(source, omit={"valid", "ready", "last", "last_be"})
         fsm.act("COPY",
             fifo.source.ready.eq(fifo_out),
             source.valid.eq(sink.valid & fifo_full),
-            source.payload.eq(fifo.source.payload),
 
             If(data_width <= 32,
                 source.last.eq(sink.last),
@@ -350,7 +359,7 @@ class LiteEthMACCRC32Checker(LiteXModule):
         # If the last sink word contains both data and the crc value, shift out
         # the last value here. Can only happen for data_width == 64
         fsm.act("COPY_LAST",
-            fifo.source.connect(source),
+            fifo.source.connect(source, keep={"valid", "ready", "last"}),
             source.error.eq(fifo.source.error | Replicate(crc_error, data_width//8)),
             source.last_be.eq(last_be),
             If(source.valid & source.ready,
