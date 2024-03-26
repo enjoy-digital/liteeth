@@ -33,27 +33,29 @@ class LiteEthMACCRCEngine(LiteXModule):
         The polynomial used for the CRC calculation, specified as an integer (e.g., 0x04C11DB7 for IEEE 802.3).
     """
     def __init__(self, data_width, width, polynom):
-        self.data     = Signal(data_width)
-        self.crc_prev = Signal(width)
-        self.crc_next = Signal(width)
+        self.data     = Signal(data_width) # Data (Input).
+        self.crc_prev = Signal(width)      # CRC Previous (Input).
+        self.crc_next = Signal(width)      # CRC Next (Output).
 
         # # #
 
-        # compute and optimize the parallel implementation of the CRC's LFSR
-        taps = [x for x in range(width) if (1 << x) & polynom]
-        curval = [[("state", i)] for i in range(width)]
-        for i in range(data_width):
-            feedback = curval.pop() + [("din", i)]
-            for j in range(width-1):
-                if j+1 in taps:
-                    curval[j] += feedback
-                curval[j] = self.optimize_xors(curval[j])
-            curval.insert(0, feedback)
+        # Determine bits affected by the polynom.
+        polynom_taps = [bit for bit in range(width) if (1 << bit) & polynom]
 
-        # implement logic
+        # Prepare the list for CRC calculation through LFSR.
+        crc_bits = [[("state", i)] for i in range(width)]
+        for n in range(data_width):
+            feedback = crc_bits.pop(-1) + [("din", n)]
+            for pos in range(width - 1):
+                if (pos + 1) in polynom_taps:
+                    crc_bits[pos] += feedback
+                crc_bits[pos] = self.optimize_xors(crc_bits[pos])
+            crc_bits.insert(0, feedback)
+
+        # Calculate the next CRC value based on XOR operations.
         for i in range(width):
             xors = []
-            for t, n in curval[i]:
+            for t, n in crc_bits[i]:
                 if t == "state":
                     xors += [self.crc_prev[n]]
                 elif t == "din":
