@@ -98,36 +98,31 @@ class LiteEthMACCRC32(LiteXModule):
     init    = 2**width-1
     check   = 0xC704DD7B
     def __init__(self, data_width):
-        dw = data_width//8
-
-        self.data  = Signal(data_width)
-        self.last_be = Signal(dw)
-        self.value = Signal(self.width)
-        self.error = Signal()
-        # Add a separate last_be signal, to maintain backwards compatability
-        last_be = Signal(data_width//8)
+        self.data    = Signal(data_width)
+        self.last_be = Signal(data_width//8, reset=2**(data_width//8 - 1))
+        self.value   = Signal(self.width)
+        self.error   = Signal()
 
         # # #
 
-        self.comb += [
-            If(self.last_be != 0,
-                last_be.eq(self.last_be)
-            ).Else(
-                last_be.eq(2**(dw-1)))
-        ]
         # Since the data can end at any byte end, indicated by `last_be`
         # maintain separate engines for each 8 byte increment in the data word
-        engines = [LiteEthMACCRCEngine((e+1)*8, self.width, self.polynom) for e in range(dw)]
+        engines = []
+        for e in range(data_width//8):
+            engines.append(LiteEthMACCRCEngine((e+1)*8, self.width, self.polynom))
         self.submodules += engines
 
         reg = Signal(self.width, reset=self.init)
         self.sync += reg.eq(engines[-1].crc_next)
-        self.comb += [engines[e].data.eq(self.data[:(e+1)*8]) for e in range(dw)],
-        self.comb += [engines[e].crc_prev.eq(reg) for e in range(dw)]
-        self.comb += [If(last_be[e],
-                        self.value.eq(reverse_bits(~engines[e].crc_next)),
-                        self.error.eq(engines[e].crc_next != self.check))
-                            for e in range(dw)]
+        for e in range(data_width//8):
+            self.comb += [
+                engines[e].data.eq(self.data[:(e+1)*8]),
+                engines[e].crc_prev.eq(reg),
+                If(self.last_be[e],
+                    self.value.eq(reverse_bits(~engines[e].crc_next)),
+                    self.error.eq(engines[e].crc_next != self.check),
+                )
+            ]
 
 # MAC CRC Inserter ---------------------------------------------------------------------------------
 
