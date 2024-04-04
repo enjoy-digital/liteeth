@@ -27,7 +27,9 @@ class QPLLChannel:
 
 
 class QPLL(Module):
-    def __init__(self, gtrefclk0, qpllsettings0, gtrefclk1=0, qpllsettings1=None):
+    def __init__(self,
+        gtrefclk0=0, qpllsettings0=None, gtgrefclk0=0,
+        gtrefclk1=0, qpllsettings1=None, gtgrefclk1=1):
         self.channels = []
 
         channel_settings = dict()
@@ -52,17 +54,18 @@ class QPLL(Module):
                 add_setting("o_PLLXOUTCLK",      channel.clk)
                 add_setting("o_PLLXOUTREFCLK",   channel.refclk)
 
-        self.specials += \
-            Instance("GTPE2_COMMON",
-                i_GTREFCLK0    = gtrefclk0,
-                i_GTREFCLK1    = gtrefclk1,
-                i_BGBYPASSB    = 1,
-                i_BGMONITORENB = 1,
-                i_BGPDB        = 1,
-                i_BGRCALOVRD   = 0b11111,
-                i_RCALENB      = 1,
-                **channel_settings
-            )
+        self.specials += Instance("GTPE2_COMMON",
+            i_GTREFCLK0    = gtrefclk0,
+            i_GTREFCLK1    = gtrefclk1,
+            i_GTGREFCLK0   = gtgrefclk0,
+            i_GTGREFCLK1   = gtgrefclk1,
+            i_BGBYPASSB    = 1,
+            i_BGMONITORENB = 1,
+            i_BGPDB        = 1,
+            i_BGRCALOVRD   = 0b11111,
+            i_RCALENB      = 1,
+            **channel_settings
+        )
 
 
 class GTPTxInit(Module):
