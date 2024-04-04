@@ -158,8 +158,8 @@ class LiteEthMACCRC32Inserter(LiteXModule):
         assert data_width in [8, 16, 32, 64]
 
         # Signals.
-        crc_packet = Signal(32)
-        last_be    = Signal(data_width//8)
+        crc_packet = Signal(32,            reset_less=True)
+        last_be    = Signal(data_width//8, reset_less=True)
 
         # CRC32 Generator.
         self.crc = crc = LiteEthMACCRC32(data_width)
