@@ -38,7 +38,7 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         self.dw = dw
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
-    def get_port(self, udp_port, dw=8, cd="sys"):
+    def get_port(self, udp_port, dw=8, cd="sys", tx_buffer=False, rx_buffer=False):
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
@@ -48,11 +48,17 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         # TX
         # ---
 
+        # Buffer.
+        if tx_buffer:
+            self.tx_buffer = tx_buffer = stream.Buffer(eth_udp_user_description(user_port.dw))
+            self.comb += tx_buffer.source.connect(user_port.sink)
+            user_port.sink = tx_buffer.sink
+
         # CDC.
         self.tx_cdc = tx_cdc = stream.ClockDomainCrossing(
             layout  = eth_udp_user_description(user_port.dw),
             cd_from = cd,
-            cd_to   ="sys"
+            cd_to   = "sys"
         )
         self.comb += user_port.sink.connect(tx_cdc.sink)
 
@@ -85,6 +91,12 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         # Interface.
         self.comb += rx_cdc.source.connect(user_port.source)
+
+        # Buffer.
+        if rx_buffer:
+            self.rx_buffer = rx_buffer = stream.Buffer(eth_udp_user_description(user_port.dw))
+            self.comb += user_port.source.connect(rx_buffer.sink)
+            user_port.source = rx_buffer.sink
 
         # Expose/Return User Port.
         # ------------------------
