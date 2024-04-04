@@ -94,7 +94,7 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 
 class LiteEthIPTX(LiteXModule):
-    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=False):
+    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=True):
         self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_mac_description(dw))
         self.target_unreachable = Signal()
