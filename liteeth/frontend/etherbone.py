@@ -125,7 +125,7 @@ class LiteEthEtherbonePacket(LiteXModule):
     def __init__(self, udp, udp_port, cd="sys"):
         self.tx = tx = LiteEthEtherbonePacketTX(udp_port)
         self.rx = rx = LiteEthEtherbonePacketRX()
-        udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
+        udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd, tx_buffer=True, rx_buffer=True)
         self.comb += [
             tx.source.connect(udp_port.sink),
             udp_port.source.connect(rx.sink)
@@ -321,9 +321,9 @@ class LiteEthEtherboneRecord(LiteXModule):
 
         # # #
 
-        # Receive record, decode it and generate mmap stream
+        # Receive record, decode it and generate mmap stream.
         self.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
-        self.receiver = receiver = LiteEthEtherboneRecordReceiver(buffer_depth)
+        self.receiver     = receiver     = LiteEthEtherboneRecordReceiver(buffer_depth)
         self.comb += [
             sink.connect(depacketizer.sink),
             depacketizer.source.connect(receiver.sink)
@@ -331,7 +331,7 @@ class LiteEthEtherboneRecord(LiteXModule):
         if endianness == "big":
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
-        # Save last ip address
+        # Save last ip address.
         first = Signal(reset=1)
         last_ip_address = Signal(32, reset_less=True)
         self.sync += [
@@ -341,7 +341,7 @@ class LiteEthEtherboneRecord(LiteXModule):
             )
         ]
 
-        # Receive MMAP stream, encode it and send records
+        # Receive MMAP stream, encode it and send records.
         self.sender     = sender     = LiteEthEtherboneRecordSender(buffer_depth)
         self.packetizer = packetizer = LiteEthEtherboneRecordPacketizer()
         self.comb += [
@@ -485,20 +485,20 @@ class LiteEthEtherboneWishboneSlave(LiteXModule):
 
 class LiteEthEtherbone(LiteXModule):
     def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
-        # Encode/encode etherbone packets
+        # Encode/encode etherbone packets.
         self.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
 
-        # Packets can be probe (etherbone discovering) or records with writes and reads
-        self.probe  = probe = LiteEthEtherboneProbe()
+        # Packets can be probe (etherbone discovering) or records with writes and reads.
+        self.probe  = probe  = LiteEthEtherboneProbe()
         self.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth)
 
-        # Arbitrate/dispatch probe/records packets
+        # Arbitrate/dispatch probe/records packets.
         dispatcher = Dispatcher(packet.source, [probe.sink, record.sink])
         self.comb += dispatcher.sel.eq(~packet.source.pf)
         arbiter = Arbiter([probe.source, record.source], packet.sink)
         self.submodules += dispatcher, arbiter
 
-        # Create MMAP wishbone
+        # Create MMAP wishbone.
         self.wishbone = {
             "master": LiteEthEtherboneWishboneMaster(),
             "slave":  LiteEthEtherboneWishboneSlave(),
