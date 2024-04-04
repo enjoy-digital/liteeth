@@ -194,10 +194,7 @@ class LiteEthMACCRC32Inserter(LiteXModule):
                     source.last.eq(1),
                     source.last_be.eq(sink.last_be << (data_width//8 - 4))
                 ),
-            ).Else(
-                crc.ce.eq(sink.valid & source.ready),
             ),
-
             If(sink.valid & sink.last & source.ready,
                 If((data_width == 64) & (sink.last_be <= 0xf),
                     NextState("IDLE"),
