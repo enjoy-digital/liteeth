@@ -95,13 +95,13 @@ class LiteEthMACCRC32(LiteXModule):
     """
     width   = 32
     polynom = 0x04c11db7
-    init    = 2**width-1
+    init    = 2**width - 1
     check   = 0xc704dd7b
     def __init__(self, data_width):
-        self.data    = Signal(data_width)
-        self.be      = Signal(data_width//8, reset=2**data_width//8 - 1)
-        self.value   = Signal(self.width)
-        self.error   = Signal()
+        self.data  = Signal(data_width)
+        self.be    = Signal(data_width//8, reset=2**data_width//8 - 1)
+        self.value = Signal(self.width)
+        self.error = Signal()
 
         # # #
 
@@ -117,15 +117,21 @@ class LiteEthMACCRC32(LiteXModule):
         self.sync += reg.eq(engines[-1].crc_next)
 
         # Select CRC Engine/Result.
+        crc_next = Signal(self.width)
         for n in range(data_width//8):
             self.comb += [
-                engines[n].data.eq(self.data[:(n + 1)*8]),
+                engines[n].data.eq(self.data),
                 engines[n].crc_prev.eq(reg),
                 If(self.be[n],
-                    self.value.eq(reverse_bits(~engines[n].crc_next)),
-                    self.error.eq(engines[n].crc_next != self.check),
+                    crc_next.eq(engines[n].crc_next)
                 )
             ]
+
+        # Output.
+        self.comb += [
+            self.value.eq(crc_next[::-1] ^ self.init),
+            self.error.eq(crc_next != self.check),
+        ]
 
 # MAC CRC32 Inserter -------------------------------------------------------------------------------
 
@@ -163,6 +169,10 @@ class LiteEthMACCRC32Inserter(LiteXModule):
 
         # CRC32 Generator.
         self.crc = crc = LiteEthMACCRC32(data_width)
+        self.comb += [
+            crc.data.eq(sink.data),
+            crc.be.eq(sink.last_be),
+        ]
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
@@ -174,10 +184,6 @@ class LiteEthMACCRC32Inserter(LiteXModule):
                 NextState("COPY"),
             )
         )
-        self.comb += [
-            crc.data.eq(sink.data),
-            crc.be.eq(sink.last_be),
-        ]
         fsm.act("COPY",
             crc.ce.eq(sink.valid & source.ready),
             sink.connect(source),
