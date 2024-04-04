@@ -155,7 +155,7 @@ class LiteEthMACCRC32Inserter(LiteXModule):
         # Parameters.
         data_width  = len(sink.data)
         ratio       = 32//data_width
-        assert data_width in [8, 32, 64]
+        assert data_width in [8, 16, 32, 64]
 
         # Signals.
         crc_packet = Signal(32)
@@ -275,7 +275,7 @@ class LiteEthMACCRC32Checker(LiteXModule):
         # Parameters.
         data_width  = len(sink.data)
         ratio       = ceil(32/data_width)
-        assert data_width in [8, 32, 64]
+        assert data_width in [8, 16, 32, 64]
 
         # CRC32 Checker.
         self.crc = crc = LiteEthMACCRC32(data_width)
