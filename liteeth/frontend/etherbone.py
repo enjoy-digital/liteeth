@@ -125,7 +125,7 @@ class LiteEthEtherbonePacket(LiteXModule):
     def __init__(self, udp, udp_port, cd="sys"):
         self.tx = tx = LiteEthEtherbonePacketTX(udp_port)
         self.rx = rx = LiteEthEtherbonePacketRX()
-        udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd, tx_buffer=True, rx_buffer=True)
+        udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
         self.comb += [
             tx.source.connect(udp_port.sink),
             udp_port.source.connect(rx.sink)
