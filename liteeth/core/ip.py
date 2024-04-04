@@ -94,12 +94,18 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 
 class LiteEthIPTX(LiteXModule):
-    def __init__(self, mac_address, ip_address, arp_table, dw=8):
+    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=False):
         self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_mac_description(dw))
         self.target_unreachable = Signal()
 
         # # #
+
+        # Buffer.
+        if with_buffer:
+            self.buffer = buffer = stream.Buffer(eth_ipv4_user_description(dw))
+            self.comb += sink.connect(buffer.sink)
+            sink = buffer.source
 
         # Checksum.
         self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
