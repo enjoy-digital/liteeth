@@ -23,7 +23,6 @@ class LiteEthMACCRCEngine(LiteXModule):
     Cyclic Redundancy Check (CRC) Engine using an asynchronous LFSR.
 
     This module calculates the next CRC value based on the previous CRC value and the current data input.
-    The CRC calculation is optimized for speed and resource efficiency.
 
     Parameters
     ----------
@@ -109,7 +108,12 @@ class LiteEthMACCRC32(LiteXModule):
         # Ex for a 32-bit Data-Path, we create 4 engines: 8, 16, 24 and 32-bit engines.
         engines = []
         for n in range(data_width//8):
-            engines.append(LiteEthMACCRCEngine((n + 1)*8, self.width, self.polynom))
+            engine = LiteEthMACCRCEngine(
+                data_width = (n + 1)*8,
+                width      = self.width,
+                polynom    = self.polynom,
+            )
+            engines.append(engine)
         self.submodules += engines
 
         # Register Full-Word CRC Engine (last one).
