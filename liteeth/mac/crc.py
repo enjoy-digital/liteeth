@@ -121,21 +121,15 @@ class LiteEthMACCRC32(LiteXModule):
         self.sync += reg.eq(engines[-1].crc_next)
 
         # Select CRC Engine/Result.
-        crc_next = Signal(self.width)
         for n in range(data_width//8):
             self.comb += [
                 engines[n].data.eq(self.data),
                 engines[n].crc_prev.eq(reg),
                 If(self.be[n],
-                    crc_next.eq(engines[n].crc_next)
+                    self.value.eq(engines[n].crc_next[::-1] ^ self.init),
+                    self.error.eq(engines[n].crc_next != self.check),
                 )
             ]
-
-        # Output.
-        self.comb += [
-            self.value.eq(crc_next[::-1] ^ self.init),
-            self.error.eq(crc_next != self.check),
-        ]
 
 # MAC CRC32 Inserter -------------------------------------------------------------------------------
 
