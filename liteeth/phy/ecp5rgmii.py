@@ -71,7 +71,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                     ("``0b0``", "Link down."),
                     ("``0b1``", "Link up."),
                 ]),
-                CSRField("clock_speed", size=1, values=[
+                CSRField("clock_speed", size=2, values=[
                     ("``0b00``", "2.5MHz   (10Mbps)."),
                     ("``0b01``", "25MHz   (100MBps)."),
                     ("``0b10``", "125MHz (1000MBps)."),
