@@ -36,50 +36,45 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
             self.sram.source.connect(self.source),
         ]
 
-        # Ethernet RX Wishbone SRAM interfaces.
-        # -------------------------------------
+        # Ethernet Wishbone SRAM interfaces exposure.
+        # -------------------------------------------
+        self._expose_wishbone_sram_interfaces(
+            bus        = self.bus_rx,
+            dw         = dw,
+            mems       = self.sram.writer.mems,
+            nslots     = nrxslots,
+            read_only  = rxslots_read_only,
+            write_only = True,
+        )
+        self._expose_wishbone_sram_interfaces(
+            bus        = self.bus_tx,
+            dw         = dw,
+            mems       = self.sram.reader.mems,
+            nslots     = ntxslots,
+            read_only  = False,
+            write_only = txslots_write_only,
+        )
 
-        # RX SRAMs.
-        wb_rx_sram_ifs = []
-        for n in range(nrxslots):
-            wb_rx_sram_ifs.append(wishbone.SRAM(
-                mem_or_size = self.sram.writer.mems[n],
-                read_only   = rxslots_read_only,
+    def _expose_wishbone_sram_interfaces(self, bus, dw, mems, nslots, read_only, write_only):
+        # SRAMs.
+        wb_sram_ifs = []
+        for n in range(nslots):
+            wb_sram_ifs.append(wishbone.SRAM(
+                mem_or_size = mems[n],
+                read_only   = read_only,
+                write_only  = write_only,
                 bus         = wishbone.Interface(data_width=dw)
             ))
 
-        # Expose RX SRAMs on RX Bus.
+        # Expose SRAMs on Bus.
         wb_slaves      = []
+        sram_depth     = math.ceil(eth_mtu/(dw//8))
         decoderoffset  = log2_int(sram_depth, need_pow2=False)
-        rx_decoderbits = log2_int(len(wb_rx_sram_ifs))
-        for n, wb_sram_if in enumerate(wb_rx_sram_ifs):
+        decoderbits    = log2_int(len(wb_sram_ifs))
+        for n, wb_sram_if in enumerate(wb_sram_ifs):
             def slave_filter(a, v=n):
-                return a[decoderoffset:decoderoffset+rx_decoderbits] == v
+                return a[decoderoffset:decoderoffset+decoderbits] == v
             wb_slaves.append((slave_filter, wb_sram_if.bus))
             self.submodules += wb_sram_if
-        wb_con = wishbone.Decoder(self.bus_rx, wb_slaves, register=True)
-        self.submodules += wb_con
-
-        # Ethernet TX Wishbone SRAM interfaces.
-        # -------------------------------------
-
-        # TX SRAMs.
-        wb_tx_sram_ifs = []
-        for n in range(ntxslots):
-            wb_tx_sram_ifs.append(wishbone.SRAM(
-                mem_or_size = self.sram.reader.mems[n],
-                write_only  = txslots_write_only,
-                bus         = wishbone.Interface(data_width=dw)
-            ))
-
-        # Expose TX SRAMs on TX Bus.
-        wb_slaves      = []
-        decoderoffset  = log2_int(sram_depth, need_pow2=False)
-        tx_decoderbits = log2_int(len(wb_tx_sram_ifs))
-        for n, wb_sram_if in enumerate(wb_tx_sram_ifs):
-            def slave_filter(a, v=n):
-                return a[decoderoffset:decoderoffset+tx_decoderbits] == v
-            wb_slaves.append((slave_filter, wb_sram_if.bus))
-            self.submodules += wb_sram_if
-        wb_con = wishbone.Decoder(self.bus_tx, wb_slaves, register=True)
+        wb_con = wishbone.Decoder(bus, wb_slaves, register=True)
         self.submodules += wb_con
