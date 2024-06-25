@@ -3,7 +3,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2020 Xiretza <xiretza@xiretza.xyz>
 # Copyright (c) 2020 Stefan Schrijvers <ximin@ximinity.net>
 # Copyright (c) 2022 Victor Suarez Rovere <suarezvictor@gmail.com>
@@ -413,13 +413,32 @@ class MACCore(PHYCore):
           # AXI-Lite Interface -----------------------------------------------------------------------
           axil_bus = axi.AXILiteInterface(address_width=32, data_width=32)
           platform.add_extension(axil_bus.get_ios("bus"))
-          self.submodules += axi.Wishbone2AXILite(ethmac.bus, axil_bus)
           self.comb += axil_bus.connect_to_pads(self.platform.request("bus"), mode="slave")
           self.bus.add_master(master=axil_bus)
 
-        ethmac_region_size = (nrxslots + ntxslots)*buffer_depth
-        ethmac_region = SoCRegion(origin=self.mem_map.get("ethmac", None), size=ethmac_region_size, cached=False)
-        self.bus.add_slave(name="ethmac", slave=ethmac.bus, region=ethmac_region)
+        ethmac_rx_region_size = ethmac.rx_slots.constant*ethmac.slot_size.constant
+        ethmac_tx_region_size = ethmac.tx_slots.constant*ethmac.slot_size.constant
+        ethmac_region_size    = ethmac_rx_region_size + ethmac_tx_region_size
+        self.bus.add_region("ethmac", SoCRegion(
+            origin = self.mem_map.get("ethmac", None),
+            size   = ethmac_region_size,
+            linker = True,
+            cached = False,
+        ))
+        ethmac_rx_region = SoCRegion(
+            origin = self.bus.regions["ethmac"].origin + 0,
+            size   = ethmac_rx_region_size,
+            linker = True,
+            cached = False,
+        )
+        self.bus.add_slave(name="ethmac_rx", slave=ethmac.bus_rx, region=ethmac_rx_region)
+        ethmac_tx_region = SoCRegion(
+            origin = self.bus.regions["ethmac"].origin + ethmac_rx_region_size,
+            size   = ethmac_tx_region_size,
+            linker = True,
+            cached = False,
+        )
+        self.bus.add_slave(name="ethmac_tx", slave=ethmac.bus_tx, region=ethmac_tx_region)
 
         # Interrupt Interface ----------------------------------------------------------------------
         self.comb += self.platform.request("interrupt").eq(self.ethmac.ev.irq)
