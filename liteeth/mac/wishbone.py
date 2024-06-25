@@ -46,7 +46,7 @@ class LiteEthMACWishboneInterface(LiteXModule):
             mems       = self.sram.writer.mems,
             nslots     = nrxslots,
             read_only  = rxslots_read_only,
-            write_only = True,
+            write_only = False,
         )
         self._expose_wishbone_sram_interfaces(
             bus        = self.bus_tx,
