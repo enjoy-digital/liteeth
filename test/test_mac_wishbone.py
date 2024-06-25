@@ -102,12 +102,13 @@ class DUT(Module):
 
 
 def main_generator(dut):
-    wishbone_master = WishboneMaster(dut.ethmac.bus)
+    wishbone_tx_master = WishboneMaster(dut.ethmac.bus_tx)
+    wishbone_rx_master = WishboneMaster(dut.ethmac.bus_rx)
     sram_reader_driver = SRAMReaderDriver(dut.ethmac.interface.sram.reader)
     sram_writer_driver = SRAMWriterDriver(dut.ethmac.interface.sram.writer)
 
     sram_writer_slots_offset = [0x000, 0x200]
-    sram_reader_slots_offset = [0x400, 0x600]
+    sram_reader_slots_offset = [0x000, 0x200]
 
     length = 150+2
 
@@ -121,7 +122,7 @@ def main_generator(dut):
             # fill tx memory
             for i in range(length//4+1):
                 dat = int.from_bytes(tx_payload[4*i:4*(i+1)], "big")
-                yield from wishbone_master.write(sram_reader_slots_offset[slot]+i, dat)
+                yield from wishbone_tx_master.write(sram_reader_slots_offset[slot]+i, dat)
 
             # send tx payload & wait
             yield from sram_reader_driver.start(slot, length)
@@ -135,8 +136,8 @@ def main_generator(dut):
             # get rx payload (loopback on PHY Model)
             rx_payload = []
             for i in range(length//4+1):
-                yield from wishbone_master.read(sram_writer_slots_offset[slot]+i)
-                dat = wishbone_master.dat
+                yield from wishbone_tx_master.read(sram_writer_slots_offset[slot]+i)
+                dat = wishbone_tx_master.dat
                 rx_payload += list(dat.to_bytes(4, byteorder='big'))
 
             # check results
