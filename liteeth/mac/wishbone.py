@@ -8,6 +8,8 @@
 
 import math
 
+from litex.gen import *
+
 from liteeth.common import *
 from liteeth.mac import sram
 
@@ -15,7 +17,7 @@ from litex.soc.interconnect import wishbone
 
 # MAC Wishbone Interface ---------------------------------------------------------------------------
 
-class LiteEthMACWishboneInterface(Module, AutoCSR):
+class LiteEthMACWishboneInterface(LiteXModule):
     def __init__(self, dw, nrxslots=2, ntxslots=2, endianness="big", timestamp=None,
         rxslots_read_only  = True,
         txslots_write_only = False,
@@ -30,7 +32,7 @@ class LiteEthMACWishboneInterface(Module, AutoCSR):
         # Storage in SRAM.
         # ----------------
         sram_depth = math.ceil(eth_mtu/(dw//8))
-        self.submodules.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness, timestamp)
+        self.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness, timestamp)
         self.comb += [
             self.sink.connect(self.sram.sink),
             self.sram.source.connect(self.source),
