@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2021 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2015-2016 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2021 Leon Schuermann <leon@is.currently.online>
 # SPDX-License-Identifier: BSD-2-Clause
