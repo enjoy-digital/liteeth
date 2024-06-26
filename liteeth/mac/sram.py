@@ -9,6 +9,8 @@
 
 import math
 
+from litex.gen import *
+
 from liteeth.common import *
 
 from litex.soc.interconnect.csr import *
@@ -16,7 +18,7 @@ from litex.soc.interconnect.csr_eventmanager import *
 
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
-class LiteEthMACSRAMWriter(Module, AutoCSR):
+class LiteEthMACSRAMWriter(LiteXModule):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
         # Endpoint / Signals.
         self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
@@ -38,7 +40,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
             self._timestamp = CSRStatus(timestampbits)
 
         # Event Manager.
-        self.submodules.ev = EventManager()
+        self.ev = EventManager()
         self.ev.available  = EventSourceLevel()
         self.ev.finalize()
 
@@ -70,10 +72,10 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
         stat_fifo_layout = [("slot", slotbits), ("length", lengthbits)]
         if timestamp is not None:
             stat_fifo_layout += [("timestamp", timestampbits)]
-        self.submodules.stat_fifo = stat_fifo = stream.SyncFIFO(stat_fifo_layout, nslots)
+        self.stat_fifo = stat_fifo = stream.SyncFIFO(stat_fifo_layout, nslots)
 
         # FSM.
-        self.submodules.fsm = fsm = FSM(reset_state="WRITE")
+        self.fsm = fsm = FSM(reset_state="WRITE")
         fsm.act("WRITE",
             If(sink.valid,
                 If(stat_fifo.sink.ready,
@@ -169,7 +171,7 @@ class LiteEthMACSRAMWriter(Module, AutoCSR):
 
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
-class LiteEthMACSRAMReader(Module, AutoCSR):
+class LiteEthMACSRAMReader(LiteXModule):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
         # Endpoint / Signals.
         self.source = source = stream.Endpoint(eth_phy_description(dw))
@@ -193,7 +195,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
             self._timestamp      = CSRStatus(timestampbits)
 
         # Event Manager.
-        self.submodules.ev = EventManager()
+        self.ev = EventManager()
         self.ev.done       = EventSourcePulse() if timestamp is None else EventSourceLevel()
         self.ev.finalize()
 
@@ -238,7 +240,7 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
         )
 
         # FSM.
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(cmd_fifo.source.valid,
                 read.eq(1),
@@ -300,9 +302,9 @@ class LiteEthMACSRAMReader(Module, AutoCSR):
 
 # MAC SRAM -----------------------------------------------------------------------------------------
 
-class LiteEthMACSRAM(Module, AutoCSR):
+class LiteEthMACSRAM(LiteXModule):
     def __init__(self, dw, depth, nrxslots, ntxslots, endianness, timestamp=None):
-        self.submodules.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness, timestamp)
-        self.submodules.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness, timestamp)
-        self.submodules.ev     = SharedIRQ(self.writer.ev, self.reader.ev)
+        self.writer = LiteEthMACSRAMWriter(dw, depth, nrxslots, endianness, timestamp)
+        self.reader = LiteEthMACSRAMReader(dw, depth, ntxslots, endianness, timestamp)
+        self.ev     = SharedIRQ(self.writer.ev, self.reader.ev)
         self.sink, self.source = self.writer.sink, self.reader.source
