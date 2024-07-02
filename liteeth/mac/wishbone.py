@@ -72,10 +72,10 @@ class LiteEthMACWishboneInterface(LiteXModule):
         wb_slaves      = []
         sram_depth     = math.ceil(eth_mtu/(dw//8))
         decoderoffset  = log2_int(sram_depth, need_pow2=False)
-        decoderbits    = log2_int(len(wb_sram_ifs))
+        decoderbits    = max(log2_int(len(wb_sram_ifs)), 1)
         for n, wb_sram_if in enumerate(wb_sram_ifs):
             def slave_filter(a, v=n):
-                return a[decoderoffset:decoderoffset+decoderbits] == v
+                return a[decoderoffset:decoderoffset + decoderbits] == v
             wb_slaves.append((slave_filter, wb_sram_if.bus))
             self.submodules += wb_sram_if
         wb_con = wishbone.Decoder(bus, wb_slaves, register=True)
