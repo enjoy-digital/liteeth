@@ -400,7 +400,10 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_RX_INT_DATAWIDTH             = 0,
             p_RX_PMA_POWER_SAVE            = 0b0,
             p_RX_PMA_RSV0                  = 0b0000000000000000,
-            p_RX_PROGDIV_CFG               = {1.25e9 : 20.0, 3.125e9 : 10.0}[self.linerate],
+            p_RX_PROGDIV_CFG               = {
+                1.25e9  : 20.0*pll.config["d"]/4,
+                3.125e9 : 10.0*pll.config["d"]/4,
+            }[self.linerate],
             p_RX_PROGDIV_RATE              = 0b0000000000000001,
             p_RX_RESLOAD_CTRL              = 0b0000,
             p_RX_RESLOAD_OVRD              = 0b0,
@@ -513,7 +516,10 @@ class USP_GTH_1000BASEX(LiteXModule):
             p_TX_PMA_RSV0                  = 0b0000000000001000,
             p_TX_PREDRV_CTRL               = 2,
             p_TX_PROGCLK_SEL               = "PREPI",
-            p_TX_PROGDIV_CFG               = {1.25e9 : 20.0, 3.125e9 : 10.0}[self.linerate],
+            p_TX_PROGDIV_CFG               = {
+                1.25e9  : 20.0*pll.config["d"]/4,
+                3.125e9 : 10.0*pll.config["d"]/4,
+            }[self.linerate],
             p_TX_PROGDIV_RATE              = 0b0000000000000001,
             p_TX_QPI_STATUS_EN             = 0b0,
             p_TX_RXDETECT_CFG              = 0b00000000110010,
