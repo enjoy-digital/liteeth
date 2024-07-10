@@ -6,9 +6,6 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from functools import reduce
-from operator import or_
-
-from migen import Module
 
 from litex.gen import *
 
@@ -22,7 +19,7 @@ XGMII_END   = Constant(0xFD, bits_sign=8)
 
 # LiteEth PHY XGMII TX -----------------------------------------------------------------------------
 
-class LiteEthPHYXGMIITX(Module):
+class LiteEthPHYXGMIITX(LiteXModule):
     def __init__(self, pads, dw, dic=True):
         # Enforce 64-bit data path
         assert dw == 64
@@ -202,7 +199,7 @@ class LiteEthPHYXGMIITX(Module):
         # ---------- XGMII transmission logic ----------
 
         # Transmit FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
 
         # This block will be executed by the FSM below in the IDLE state, when
         # it's time to start a transmission aligned on the FIRST byte in a
@@ -458,7 +455,7 @@ class LiteEthPHYXGMIITX(Module):
 
 # LiteEth PHY XGMII RX Aligner ---------------------------------------------------------------------
 
-class LiteEthPHYXGMIIRXAligner(Module):
+class LiteEthPHYXGMIIRXAligner(LiteXModule):
     def __init__(self, unaligned_ctl, unaligned_data):
         # Aligned ctl and data characters
         self.aligned_ctl = Signal.like(unaligned_ctl)
@@ -470,7 +467,7 @@ class LiteEthPHYXGMIIRXAligner(Module):
 
 
         # Alignment FSM
-        self.submodules.fsm = fsm = FSM(reset_state="NOSHIFT")
+        self.fsm = fsm = FSM(reset_state="NOSHIFT")
 
         fsm.act("NOSHIFT",
             If(unaligned_ctl[4] & (unaligned_data[4*8:5*8] == XGMII_START),
@@ -529,7 +526,7 @@ class LiteEthPHYXGMIIRX(LiteXModule):
         # XGMII bus word, which we can do without packet loss given 10G Ethernet
         # mandates a 5-byte interpacket gap (which may be less at the receiver,
         # but this assumption seems to work for now).
-        self.submodules.aligner = LiteEthPHYXGMIIRXAligner(pads.rx_ctl, pads.rx_data)
+        self.aligner = LiteEthPHYXGMIIRXAligner(pads.rx_ctl, pads.rx_data)
 
         # We need to have a lookahead and buffer the XGMII bus to properly
         # determine whether we are processing the last bus word in some
@@ -583,7 +580,7 @@ class LiteEthPHYXGMIIRX(LiteXModule):
         ]
 
         # Receive FSM
-        self.submodules.fsm = fsm = FSM(reset_state="IDLE")
+        self.fsm = fsm = FSM(reset_state="IDLE")
 
         fsm.act("IDLE",
             # The Ethernet preamble and start of frame character must follow
@@ -639,11 +636,11 @@ class LiteEthPHYXGMIIRX(LiteXModule):
 
 # LiteEth PHY XGMII CRG ----------------------------------------------------------------------------
 
-class LiteEthPHYXGMIICRG(Module, AutoCSR):
+class LiteEthPHYXGMIICRG(LiteXModule):
     def __init__(self, clock_pads, model=False):
         self._reset = CSRStorage()
-        self.clock_domains.cd_eth_rx = ClockDomain()
-        self.clock_domains.cd_eth_tx = ClockDomain()
+        self.cd_eth_rx = ClockDomain()
+        self.cd_eth_tx = ClockDomain()
         if model:
             self.comb += [
                 self.cd_eth_rx.clk.eq(ClockSignal()),
@@ -657,7 +654,7 @@ class LiteEthPHYXGMIICRG(Module, AutoCSR):
 
 # LiteEth PHY XGMII --------------------------------------------------------------------------------
 
-class LiteEthPHYXGMII(Module, AutoCSR):
+class LiteEthPHYXGMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 156.25e6
     rx_clk_freq = 156.25e6
@@ -665,13 +662,14 @@ class LiteEthPHYXGMII(Module, AutoCSR):
         self.dw = dw
         self.cd_eth_tx, self.cd_eth_rx = "eth_tx", "eth_rx"
         self.integrated_ifg_inserter = True
-        self.submodules.crg = LiteEthPHYXGMIICRG(clock_pads, model)
-        self.submodules.tx = ClockDomainsRenamer(self.cd_eth_tx)(
-            LiteEthPHYXGMIITX(
-                pads,
-                self.dw,
-                dic=dic,
-            ))
-        self.submodules.rx = ClockDomainsRenamer(self.cd_eth_rx)(
-            LiteEthPHYXGMIIRX(pads, self.dw))
+        self.crg = LiteEthPHYXGMIICRG(clock_pads, model)
+        self.tx = ClockDomainsRenamer(self.cd_eth_tx)(LiteEthPHYXGMIITX(
+            pads = pads,
+            dw   = self.dw,
+            dic  = dic,
+        ))
+        self.rx = ClockDomainsRenamer(self.cd_eth_rx)(LiteEthPHYXGMIIRX(
+            pads = pads,
+            dw   = self.dw,
+        ))
         self.sink, self.source = self.tx.sink, self.rx.source
