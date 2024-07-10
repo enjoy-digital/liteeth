@@ -37,7 +37,7 @@ class _CRG(LiteXModule):
         self.comb += main_pll.reset.eq(platform.request("cpu_reset"))
         main_pll.register_clkin(platform.request("clk125"), 125e6)
         main_pll.create_clkout(self.cd_sys, sys_clk_freq)
-        main_pll.create_clkout(self.cd_eth, 200e6)
+        main_pll.create_clkout(self.cd_eth, 200e6, margin=0)
 
 # Bench SoC ----------------------------------------------------------------------------------------
 

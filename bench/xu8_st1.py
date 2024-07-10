@@ -36,7 +36,7 @@ class _CRG(LiteXModule):
         self.pll = pll = USMMCM(speedgrade=-1)
         pll.register_clkin(platform.request("clk100"), 100e6)
         pll.create_clkout(self.cd_sys, sys_clk_freq)
-        pll.create_clkout(self.cd_eth, 200e6)
+        pll.create_clkout(self.cd_eth, 200e6, margin=0)
 
 # Bench SoC ----------------------------------------------------------------------------------------
 
