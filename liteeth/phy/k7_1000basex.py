@@ -12,8 +12,6 @@ from litex.gen import *
 
 from litex.soc.cores.clock import S7MMCM
 
-from liteiclink.transceiver.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
-
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
@@ -26,6 +24,7 @@ class K7_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
+        from liteiclink.transceiver.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
         assert refclk_freq in [200e6]
         self.pcs = pcs = PCS(lsb_first=True)
 

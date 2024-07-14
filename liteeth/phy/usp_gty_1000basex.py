@@ -11,8 +11,6 @@ from migen.genlib.cdc import PulseSynchronizer
 
 from litex.gen import *
 
-from liteiclink.serdes.gty_ultrascale import GTYChannelPLL
-
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
@@ -25,6 +23,7 @@ class USP_GTY_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
+        from liteiclink.serdes.gty_ultrascale import GTYChannelPLL
         assert refclk_freq in [200e6, 156.25e6]
         self.pcs = pcs = PCS(lsb_first=True)
 
