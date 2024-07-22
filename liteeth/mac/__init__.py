@@ -130,16 +130,24 @@ class LiteEthMACCoreCrossbar(Module):
             ]
 
             # RX packetizer broadcast
+            mac_local = Signal()
+            mac_bcast = Signal()
+            mac_mcast4 = Signal()
+            mac_mcast6 = Signal()
             mac_match = Signal()
             self.comb += [
-                mac_match.eq(hw_mac == depacketizer.source.payload.target_mac),
-                rx_ready.eq(hw_fifo.sink.ready & (cpu_fifo.sink.ready | mac_match)),
+                mac_local.eq(hw_mac == depacketizer.source.payload.target_mac),
+                mac_bcast.eq(0xffffffffffff == depacketizer.source.payload.target_mac),
+                mac_mcast4.eq(0x01005e000000 == (depacketizer.source.payload.target_mac & 0xffffff000000)),
+                mac_mcast6.eq(0x333300000000 == (depacketizer.source.payload.target_mac & 0xffff00000000)),
+                mac_match.eq(mac_local | mac_bcast | mac_mcast4 | mac_mcast6),
+                rx_ready.eq(hw_fifo.sink.ready & cpu_fifo.sink.ready),
                 rx_valid.eq(rx_ready & depacketizer.source.valid),
                 depacketizer.source.connect(hw_fifo.sink, omit={"ready", "valid"}),
                 depacketizer.source.connect(cpu_fifo.sink, omit={"ready", "valid"}),
                 depacketizer.source.ready.eq(rx_ready),
-                hw_fifo.sink.valid.eq(rx_valid),
-                cpu_fifo.sink.valid.eq(rx_valid & ~mac_match),
+                hw_fifo.sink.valid.eq(rx_valid & mac_match),
+                cpu_fifo.sink.valid.eq(rx_valid & ~mac_local),
             ]
         else:
             # RX broadcast
