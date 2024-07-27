@@ -8,6 +8,8 @@
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import math
+
 from liteeth.common import *
 from liteeth.mac import gap, preamble, crc, padding, last_be
 from liteeth.phy.model import LiteEthPHYModel
@@ -103,7 +105,14 @@ class LiteEthMACCore(Module, AutoCSR):
                 self.pipeline.append(tx_preamble)
 
             def add_gap(self):
-                tx_gap = gap.LiteEthMACGap(phy_dw)
+                # Some phys, ECP5 for example, have a byte time enable to support
+                # dynamic link speeds.
+                # In the gap inserter we need to ensure this is enable holds for
+                # the gap counter. If not we would insert a gap that might be too
+                # short.
+                default_gap = Constant(math.ceil(eth_interpacket_gap/(phy_dw//8)))
+                gap_len = getattr(phy, "gap", default_gap)
+                tx_gap = gap.LiteEthMACGap(phy_dw, gap_len)
                 tx_gap = ClockDomainsRenamer("eth_tx")(tx_gap)
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
