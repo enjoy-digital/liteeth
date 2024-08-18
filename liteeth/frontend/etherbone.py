@@ -251,6 +251,7 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
             source.last.eq(count == fifo.source.rcount-1),
             source.last_be.eq(source.last << 3),
             source.count.eq(fifo.source.rcount),
+            source.be.eq(fifo.source.byte_enable),
             source.base_addr.eq(base_addr),
             source.addr.eq(fifo.source.data[2:]),
             fifo.source.ready.eq(source.ready),
