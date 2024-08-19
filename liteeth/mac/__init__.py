@@ -133,7 +133,7 @@ class LiteEthMACCoreCrossbar(Module):
             # HW FIFO -> HW Packetizer -> Depacketizer.
             self.comb += [
                 hw_fifo.source.connect(hw_packetizer.sink),
-                hw_packetizer.source.connect(depacketizer.sink),
+                hw_packetizer.source.connect(self.depacketizer.sink),
             ]
 
             # CPU FIFO -> CPU Packetizer -> Interface.
@@ -142,41 +142,57 @@ class LiteEthMACCoreCrossbar(Module):
                 cpu_packetizer.source.connect(interface.sink),
             ]
 
-            # RX packetizer broadcast.
-            mac_local  = Signal()
-            mac_bcast  = Signal()
-            mac_mcast4 = Signal()
-            mac_mcast6 = Signal()
-            mac_match  = Signal()
+            # RX Packetizer Broadcast Filtering.
+            mac_local  = Signal() # Matches the Hardware MAC address (local).
+            mac_bcast  = Signal() # Matches the Broadcast MAC address (FF:FF:FF:FF:FF:FF).
+            mac_mcast4 = Signal() # Matches IPv4 Multicast MAC addresses (01:00:5E:XX:XX:XX).
+            mac_mcast6 = Signal() # Matches IPv6 Multicast MAC addresses (33:33:XX:XX:XX:XX).
+            mac_valid  = Signal() # Matches any of the above MAC types.
             self.comb += [
+                # Hardware MAC address check.
                 mac_local.eq(hw_mac == depacketizer.source.payload.target_mac),
+                # Broadcast MAC address check.
                 mac_bcast.eq( 0xffffffffffff == depacketizer.source.payload.target_mac),
+                # IPv4 Multicast MAC address check.
                 mac_mcast4.eq(0x01005e000000 == (depacketizer.source.payload.target_mac & 0xffffff000000)),
+                # IPV6 Multicat MAC address check.
                 mac_mcast6.eq(0x333300000000 == (depacketizer.source.payload.target_mac & 0xffff00000000)),
-                mac_match.eq(mac_local | mac_bcast | mac_mcast4 | mac_mcast6),
+                # Combine all conditions to determine if the packet should be processed.
+                mac_valid.eq(mac_local | mac_bcast | mac_mcast4 | mac_mcast6),
+
+                # Accept when both FIFOs are ready.
                 rx_ready.eq(hw_fifo.sink.ready & cpu_fifo.sink.ready),
+
+                # Present when ready and Depacketizer valid.
                 rx_valid.eq(rx_ready & depacketizer.source.valid),
-                depacketizer.source.connect(hw_fifo.sink, omit={"ready", "valid"}),
+
+                # Depacketizer -> HW FIFO/CPU FIFO.
+                depacketizer.source.connect(hw_fifo.sink,  omit={"ready", "valid"}),
                 depacketizer.source.connect(cpu_fifo.sink, omit={"ready", "valid"}),
                 depacketizer.source.ready.eq(rx_ready),
-                hw_fifo.sink.valid.eq(rx_valid & mac_match),
+                hw_fifo.sink.valid.eq(rx_valid & mac_valid),
                 cpu_fifo.sink.valid.eq(rx_valid & ~mac_local),
             ]
         else:
-            # RX broadcast.
+            # RX Broadcast.
             self.comb += [
+                # Accept when both Interface/Depacketizer are ready.
                 rx_ready.eq(interface.sink.ready & self.depacketizer.sink.ready),
+
+                # Present when ready and Core valid.
                 rx_valid.eq(rx_ready & core.source.valid),
-                core.source.connect(interface.sink, omit={"ready", "valid"}),
-                core.source.connect(self.depacketizer.sink, omit={"ready", "valid"}),
+
+                # Core -> Interface/Depacketizer.
+                core.source.connect(interface.sink,    omit={"ready", "valid"}),
+                core.source.connect(depacketizer.sink, omit={"ready", "valid"}),
                 core.source.ready.eq(rx_ready),
                 interface.sink.valid.eq(rx_valid),
                 self.depacketizer.sink.valid.eq(rx_valid),
             ]
 
-        # TX arbiter.
-        self.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
+        # TX arbiter FSM.
+        self.tx_arb_fsm = tx_arb_fsm = FSM(reset_state="IDLE")
+        tx_arb_fsm.act("IDLE",
             If(interface.source.valid,
                 NextState("WISHBONE")
             ).Else(
@@ -185,13 +201,13 @@ class LiteEthMACCoreCrossbar(Module):
                 )
             ),
         )
-        fsm.act("WISHBONE",
+        tx_arb_fsm.act("WISHBONE",
             interface.source.connect(core.sink),
             If(core.sink.valid & core.sink.ready & core.sink.last,
                 NextState("IDLE")
             ),
         )
-        fsm.act("CROSSBAR",
+        tx_arb_fsm.act("CROSSBAR",
             self.packetizer.source.connect(core.sink),
             If(core.sink.valid & core.sink.ready & core.sink.last,
                 NextState("IDLE")
