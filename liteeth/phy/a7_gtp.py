@@ -88,9 +88,9 @@ class GTPTxInit(Module):
         self.specials += MultiReg(self.qpll_lock, qpll_lock)
 
         # After configuration, transceiver resets have to stay low for
-        # at least 500ns.
+        # at least 500ns (Here extended to 10us).
         # See https://www.xilinx.com/support/answers/43482.html
-        timer_max = ceil(10000e-9*sys_clk_freq)
+        timer_max = ceil(10e-6*sys_clk_freq)
         timer     = Signal(max=timer_max+1)
         tick      = Signal()
         self.sync += [
