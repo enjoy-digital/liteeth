@@ -5,6 +5,8 @@
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+from litex.gen import *
+
 from liteeth.common import *
 from liteeth.mac.common import *
 from liteeth.mac.core import LiteEthMACCore
@@ -12,7 +14,7 @@ from liteeth.mac.wishbone import LiteEthMACWishboneInterface
 
 # MAC ----------------------------------------------------------------------------------------------
 
-class LiteEthMAC(Module, AutoCSR):
+class LiteEthMAC(LiteXModule):
     def __init__(self, phy, dw,
         interface          = "crossbar",
         endianness         = "big",
@@ -34,7 +36,7 @@ class LiteEthMAC(Module, AutoCSR):
         assert interface  in ["crossbar", "wishbone", "hybrid"]
         assert endianness in ["big", "little"]
 
-        self.submodules.core = LiteEthMACCore(
+        self.core = LiteEthMACCore(
             phy               = phy,
             dw                = dw,
             with_sys_datapath = with_sys_datapath,
@@ -46,9 +48,9 @@ class LiteEthMAC(Module, AutoCSR):
         )
         self.csrs = []
         if interface == "crossbar":
-            self.submodules.crossbar     = LiteEthMACCrossbar(dw)
-            self.submodules.packetizer   = LiteEthMACPacketizer(dw)
-            self.submodules.depacketizer = LiteEthMACDepacketizer(dw)
+            self.crossbar     = LiteEthMACCrossbar(dw)
+            self.packetizer   = LiteEthMACPacketizer(dw)
+            self.depacketizer = LiteEthMACDepacketizer(dw)
             self.comb += [
                 self.crossbar.master.source.connect(self.packetizer.sink),
                 self.packetizer.source.connect(self.core.sink),
@@ -76,13 +78,13 @@ class LiteEthMAC(Module, AutoCSR):
             # increases memory usage by a lot.
             if full_memory_we:
                 wishbone_interface = FullMemoryWE()(wishbone_interface)
-            self.submodules.interface = wishbone_interface
+            self.interface = wishbone_interface
             self.ev, self.bus_rx, self.bus_tx = self.interface.sram.ev, self.interface.bus_rx, self.interface.bus_tx
             self.csrs = self.interface.get_csrs() + self.core.get_csrs()
             if interface == "hybrid":
                 # Hardware MAC
-                self.submodules.crossbar     = LiteEthMACCrossbar(dw)
-                self.submodules.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
+                self.crossbar     = LiteEthMACCrossbar(dw)
+                self.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
             else:
                 self.comb += self.interface.source.connect(self.core.sink)
                 self.comb += self.core.source.connect(self.interface.sink)
@@ -97,20 +99,23 @@ class LiteEthMACCoreCrossbar(Module):
         rx_ready = Signal()
         rx_valid = Signal()
 
-        # IP core packet processing
-        self.submodules.packetizer   = LiteEthMACPacketizer(dw)
-        self.submodules.depacketizer = LiteEthMACDepacketizer(dw)
+        # IP core packet processing.
+        self.packetizer   = LiteEthMACPacketizer(dw)
+        self.depacketizer = LiteEthMACDepacketizer(dw)
 
+        # HW Input Path.
         self.comb += [
-            # HW input path
-            # depacketizer -> crossbar
+            # Depacketizer -> Crossbar.
             self.depacketizer.source.connect(crossbar.master.sink),
-            # HW output path
-            # crossbar -> packetizer -> tx_fifo
+        ]
+
+        # HW Output Path.
+        self.comb += [
+            # Crossbar -> Packetizer.
             crossbar.master.source.connect(self.packetizer.sink),
         ]
 
-        # MAC filtering
+        # MAC filtering.
         if hw_mac is not None:
             depacketizer   = LiteEthMACDepacketizer(dw)
             hw_packetizer  = LiteEthMACPacketizer(dw)
@@ -121,23 +126,31 @@ class LiteEthMACCoreCrossbar(Module):
 
             self.submodules += depacketizer, cpu_packetizer, hw_packetizer, hw_fifo, cpu_fifo
 
+            # Core -> Depacketizer.
+            self.comb += core.source.connect(depacketizer.sink)
+
+
+            # HW FIFO -> HW Packetizer -> Depacketizer.
             self.comb += [
-                core.source.connect(depacketizer.sink),
                 hw_fifo.source.connect(hw_packetizer.sink),
-                hw_packetizer.source.connect(self.depacketizer.sink),
+                hw_packetizer.source.connect(depacketizer.sink),
+            ]
+
+            # CPU FIFO -> CPU Packetizer -> Interface.
+            self.comb += [
                 cpu_fifo.source.connect(cpu_packetizer.sink),
                 cpu_packetizer.source.connect(interface.sink),
             ]
 
-            # RX packetizer broadcast
-            mac_local = Signal()
-            mac_bcast = Signal()
+            # RX packetizer broadcast.
+            mac_local  = Signal()
+            mac_bcast  = Signal()
             mac_mcast4 = Signal()
             mac_mcast6 = Signal()
-            mac_match = Signal()
+            mac_match  = Signal()
             self.comb += [
                 mac_local.eq(hw_mac == depacketizer.source.payload.target_mac),
-                mac_bcast.eq(0xffffffffffff == depacketizer.source.payload.target_mac),
+                mac_bcast.eq( 0xffffffffffff == depacketizer.source.payload.target_mac),
                 mac_mcast4.eq(0x01005e000000 == (depacketizer.source.payload.target_mac & 0xffffff000000)),
                 mac_mcast6.eq(0x333300000000 == (depacketizer.source.payload.target_mac & 0xffff00000000)),
                 mac_match.eq(mac_local | mac_bcast | mac_mcast4 | mac_mcast6),
@@ -150,7 +163,7 @@ class LiteEthMACCoreCrossbar(Module):
                 cpu_fifo.sink.valid.eq(rx_valid & ~mac_local),
             ]
         else:
-            # RX broadcast
+            # RX broadcast.
             self.comb += [
                 rx_ready.eq(interface.sink.ready & self.depacketizer.sink.ready),
                 rx_valid.eq(rx_ready & core.source.valid),
@@ -161,8 +174,8 @@ class LiteEthMACCoreCrossbar(Module):
                 self.depacketizer.sink.valid.eq(rx_valid),
             ]
 
-        # TX arbiter
-        self.submodules.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
+        # TX arbiter.
+        self.tx_arbiter_fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(interface.source.valid,
                 NextState("WISHBONE")
