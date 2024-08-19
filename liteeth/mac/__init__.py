@@ -36,6 +36,8 @@ class LiteEthMAC(LiteXModule):
         assert interface  in ["crossbar", "wishbone", "hybrid"]
         assert endianness in ["big", "little"]
 
+        # Core.
+        # -----
         self.core = LiteEthMACCore(
             phy               = phy,
             dw                = dw,
@@ -47,7 +49,10 @@ class LiteEthMAC(LiteXModule):
             rx_cdc_buffered   = rx_cdc_buffered,
         )
         self.csrs = []
-        if interface == "crossbar":
+
+        # Crossbar Mode.
+        # --------------
+        if interface in ["crossbar"]:
             self.crossbar     = LiteEthMACCrossbar(dw)
             self.packetizer   = LiteEthMACPacketizer(dw)
             self.depacketizer = LiteEthMACDepacketizer(dw)
@@ -57,8 +62,11 @@ class LiteEthMAC(LiteXModule):
                 self.core.source.connect(self.depacketizer.sink),
                 self.depacketizer.source.connect(self.crossbar.master.sink)
             ]
-        else:
-            # Wishbone MAC
+        # Wishbone/Hybrid Mode.
+        # ---------------------
+        if interface in ["wishbone", "hybrid"]:
+            # Wishbone MAC (Common to Wishbone and Hybrid Modes).
+            # ---------------------------------------------------
             self.rx_slots  = CSRConstant(nrxslots)
             self.tx_slots  = CSRConstant(ntxslots)
             self.slot_size = CSRConstant(2**bits_for(eth_mtu))
@@ -69,25 +77,29 @@ class LiteEthMAC(LiteXModule):
                 endianness = endianness,
                 timestamp  = timestamp,
             )
-            # On some targets (Intel/Altera), the complex ports aren't inferred
-            # as block ram, but are created with LUTs.  FullMemoryWe splits such
-            # `Memory` instances up into 4 separate memory blocks, each
-            # containing 8 bits which gets inferred correctly on intel/altera.
-            # Yosys on ECP5 inferrs the original correctly, so FullMemoryWE
-            # leads to additional block ram instances being used, which
-            # increases memory usage by a lot.
             if full_memory_we:
-                wishbone_interface = FullMemoryWE()(wishbone_interface)
+                wishbone_interface = self.apply_full_memory_we(wishbone_interface)
             self.interface = wishbone_interface
-            self.ev, self.bus_rx, self.bus_tx = self.interface.sram.ev, self.interface.bus_rx, self.interface.bus_tx
-            self.csrs = self.interface.get_csrs() + self.core.get_csrs()
-            if interface == "hybrid":
-                # Hardware MAC
-                self.crossbar     = LiteEthMACCrossbar(dw)
-                self.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
-            else:
+            self.ev        = self.interface.sram.ev
+            self.bus_rx    = self.interface.bus_rx
+            self.bus_tx    = self.interface.bus_tx
+            self.csrs      = self.interface.get_csrs() + self.core.get_csrs()
+
+            # Wishbone Mode.
+            # --------------
+            if interface in ["wishbone"]:
                 self.comb += self.interface.source.connect(self.core.sink)
                 self.comb += self.core.source.connect(self.interface.sink)
+            # Hybrid Mode.
+            # ------------
+            if interface in ["hybrid"]:
+                self.crossbar     = LiteEthMACCrossbar(dw)
+                self.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
+
+    def apply_full_memory_we(self, interface):
+        # FullMemoryWE splits memory into 8-bit blocks to ensure proper block RAM inference on most FPGAs.
+        # On some (e.g., ECP5/Yosys), this isn't needed and can increase memory usage.
+        return FullMemoryWE()(wishbone_interface)
 
     def get_csrs(self):
         return self.csrs
