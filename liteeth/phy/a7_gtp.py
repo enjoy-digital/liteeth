@@ -11,11 +11,11 @@ from math import ceil
 from migen import *
 from migen.genlib.cdc import MultiReg, PulseSynchronizer
 
-__all__ = ["QPLLSettings", "QPLLChannel", "QPLL", "GTPTxInit", "GTPRxInit"]
-
+# QPLL Settings ------------------------------------------------------------------------------------
 
 QPLLSettings = namedtuple("QPLLSettings", "refclksel fbdiv fbdiv_45 refclk_div")
 
+# QPLL Channel -------------------------------------------------------------------------------------
 
 class QPLLChannel:
     def __init__(self, index):
@@ -25,6 +25,7 @@ class QPLLChannel:
         self.clk    = Signal()
         self.refclk = Signal()
 
+# QPLL ---------------------------------------------------------------------------------------------
 
 class QPLL(Module):
     def __init__(self,
@@ -67,6 +68,7 @@ class QPLL(Module):
             **channel_settings
         )
 
+# GTP Tx Init --------------------------------------------------------------------------------------
 
 class GTPTxInit(Module):
     def __init__(self, sys_clk_freq):
@@ -126,6 +128,7 @@ class GTPTxInit(Module):
             self.done.eq(1)
         )
 
+# GTP Rx Init --------------------------------------------------------------------------------------
 
 # RX Reset Sequence Requirement for Production Silicon:  https://www.xilinx.com/support/answers/53561.html
 class GTPRxInit(Module):
