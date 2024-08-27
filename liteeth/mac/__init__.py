@@ -99,14 +99,14 @@ class LiteEthMAC(LiteXModule):
     def apply_full_memory_we(self, interface):
         # FullMemoryWE splits memory into 8-bit blocks to ensure proper block RAM inference on most FPGAs.
         # On some (e.g., ECP5/Yosys), this isn't needed and can increase memory usage.
-        return FullMemoryWE()(wishbone_interface)
+        return FullMemoryWE()(interface)
 
     def get_csrs(self):
         return self.csrs
 
 # MAC Core Crossbar --------------------------------------------------------------------------------
 
-class LiteEthMACCoreCrossbar(Module):
+class LiteEthMACCoreCrossbar(LiteXModule):
     def __init__(self, core, crossbar, interface, dw, hw_mac=None):
         rx_ready = Signal()
         rx_valid = Signal()
@@ -129,17 +129,17 @@ class LiteEthMACCoreCrossbar(Module):
 
         # MAC filtering.
         if hw_mac is not None:
-            depacketizer   = LiteEthMACDepacketizer(dw)
-            hw_packetizer  = LiteEthMACPacketizer(dw)
-            cpu_packetizer = LiteEthMACPacketizer(dw)
+            filter_depacketizer = LiteEthMACDepacketizer(dw)
+            hw_packetizer       = LiteEthMACPacketizer(dw)
+            cpu_packetizer      = LiteEthMACPacketizer(dw)
 
             hw_fifo  = stream.SyncFIFO(eth_mac_description(dw), depth=4, buffered=True)
             cpu_fifo = stream.SyncFIFO(eth_mac_description(dw), depth=4, buffered=True)
 
-            self.submodules += depacketizer, cpu_packetizer, hw_packetizer, hw_fifo, cpu_fifo
+            self.submodules += filter_depacketizer, cpu_packetizer, hw_packetizer, hw_fifo, cpu_fifo
 
             # Core -> Depacketizer.
-            self.comb += core.source.connect(depacketizer.sink)
+            self.comb += core.source.connect(filter_depacketizer.sink)
 
 
             # HW FIFO -> HW Packetizer -> Depacketizer.
@@ -162,13 +162,13 @@ class LiteEthMACCoreCrossbar(Module):
             mac_valid  = Signal() # Matches any of the above MAC types.
             self.comb += [
                 # Hardware MAC address check.
-                mac_local.eq(hw_mac == depacketizer.source.payload.target_mac),
+                mac_local.eq(hw_mac == filter_depacketizer.source.payload.target_mac),
                 # Broadcast MAC address check.
-                mac_bcast.eq( 0xffffffffffff == depacketizer.source.payload.target_mac),
+                mac_bcast.eq( 0xffffffffffff == filter_depacketizer.source.payload.target_mac),
                 # IPv4 Multicast MAC address check.
-                mac_mcast4.eq(0x01005e000000 == (depacketizer.source.payload.target_mac & 0xffffff000000)),
+                mac_mcast4.eq(0x01005e000000 == (filter_depacketizer.source.payload.target_mac & 0xffffff000000)),
                 # IPV6 Multicat MAC address check.
-                mac_mcast6.eq(0x333300000000 == (depacketizer.source.payload.target_mac & 0xffff00000000)),
+                mac_mcast6.eq(0x333300000000 == (filter_depacketizer.source.payload.target_mac & 0xffff00000000)),
                 # Combine all conditions to determine if the packet should be processed.
                 mac_valid.eq(mac_local | mac_bcast | mac_mcast4 | mac_mcast6),
 
@@ -176,12 +176,12 @@ class LiteEthMACCoreCrossbar(Module):
                 rx_ready.eq(hw_fifo.sink.ready & cpu_fifo.sink.ready),
 
                 # Present when ready and Depacketizer valid.
-                rx_valid.eq(rx_ready & depacketizer.source.valid),
+                rx_valid.eq(rx_ready & filter_depacketizer.source.valid),
 
                 # Depacketizer -> HW FIFO/CPU FIFO.
-                depacketizer.source.connect(hw_fifo.sink,  omit={"ready", "valid"}),
-                depacketizer.source.connect(cpu_fifo.sink, omit={"ready", "valid"}),
-                depacketizer.source.ready.eq(rx_ready),
+                filter_depacketizer.source.connect(hw_fifo.sink,  omit={"ready", "valid"}),
+                filter_depacketizer.source.connect(cpu_fifo.sink, omit={"ready", "valid"}),
+                filter_depacketizer.source.ready.eq(rx_ready),
                 hw_fifo.sink.valid.eq(rx_valid & mac_valid),
                 cpu_fifo.sink.valid.eq(rx_valid & ~mac_local),
             ]
@@ -195,8 +195,8 @@ class LiteEthMACCoreCrossbar(Module):
                 rx_valid.eq(rx_ready & core.source.valid),
 
                 # Core -> Interface/Depacketizer.
-                core.source.connect(interface.sink,    omit={"ready", "valid"}),
-                core.source.connect(depacketizer.sink, omit={"ready", "valid"}),
+                core.source.connect(interface.sink,         omit={"ready", "valid"}),
+                core.source.connect(self.depacketizer.sink, omit={"ready", "valid"}),
                 core.source.ready.eq(rx_ready),
                 interface.sink.valid.eq(rx_valid),
                 self.depacketizer.sink.valid.eq(rx_valid),
