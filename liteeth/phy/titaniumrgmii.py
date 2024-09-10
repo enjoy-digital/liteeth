@@ -36,7 +36,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
                 i1  = tx_data_h[i],
                 i2  = tx_data_l[i],
                 o   = pads.tx_data[i],
-                clk = f"auto_eth{n}_tx_clk", # FIXME: Use Clk Signal.
+                clk = ClockSignal("eth_tx"),
             )
 
         # TX Ctl IOs.
@@ -47,7 +47,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
             i1  = tx_ctl_h,
             i2  = tx_ctl_l,
             o   = pads.tx_ctl,
-            clk = f"auto_eth{n}_tx_clk", # FIXME: Use Clk Signal.
+            clk = ClockSignal("eth_tx"),
         )
 
         # Logic.
@@ -80,7 +80,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 i   = pads.rx_data[i],
                 o1  = rx_data_h[i],
                 o2  = rx_data_l[i],
-                clk = f"auto_eth{n}_rx_clk", # FIXME: Use Clk Signal.
+                clk = ClockSignal("eth_rx"),
             )
 
         # RX Ctl IOs.
@@ -91,7 +91,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
             i   = pads.rx_ctl,
             o1  = rx_ctl_h,
             o2  = rx_ctl_l,
-            clk = f"auto_eth{n}_rx_clk", # FIXME: Use Clk Signal.
+            clk = ClockSignal("eth_rx"),
         )
 
         rx_ctl   = rx_ctl_h
@@ -123,8 +123,9 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         # Clk Domains.
         # ------------
-        self.cd_eth_rx = ClockDomain()
-        self.cd_eth_tx = ClockDomain()
+        self.cd_eth_rx         = ClockDomain()
+        self.cd_eth_tx         = ClockDomain()
+        self.cd_eth_tx_delayed = ClockDomain(reset_less=True)
 
         # RX Clk.
         # -------
@@ -136,17 +137,17 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         # TX Clk.
         # -------
         self.specials += ClkOutput(
-            i = f"auto_eth{n}_tx_clk_delayed", # FIXME: Use Clk Signal.
+            i = ClockSignal("eth_tx_delayed"),
             o = clock_pads.tx
         )
 
         # TX PLL.
         # -------
         self.pll = pll = TITANIUMPLL(platform)
-        pll.register_clkin(None,          freq=125e6,           name=f"auto_eth{n}_rx_clk_in0") # FIXME: 0 is to match ClkInput
-        pll.create_clkout(self.cd_eth_rx, freq=125e6, phase=0,  name=f"auto_eth{n}_rx_clk", with_reset=False)
-        pll.create_clkout(self.cd_eth_tx, freq=125e6, phase=0,  name=f"auto_eth{n}_tx_clk", with_reset=False)
-        pll.create_clkout(None,           freq=125e6, phase=90, name=f"auto_eth{n}_tx_clk_delayed")
+        pll.register_clkin(None,                  freq=125e6,           name=f"auto_eth{n}_rx_clk_in0") # FIXME: 0 is to match ClkInput
+        pll.create_clkout(self.cd_eth_rx,         freq=125e6, phase=0,  with_reset=False)
+        pll.create_clkout(self.cd_eth_tx,         freq=125e6, phase=0,  with_reset=False)
+        pll.create_clkout(self.cd_eth_tx_delayed, freq=125e6, phase=90)
 
         # Reset.
         # ------
