@@ -160,6 +160,16 @@ _io = [
         Subsignal("rxn",     Pins(1)),
         Subsignal("link_up", Pins(1)),
     ),
+
+    # XGMII PHY Pads
+    ("xgmii", 0,
+        Subsignal("rx",      Pins(1)), # Clk.
+        Subsignal("rx_ctl",  Pins(8)),
+        Subsignal("rx_data", Pins(64)),
+        Subsignal("tx",      Pins(1)), # Clk.
+        Subsignal("tx_ctl",  Pins(8)),
+        Subsignal("tx_data", Pins(64)),
+    ),
 ]
 
 def get_udp_port_ios(name, data_width, dynamic_params=False):
@@ -354,6 +364,13 @@ class PHYCore(SoCMini):
                 ethphy.reset.eq(ethphy_pads.rst),
                 ethphy_pads.link_up.eq(ethphy.link_up),
             ]
+        elif phy in [liteeth_phys.LiteEthPHYXGMII]:
+            ethphy_pads = platform.request("xgmii")
+            ethphy      = phy(
+                clock_pads = ethphy_pads,
+                pads       = ethphy_pads,
+                dw         = 64,
+            )
         else:
             raise ValueError("Unsupported PHY")
         self.ethphy = ethphy
