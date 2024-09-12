@@ -65,6 +65,7 @@ class LiteEthStream2UDPTX(LiteXModule):
                 source.data.eq(fifo.source.data),
                 If(source.last,
                     source.last_be.eq({
+                        64 : 0b10000000,
                         32 : 0b1000,
                         16 : 0b10,
                         8  : 0b1
