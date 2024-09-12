@@ -1,7 +1,7 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 """
@@ -21,6 +21,8 @@ from liteeth.common import *
 
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.packet import *
+
+from liteeth.mac.common import LiteEthLastHandler
 
 from liteeth.packet import Depacketizer, Packetizer
 
@@ -84,8 +86,13 @@ class LiteEthEtherbonePacketRX(LiteXModule):
 
         # # #
 
+        self.last_handler = LiteEthLastHandler(eth_udp_user_description(32))
+
         self.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
-        self.comb += sink.connect(depacketizer.sink)
+        self.comb += [
+            sink.connect(self.last_handler.sink),
+            self.last_handler.source.connect(depacketizer.sink),
+        ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
