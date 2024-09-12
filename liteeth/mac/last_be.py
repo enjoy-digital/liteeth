@@ -1,46 +1,36 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2020 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2018 whitequark <whitequark@whitequark.org>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from liteeth.common import *
+from litex.gen import *
+
+from liteeth.common     import *
+from liteeth.mac.common import LiteEthLastHandler
 
 # MAC TX Last BE -----------------------------------------------------------------------------------
 
-class LiteEthMACTXLastBE(Module):
+class LiteEthMACTXLastBE(LiteXModule):
     def __init__(self, dw):
-        self.sink   = sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink   =   sink = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
-        self.submodules.fsm = fsm = FSM(reset_state="COPY")
-        fsm.act("COPY",
-            sink.connect(source),
-            source.last.eq(sink.last_be != 0),
-            If(sink.valid & sink.ready,
-                # If last Byte but not last packet token.
-                If(source.last & ~sink.last,
-                    NextState("WAIT-LAST")
-                )
-            )
-        )
-        fsm.act("WAIT-LAST",
-            # Accept incoming stream until we receive last packet token.
-            sink.ready.eq(1),
-            If(sink.valid & sink.last,
-                NextState("COPY")
-            )
-        )
+        self.last_handler = LiteEthLastHandler(layout=eth_phy_description(dw))
+        self.comb += [
+            sink.connect(self.last_handler.sink),
+            self.last_handler.source.connect(source),
+        ]
 
 # MAC RX Last BE -----------------------------------------------------------------------------------
 
 class LiteEthMACRXLastBE(Module):
     def __init__(self, dw):
-        self.sink = sink = stream.Endpoint(eth_phy_description(dw))
+        self.sink   =   sink = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
