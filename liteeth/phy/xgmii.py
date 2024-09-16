@@ -17,6 +17,18 @@ XGMII_IDLE  = Constant(0x07, bits_sign=8)
 XGMII_START = Constant(0xFB, bits_sign=8)
 XGMII_END   = Constant(0xFD, bits_sign=8)
 
+# Pads/Interfaces ----------------------------------------------------------------------------------
+
+class LiteEthPHYXGMIIClkPads:
+    rx = Signal()
+    tx = Signal()
+
+class LiteEthPHYXGMIIPads:
+    rx_ctl  = Signal(8)
+    rx_data = Signal(64)
+    tx_ctl  = Signal(8)
+    tx_data = Signal(64)
+
 # LiteEth PHY XGMII TX -----------------------------------------------------------------------------
 
 class LiteEthPHYXGMIITX(LiteXModule):
@@ -649,7 +661,7 @@ class LiteEthPHYXGMIICRG(LiteXModule):
         else:
             self.comb += [
                 self.cd_eth_rx.clk.eq(clock_pads.rx),
-                self.cd_eth_tx.clk.eq(clock_pads.tx)
+                self.cd_eth_tx.clk.eq(clock_pads.tx),
             ]
 
 # LiteEth PHY XGMII --------------------------------------------------------------------------------
