@@ -109,14 +109,15 @@ class LiteEthPHYRMIICRG(LiteXModule):
 
         # Else use refclk_cd as RMII reference clock (provided by user design).
         else:
-            self.comb += self.cd_eth_rx.clk.eq(ClockSignal(refclk_cd))
-            self.comb += self.cd_eth_tx.clk.eq(ClockSignal(refclk_cd))
+            clk_signal = ClockSignal(refclk_cd)
+            self.comb += self.cd_eth_rx.clk.eq(clk_signal)
+            self.comb += self.cd_eth_tx.clk.eq(clk_signal)
             # Drive clock_pads if provided.
             if clock_pads is not None:
                 if with_refclk_ddr_output:
-                    self.specials += DDROutput(i1=0, i2=1, o=clock_pads.ref_clk, clk=ClockSignal("eth_tx"))
+                    self.specials += DDROutput(i1=0, i2=1, o=clock_pads.ref_clk, clk=clk_signal)
                 else:
-                    self.comb += clock_pads.ref_clk.eq(~ClockSignal("eth_tx")) # CHEKCME: Keep Invert?
+                    self.comb += clock_pads.ref_clk.eq(~clk_signal) # CHEKCME: Keep Invert?
 
         # Reset
         self.reset = reset = Signal()
