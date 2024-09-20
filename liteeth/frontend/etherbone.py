@@ -80,19 +80,22 @@ class LiteEthEtherbonePacketDepacketizer(Depacketizer):
 
 
 class LiteEthEtherbonePacketRX(LiteXModule):
-    def __init__(self):
+    def __init__(self, with_last_handler=False):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
         # # #
 
-        self.last_handler = LiteEthLastHandler(eth_udp_user_description(32))
-
         self.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
-        self.comb += [
-            sink.connect(self.last_handler.sink),
-            self.last_handler.source.connect(depacketizer.sink),
-        ]
+
+        if with_last_handler:
+            self.last_handler = LiteEthLastHandler(eth_udp_user_description(32))
+            self.comb += [
+                sink.connect(self.last_handler.sink),
+                self.last_handler.source.connect(depacketizer.sink),
+            ]
+        else:
+            self.comb += sink.connect(depacketizer.sink)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -131,7 +134,7 @@ class LiteEthEtherbonePacketRX(LiteXModule):
 class LiteEthEtherbonePacket(LiteXModule):
     def __init__(self, udp, udp_port, cd="sys"):
         self.tx = tx = LiteEthEtherbonePacketTX(udp_port)
-        self.rx = rx = LiteEthEtherbonePacketRX()
+        self.rx = rx = LiteEthEtherbonePacketRX(with_last_handler=(udp.crossbar.dw == 64)) # FIXME: Avoid 64-bit specific behavior.
         udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
         self.comb += [
             tx.source.connect(udp_port.sink),
