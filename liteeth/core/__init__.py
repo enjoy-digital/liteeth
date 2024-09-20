@@ -5,6 +5,8 @@
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+from litex.gen import *
+
 from liteeth.common    import *
 from liteeth.mac       import LiteEthMAC
 from liteeth.core.arp  import LiteEthARP
@@ -14,7 +16,7 @@ from liteeth.core.icmp import LiteEthICMP
 
 # IP Core ------------------------------------------------------------------------------------------
 
-class LiteEthIPCore(Module, AutoCSR):
+class LiteEthIPCore(LiteXModule):
     def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True, icmp_fifo_depth=128,
         with_ip_broadcast = True,
@@ -32,7 +34,7 @@ class LiteEthIPCore(Module, AutoCSR):
 
         # MAC.
         # ----
-        self.submodules.mac = LiteEthMAC(
+        self.mac = LiteEthMAC(
             phy               = phy,
             dw                = dw,
             interface         = interface,
@@ -48,7 +50,7 @@ class LiteEthIPCore(Module, AutoCSR):
 
         # ARP.
         # ----
-        self.submodules.arp = LiteEthARP(
+        self.arp = LiteEthARP(
             mac         = self.mac,
             mac_address = mac_address,
             ip_address  = ip_address,
@@ -59,7 +61,7 @@ class LiteEthIPCore(Module, AutoCSR):
 
         # IP.
         # ---
-        self.submodules.ip  = LiteEthIP(
+        self.ip  = LiteEthIP(
             mac            = self.mac,
             mac_address    = mac_address,
             ip_address     = ip_address,
@@ -70,7 +72,7 @@ class LiteEthIPCore(Module, AutoCSR):
         # ICMP (Optional).
         # ----------------
         if with_icmp:
-            self.submodules.icmp = LiteEthICMP(
+            self.icmp = LiteEthICMP(
                 ip         = self.ip,
                 ip_address = ip_address,
                 dw         = dw,
@@ -117,7 +119,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         )
         # UDP.
         # ----
-        self.submodules.udp = LiteEthUDP(
+        self.udp = LiteEthUDP(
             ip         = self.ip,
             ip_address = ip_address,
             dw         = dw,
