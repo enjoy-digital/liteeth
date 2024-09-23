@@ -10,7 +10,7 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
 
-from litex.build.io import DDROutput
+from litex.build.io import SDRInput, SDROutput, DDROutput
 
 from liteeth.common import *
 from liteeth.phy.common import *
@@ -45,21 +45,27 @@ class LiteEthPHYRMIIRX(LiteXModule):
 
         # # #
 
+        # Input.
+        # ------
+        crs_dv   = Signal()
+        rx_data  = Signal(2)
+        self.specials += SDRInput(i=pads.crs_dv,  o=crs_dv)
+        for i in range(2):
+            self.specials += SDRInput(i=pads.rx_data[i], o=rx_data[i])
+
+        # Converter: 2-bit to 8-bit.
+        # --------------------------
         converter = stream.Converter(2, 8)
         converter = ResetInserter()(converter)
         self.converter = converter
 
+        # Delay.
+        # ------
         self.delay = delay = stream.Delay(layout=[("data", 8)], n=2)
         self.comb += delay.source.connect(converter.sink)
 
-        crs_dv   = Signal()
         crs_dv_d = Signal()
-        rx_data  = Signal(2)
-        self.sync += [
-            crs_dv.eq(pads.crs_dv),
-            crs_dv_d.eq(crs_dv),
-            rx_data.eq(pads.rx_data)
-        ]
+        self.sync += crs_dv_d.eq(crs_dv)
 
         crs_first = (crs_dv & (rx_data != 0b00))
         crs_last  = (~crs_dv & ~crs_dv_d) # End of frame when 2 consecutives 0 on crs_dv.
