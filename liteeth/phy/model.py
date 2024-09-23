@@ -34,7 +34,8 @@ class LiteEthPHYModelCRG(LiteXModule):
 # LiteEth PHY Model --------------------------------------------------------------------------------
 
 class LiteEthPHYModel(LiteXModule):
-    dw = 8
+    dw                = 8
+    with_preamble_crc = False # Disable Preamble/CRC with for direct connection to the Ethernet tap.
     def __init__(self, pads):
         self.crg    = LiteEthPHYModelCRG()
         self.sink   = sink   = stream.Endpoint(eth_phy_description(8))

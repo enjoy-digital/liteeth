@@ -10,7 +10,6 @@
 
 from liteeth.common import *
 from liteeth.mac import gap, preamble, crc, padding, last_be
-from liteeth.phy.model import LiteEthPHYModel
 
 from migen.genlib.cdc import PulseSynchronizer
 
@@ -46,8 +45,12 @@ class LiteEthMACCore(Module, AutoCSR):
             cd_tx       = "eth_tx"
             cd_rx       = "eth_rx"
             datapath_dw = phy_dw
-        if isinstance(phy, LiteEthPHYModel):
-            with_preamble_crc = False # Disable Preamble/CRC with PHY Model for direct connection to the Ethernet tap.
+
+        # If the PHY specifies preamble, CRC, or padding behavior, use it.
+        if hasattr(phy, "with_preamble_crc"):
+            with_preamble_crc = phy.with_preamble_crc
+        if hasattr(phy, "with_padding"):
+            with_padding = phy.with_padding
 
         # CSRs.
         if with_preamble_crc:
