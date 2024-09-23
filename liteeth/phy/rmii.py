@@ -58,34 +58,36 @@ class LiteEthPHYRMIIRX(LiteXModule):
 
         # Converter: 2-bit to 8-bit.
         # --------------------------
-        converter = stream.Converter(2, 8)
-        converter = ResetInserter()(converter)
-        self.converter = converter
+        self.converter = converter = stream.Converter(2, 8)
 
         # Delay.
         # ------
         self.delay = delay = stream.Delay(layout=[("data", 8)], n=2)
-        self.comb += delay.source.connect(converter.sink)
 
-        crs_dv_d = Signal()
+        # Frame Delimitation.
+        # -------------------
+        crs_dv_d  = Signal()
+        crs_first = Signal()
+        crs_last  = Signal()
         self.sync += crs_dv_d.eq(crs_dv)
-
-        crs_first = (crs_dv & (rx_data != 0b00))
-        crs_last  = (~crs_dv & ~crs_dv_d) # End of frame when 2 consecutives 0 on crs_dv.
+        self.comb += [
+            crs_first.eq(crs_dv & (rx_data != 0b00)), # Start of frame on crs_dv at 1 and non-null data.
+            crs_last.eq(~crs_dv & ~crs_dv_d),         # End of frame on 2 consecutives crs_dv at 0.
+        ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
+            delay.source.ready.eq(1),
             If(crs_first,
                 delay.sink.valid.eq(1),
                 delay.sink.data.eq(rx_data),
                 NextState("RECEIVE")
-            ).Else(
-               converter.reset.eq(1)
             )
         )
         fsm.act("RECEIVE",
             delay.sink.valid.eq(1),
             delay.sink.data.eq(rx_data),
+            delay.source.connect(converter.sink),
             If(crs_last,
                 converter.sink.last.eq(1),
                 NextState("IDLE")
