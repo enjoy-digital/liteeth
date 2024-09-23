@@ -49,13 +49,8 @@ class LiteEthPHYRMIIRX(LiteXModule):
         converter = ResetInserter()(converter)
         self.converter = converter
 
-        converter_sink_valid = Signal()
-        converter_sink_data  = Signal(2)
-
-        self.specials += [
-            MultiReg(converter_sink_valid, converter.sink.valid, n=2),
-            MultiReg(converter_sink_data,  converter.sink.data,  n=2)
-        ]
+        self.delay = delay = stream.Delay(layout=[("data", 8)], n=2)
+        self.comb += delay.source.connect(converter.sink)
 
         crs_dv   = Signal()
         crs_dv_d = Signal()
@@ -69,16 +64,16 @@ class LiteEthPHYRMIIRX(LiteXModule):
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(crs_dv & (rx_data != 0b00),
-                converter_sink_valid.eq(1),
-                converter_sink_data.eq(rx_data),
+                delay.sink.valid.eq(1),
+                delay.sink.data.eq(rx_data),
                 NextState("RECEIVE")
             ).Else(
                converter.reset.eq(1)
             )
         )
         fsm.act("RECEIVE",
-            converter_sink_valid.eq(1),
-            converter_sink_data.eq(rx_data),
+            delay.sink.valid.eq(1),
+            delay.sink.data.eq(rx_data),
             # End of frame when 2 consecutives 0 on crs_dv.
             If(~(crs_dv | crs_dv_d),
               converter.sink.last.eq(1),
