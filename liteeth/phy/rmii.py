@@ -23,19 +23,22 @@ class LiteEthPHYRMIITX(LiteXModule):
 
         # # #
 
+        # Converter: 8-bit to 2-bit.
+        # --------------------------
         self.converter = converter = stream.Converter(8, 2)
+
+        # Datapath: Sink -> Converter.
+        # ----------------------------
         self.comb += [
-            converter.sink.valid.eq(sink.valid),
-            converter.sink.data.eq(sink.data),
-            sink.ready.eq(converter.sink.ready),
+            sink.connect(converter.sink, keep={"valid", "ready", "data"}),
             converter.source.ready.eq(1),
         ]
-        pads.tx_en.reset_less   = True
-        pads.tx_data.reset_less = True
-        self.sync += [
-            pads.tx_en.eq(converter.source.valid),
-            pads.tx_data.eq(converter.source.data)
-        ]
+
+        # Output (Sync).
+        # --------------
+        self.specials += SDROutput(i=converter.source.valid, o=pads.tx_en)
+        for i in range(2):
+            self.specials += SDROutput(i=converter.source.data[i], o=pads.tx_data[i])
 
 # LiteEth PHY RMII RX ------------------------------------------------------------------------------
 
@@ -45,8 +48,8 @@ class LiteEthPHYRMIIRX(LiteXModule):
 
         # # #
 
-        # Input.
-        # ------
+        # Input (Sync).
+        # -------------
         crs_dv   = Signal()
         rx_data  = Signal(2)
         self.specials += SDRInput(i=pads.crs_dv,  o=crs_dv)
