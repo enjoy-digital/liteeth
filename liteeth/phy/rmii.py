@@ -61,9 +61,12 @@ class LiteEthPHYRMIIRX(LiteXModule):
             rx_data.eq(pads.rx_data)
         ]
 
+        crs_first = (crs_dv & (rx_data != 0b00))
+        crs_last  = (~crs_dv & ~crs_dv_d) # End of frame when 2 consecutives 0 on crs_dv.
+
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(crs_dv & (rx_data != 0b00),
+            If(crs_first,
                 delay.sink.valid.eq(1),
                 delay.sink.data.eq(rx_data),
                 NextState("RECEIVE")
@@ -74,10 +77,9 @@ class LiteEthPHYRMIIRX(LiteXModule):
         fsm.act("RECEIVE",
             delay.sink.valid.eq(1),
             delay.sink.data.eq(rx_data),
-            # End of frame when 2 consecutives 0 on crs_dv.
-            If(~(crs_dv | crs_dv_d),
-              converter.sink.last.eq(1),
-              NextState("IDLE")
+            If(crs_last,
+                converter.sink.last.eq(1),
+                NextState("IDLE")
             )
         )
         self.comb += converter.source.connect(source)
