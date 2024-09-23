@@ -107,8 +107,8 @@ class LiteEthPHYRMIICRG(LiteXModule):
 
         # # #
 
-        # RX/TX clocks
-
+        # RX/TX clocks.
+        # -------------
         self.cd_eth_rx = ClockDomain()
         self.cd_eth_tx = ClockDomain()
 
@@ -129,7 +129,8 @@ class LiteEthPHYRMIICRG(LiteXModule):
                 else:
                     self.comb += clock_pads.ref_clk.eq(~clk_signal) # CHEKCME: Keep Invert?
 
-        # Reset
+        # Reset.
+        # ------
         self.reset = reset = Signal()
         if with_hw_init_reset:
             self.hw_reset = LiteEthPHYHWReset()
@@ -153,13 +154,21 @@ class LiteEthPHYRMII(LiteXModule):
     def __init__(self, clock_pads, pads, refclk_cd="eth",
         with_hw_init_reset     = True,
         with_refclk_ddr_output = True):
+
+        # CRG.
+        # ----
         self.crg = LiteEthPHYRMIICRG(clock_pads, pads, refclk_cd,
             with_hw_init_reset     = with_hw_init_reset,
             with_refclk_ddr_output = with_refclk_ddr_output,
         )
+
+        # TX/RX.
+        # ------
         self.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
         self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
         self.sink, self.source = self.tx.sink, self.rx.source
 
+        # MDIO.
+        # -----
         if hasattr(pads, "mdc"):
             self.mdio = LiteEthPHYMDIO(pads)
