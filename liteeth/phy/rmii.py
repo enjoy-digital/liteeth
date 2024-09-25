@@ -18,7 +18,7 @@ from liteeth.phy.common import *
 # LiteEth PHY RMII TX ------------------------------------------------------------------------------
 
 class LiteEthPHYRMIITX(LiteXModule):
-    def __init__(self, pads):
+    def __init__(self, pads, clk_signal):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -36,15 +36,15 @@ class LiteEthPHYRMIITX(LiteXModule):
 
         # Output (Sync).
         # --------------
-        self.specials += SDROutput(i=converter.source.valid, o=pads.tx_en)
+        self.specials += SDROutput(i=converter.source.valid, o=pads.tx_en, clk=clk_signal)
         for i in range(2):
-            self.specials += SDROutput(i=converter.source.data[i], o=pads.tx_data[i])
+            self.specials += SDROutput(i=converter.source.data[i], o=pads.tx_data[i], clk=clk_signal)
 
 
 # LiteEth PHY RMII RX ------------------------------------------------------------------------------
 
 class LiteEthPHYRMIIRX(LiteXModule):
-    def __init__(self, pads):
+    def __init__(self, pads, clk_signal):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -53,9 +53,9 @@ class LiteEthPHYRMIIRX(LiteXModule):
         # -------------
         crs_dv   = Signal()
         rx_data  = Signal(2)
-        self.specials += SDRInput(i=pads.crs_dv,  o=crs_dv)
+        self.specials += SDRInput(i=pads.crs_dv,  o=crs_dv, clk=clk_signal)
         for i in range(2):
-            self.specials += SDRInput(i=pads.rx_data[i], o=rx_data[i])
+            self.specials += SDRInput(i=pads.rx_data[i], o=rx_data[i], clk=clk_signal)
 
         # Converter: 2-bit to 8-bit.
         # --------------------------
@@ -116,10 +116,11 @@ class LiteEthPHYRMIICRG(LiteXModule):
         if refclk_cd is None:
             self.cd_eth_rx.clk = clock_pads.ref_clk
             self.cd_eth_tx.clk = self.cd_eth_rx.clk
+            self.clk_signal    = self.cd_eth_rx.clk
 
         # Else use refclk_cd as RMII reference clock (provided by user design).
         else:
-            clk_signal = ClockSignal(refclk_cd)
+            self.clk_signal = clk_signal = ClockSignal(refclk_cd)
             self.comb += self.cd_eth_rx.clk.eq(clk_signal)
             self.comb += self.cd_eth_tx.clk.eq(clk_signal)
             # Drive clock_pads if provided.
@@ -164,8 +165,8 @@ class LiteEthPHYRMII(LiteXModule):
 
         # TX/RX.
         # ------
-        self.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads))
-        self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads))
+        self.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads, self.crg.clk_signal))
+        self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads, self.crg.clk_signal))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         # MDIO.
