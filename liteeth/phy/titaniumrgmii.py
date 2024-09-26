@@ -131,7 +131,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         # -------
         self.specials += ClkInput(
             i = clock_pads.rx,
-            o = f"auto_eth{n}_rx_clk_in", # FIXME: Use Clk Signal.
+            o = self.cd_eth_rx.clk,
         )
 
         # TX Clk.
@@ -144,7 +144,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         # TX PLL.
         # -------
         self.pll = pll = TITANIUMPLL(platform)
-        pll.register_clkin(None,                  freq=125e6,           name=f"auto_eth{n}_rx_clk_in0") # FIXME: 0 is to match ClkInput
+        pll.register_clkin(self.cd_eth_rx.clk,    freq=125e6)
         pll.create_clkout(self.cd_eth_rx,         freq=125e6, phase=0,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx,         freq=125e6, phase=0,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, freq=125e6, phase=90)
