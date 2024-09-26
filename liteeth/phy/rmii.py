@@ -15,13 +15,42 @@ from litex.build.io import SDRInput, SDROutput, DDROutput
 from liteeth.common import *
 from liteeth.phy.common import *
 
+# LiteEth PHY RMII Timer ---------------------------------------------------------------------------
+
+class LiteEthPHYRMIITimer(LiteXModule):
+    def __init__(self, speed):
+        self.rst = Signal() # i.
+        self.ce  = Signal() # o.
+
+        # # #
+
+        timer = Signal(4)
+        self.comb += self.ce.eq(timer == 0)
+        self.sync += [
+            # Decrement timer.
+            timer.eq(timer - 1),
+            # Reload Timer.
+            If(self.ce | self.rst,
+                Case(speed, {
+                    0b0: timer.eq(9), #  10Mbps.
+                    0b1: timer.eq(0), # 100Mbps.
+                })
+            )
+        ]
+
 # LiteEth PHY RMII TX ------------------------------------------------------------------------------
 
 class LiteEthPHYRMIITX(LiteXModule):
     def __init__(self, pads, clk_signal):
-        self.sink = sink = stream.Endpoint(eth_phy_description(8))
+        self.sink  = sink = stream.Endpoint(eth_phy_description(8))
+        self.speed = Signal() # 0: 10Mbps / 1: 100Mbps.
 
         # # #
+
+        # Speed Timer for 10Mbps/100Mbps.
+        # -------------------------------
+        self.timer = timer = LiteEthPHYRMIITimer(speed=self.speed)
+        self.comb += timer.rst.eq(~sink.valid)
 
         # Converter: 8-bit to 2-bit.
         # --------------------------
@@ -31,7 +60,7 @@ class LiteEthPHYRMIITX(LiteXModule):
         # ----------------------------
         self.comb += [
             sink.connect(converter.sink, keep={"valid", "ready", "data"}),
-            converter.source.ready.eq(1),
+            converter.source.ready.eq(timer.ce),
         ]
 
         # Output (Sync).
@@ -46,16 +75,30 @@ class LiteEthPHYRMIITX(LiteXModule):
 class LiteEthPHYRMIIRX(LiteXModule):
     def __init__(self, pads, clk_signal):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.speed = Signal() # 0: 10Mbps / 1: 100Mbps.
 
         # # #
 
         # Input (Sync).
         # -------------
-        crs_dv   = Signal()
-        rx_data  = Signal(2)
-        self.specials += SDRInput(i=pads.crs_dv,  o=crs_dv, clk=clk_signal)
+        crs_dv_i  = Signal()
+        rx_data_i = Signal(2)
+        self.specials += SDRInput(i=pads.crs_dv, o=crs_dv_i, clk=clk_signal)
         for i in range(2):
-            self.specials += SDRInput(i=pads.rx_data[i], o=rx_data[i], clk=clk_signal)
+            self.specials += SDRInput(i=pads.rx_data[i], o=rx_data_i[i], clk=clk_signal)
+
+        # Speed Timer for 10Mbps/100Mbps.
+        # -------------------------------
+        self.timer = timer = LiteEthPHYRMIITimer(speed=self.speed)
+
+        # Latch Input.
+        # ------------
+        crs_dv  = Signal()
+        rx_data = Signal(2)
+        self.sync += If(timer.ce,
+            crs_dv.eq(crs_dv_i),
+            rx_data.eq(rx_data_i),
+        )
 
         # Converter: 2-bit to 8-bit.
         # --------------------------
@@ -65,20 +108,20 @@ class LiteEthPHYRMIIRX(LiteXModule):
         # ------
         # Add a delay to align the data with the frame boundaries since the end-of-frame condition
         # (2 consecutive `crs_dv` signals low) is detected with a few cycles delay.
-        self.delay = delay = stream.Delay(layout=[("data", 8)], n=2)
+        self.delay = delay = stream.Delay(layout=[("data", 2)], n=2)
 
         # Frame Delimitation.
         # -------------------
-        crs_dv_d  = Signal()
         crs_first = Signal()
         crs_last  = Signal()
         crs_run   = Signal()
-        self.sync += crs_dv_d.eq(crs_dv)
-        self.comb += [
+        crs_dv_d  = Signal()
+        self.comb += If(timer.ce,
             crs_first.eq(crs_dv & (rx_data != 0b00)), # Start of frame on crs_dv high and non-null data.
             crs_last.eq(~crs_dv & ~crs_dv_d),         # End of frame on 2 consecutive crs_dv low.
-        ]
+        )
         self.sync += [
+            If(timer.ce,  crs_dv_d.eq(crs_dv)),
             If(crs_first, crs_run.eq(1)),
             If(crs_last,  crs_run.eq(0)),
         ]
@@ -86,16 +129,16 @@ class LiteEthPHYRMIIRX(LiteXModule):
         # Datapath: Input -> Delay -> Converter -> Source.
         # ------------------------------------------------
         self.comb += [
-            delay.source.ready.eq(1), # Ready by default to flush pipeline.
-            delay.sink.valid.eq(crs_first | crs_run),
+            delay.sink.valid.eq(crs_first | (crs_run & timer.ce)),
             delay.sink.data.eq(rx_data),
-            If(crs_run,
+            delay.source.ready.eq(~crs_run), # Flush pipeline when in idle.
+            delay.source.connect(converter.sink, keep={"data"}),
+            If(crs_run & timer.ce,
+                delay.source.connect(converter.sink, keep={"valid", "ready"}),
                 converter.sink.last.eq(crs_last),
-                delay.source.connect(converter.sink, keep={"valid", "ready", "data"})
             ),
             converter.source.connect(source),
-        ]
-
+         ]
 
 # LiteEth PHY RMII CRG -----------------------------------------------------------------------------
 
@@ -152,7 +195,7 @@ class LiteEthPHYRMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 50e6
     rx_clk_freq = 50e6
-    def __init__(self, clock_pads, pads, refclk_cd="eth",
+    def __init__(self, clock_pads, pads, refclk_cd="eth", default_speed=1,
         with_hw_init_reset     = True,
         with_refclk_ddr_output = True):
 
@@ -163,10 +206,24 @@ class LiteEthPHYRMII(LiteXModule):
             with_refclk_ddr_output = with_refclk_ddr_output,
         )
 
+        # Control/Status.
+        self._control = CSRStorage(fields=[
+            CSRField("speed", size=1, values=[
+                ("``0b0``", "10Mbps."),
+                ("``0b1``", "100Mbps."),
+            ], reset=default_speed)
+        ])
+        speed = Signal()
+        self.specials += MultiReg(self._control.fields.speed, speed, n=2)
+
         # TX/RX.
         # ------
         self.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads, self.crg.clk_signal))
         self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads, self.crg.clk_signal))
+        self.comb += [
+            self.tx.speed.eq(speed),
+            self.rx.speed.eq(speed),
+        ]
         self.sink, self.source = self.tx.sink, self.rx.source
 
         # MDIO.
