@@ -8,8 +8,10 @@
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+from litex.gen import *
+
 from liteeth.common import *
-from liteeth.mac import gap, preamble, crc, padding, last_be
+from liteeth.mac    import gap, preamble, crc, padding, last_be
 
 from migen.genlib.cdc import PulseSynchronizer
 
@@ -17,7 +19,7 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SI
 
 # MAC Core -----------------------------------------------------------------------------------------
 
-class LiteEthMACCore(Module, AutoCSR):
+class LiteEthMACCore(LiteXModule):
     def __init__(self, phy, dw,
         with_sys_datapath = False,
         with_preamble_crc = True,
@@ -58,7 +60,7 @@ class LiteEthMACCore(Module, AutoCSR):
 
         # TX Data-Path (Core --> PHY).
         # ------------------------------------------------------------------------------------------
-        class TXDatapath(Module, AutoCSR):
+        class TXDatapath(LiteXModule):
             def __init__(self):
                 self.pipeline = []
 
@@ -114,7 +116,7 @@ class LiteEthMACCore(Module, AutoCSR):
             def do_finalize(self):
                 self.submodules += stream.Pipeline(*self.pipeline)
 
-        tx_datapath = TXDatapath()
+        self.tx_datapath = tx_datapath = TXDatapath()
         tx_datapath.pipeline.append(self.sink)
         if not with_sys_datapath:
             # CHECKME: Verify converter/cdc order for the different cases.
@@ -139,11 +141,10 @@ class LiteEthMACCore(Module, AutoCSR):
         if not getattr(phy, "integrated_ifg_inserter", False):
             tx_datapath.add_gap()
         tx_datapath.pipeline.append(phy)
-        self.submodules.tx_datapath = tx_datapath
 
         # RX Data-Path (PHY --> Core).
         # ------------------------------------------------------------------------------------------
-        class RXDatapath(Module, AutoCSR):
+        class RXDatapath(LiteXModule):
             def __init__(self):
                 self.pipeline = []
                 if with_preamble_crc:
@@ -206,7 +207,7 @@ class LiteEthMACCore(Module, AutoCSR):
             def do_finalize(self):
                 self.submodules += stream.Pipeline(*self.pipeline)
 
-        rx_datapath = RXDatapath()
+        self.rx_datapath = rx_datapath = RXDatapath()
         rx_datapath.pipeline.append(phy)
         if with_sys_datapath:
             if core_dw != 8:
@@ -228,4 +229,3 @@ class LiteEthMACCore(Module, AutoCSR):
                 rx_datapath.add_converter()
             rx_datapath.add_cdc()
         rx_datapath.pipeline.append(self.source)
-        self.submodules.rx_datapath = rx_datapath
