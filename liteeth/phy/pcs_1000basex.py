@@ -5,8 +5,6 @@
 # Copyright (c) 2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from math import ceil
-
 from migen import *
 from migen.genlib.fsm import *
 from migen.genlib.cdc import PulseSynchronizer
@@ -297,25 +295,24 @@ class PCS(LiteXModule):
         self.comb += self.source.last.eq(~self.rx.source.valid & rx_source_valid_d)
 
         # Seen Valid Synchronizer.
-        seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
-        self.submodules += seen_valid_ci
+        self.seen_valid_ci = seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
         self.comb += seen_valid_ci.i.eq(self.rx.seen_valid_ci)
 
         # Checker.
-        checker_max_val = ceil(check_period*125e6)
-        checker_counter = Signal(max=checker_max_val+1)
-        checker_tick = Signal()
-        checker_ok = Signal()
+        checker_max   = int(check_period*125e6)
+        checker_count = Signal(max=checker_max + 1)
+        checker_tick  = Signal()
+        checker_error = Signal()
         self.sync.eth_tx += [
             checker_tick.eq(0),
-            If(checker_counter == 0,
+            If(checker_count == 0,
                 checker_tick.eq(1),
-                checker_counter.eq(checker_max_val)
+                checker_count.eq(checker_max)
             ).Else(
-                checker_counter.eq(checker_counter-1)
+                checker_count.eq(checker_count - 1)
             ),
-            If(seen_valid_ci.o, checker_ok.eq(1)),
-            If(checker_tick, checker_ok.eq(0))
+            If(seen_valid_ci.o, checker_error.eq(0)),
+            If(checker_tick,    checker_error.eq(1))
         ]
 
         # Control if tx_config_reg should be empty.
@@ -351,9 +348,9 @@ class PCS(LiteXModule):
         rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
         self.submodules += rx_config_reg_abi, rx_config_reg_ack
 
-        self.more_ack_timer = more_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(more_ack_time*125e6)))
+        self.more_ack_timer = more_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time*125e6))
         # SGMII: use 1.6ms link_timer
-        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(ceil(1.6e-3*125e6)))
+        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(1.6e-3*125e6))
 
         self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
         # AN_ENABLE
@@ -372,7 +369,7 @@ class PCS(LiteXModule):
             If(rx_config_reg_abi.o,
                 NextState("AUTONEG_WAIT_ACK")
             ),
-            If((checker_tick & ~checker_ok) | rx_config_reg_ack.o,
+            If((checker_tick & checker_error) | rx_config_reg_ack.o,
                 self.restart.eq(1),
                 NextState("AUTONEG_BREAKLINK")
             )
@@ -384,7 +381,7 @@ class PCS(LiteXModule):
             If(rx_config_reg_ack.o,
                 NextState("AUTONEG_SEND_MORE_ACK")
             ),
-            If(checker_tick & ~checker_ok,
+            If(checker_tick & checker_error,
                 self.restart.eq(1),
                 NextState("AUTONEG_BREAKLINK")
             )
@@ -399,7 +396,7 @@ class PCS(LiteXModule):
                 (~is_sgmii & more_ack_timer.done),
                 NextState("RUNNING")
             ),
-            If(checker_tick & ~checker_ok,
+            If(checker_tick & checker_error,
                 self.restart.eq(1),
                 NextState("AUTONEG_BREAKLINK")
             )
@@ -407,7 +404,7 @@ class PCS(LiteXModule):
         # LINK_OK
         fsm.act("RUNNING",
             self.link_up.eq(1),
-            If((checker_tick & ~checker_ok) | linkdown,
+            If((checker_tick & checker_error) | linkdown,
                 self.restart.eq(1),
                 NextState("AUTONEG_BREAKLINK")
             )
