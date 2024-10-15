@@ -394,7 +394,7 @@ class PCS(LiteXModule):
             If(rx_config_reg_abi.o,
                 NextState("AUTONEG_WAIT_ACK")
             ),
-            If(checker_tick & ~checker_ok,
+            If((checker_tick & ~checker_ok) | rx_config_reg_ack.o,
                 self.restart.eq(1),
                 NextState("AUTONEG_BREAKLINK")
             )
