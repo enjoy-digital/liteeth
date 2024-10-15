@@ -18,12 +18,6 @@ from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
 from liteeth.common import *
 
-# PCS Constants / Helpers --------------------------------------------------------------------------
-
-SGMII_1000MBPS_SPEED = 0b10
-SGMII_100MBPS_SPEED  = 0b01
-SGMII_10MBPS_SPEED   = 0b00
-
 # PCS Gearbox --------------------------------------------------------------------------------------
 
 class PCSGearbox(LiteXModule):
@@ -53,6 +47,32 @@ class PCSGearbox(LiteXModule):
             phase_half.eq(~phase_half),
         ]
 
+# PCS SGMII Timer ----------------------------------------------------------------------------------
+
+SGMII_1000MBPS_SPEED = 0b10
+SGMII_100MBPS_SPEED  = 0b01
+SGMII_10MBPS_SPEED   = 0b00
+
+class PCSSGMIITimer(LiteXModule):
+    def __init__(self, speed):
+        self.enable = Signal()
+        self.done   = Signal()
+
+        # # #
+
+        count = Signal(max=100)
+        self.comb += self.done.eq(count == 0)
+        self.sync += [
+            count.eq(count - 1),
+            If(~self.enable | self.done,
+                Case(speed, {
+                    SGMII_10MBPS_SPEED   : count.eq(99),
+                    SGMII_100MBPS_SPEED  : count.eq(9),
+                    SGMII_1000MBPS_SPEED : count.eq(0),
+                })
+            )
+        ]
+
 # PCS TX -------------------------------------------------------------------------------------------
 
 class PCSTX(LiteXModule):
@@ -72,20 +92,7 @@ class PCSTX(LiteXModule):
 
         # SGMII Timer.
         # ------------
-        timer        = Signal(max=100)
-        timer_done   = Signal()
-        timer_enable = Signal()
-        self.comb += timer_done.eq(timer == 0)
-        self.sync += [
-            timer.eq(timer - 1),
-            If(~timer_enable | timer_done,
-                Case(self.sgmii_speed, {
-                    SGMII_10MBPS_SPEED   : timer.eq(99),
-                    SGMII_100MBPS_SPEED  : timer.eq(9),
-                    SGMII_1000MBPS_SPEED : timer.eq(0),
-                })
-            )
-        ]
+        self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed)
 
         # FSM.
         # ----
@@ -135,8 +142,8 @@ class PCSTX(LiteXModule):
         )
         fsm.act("DATA",
             # Send Data.
-            timer_enable.eq(1),
-            sink.ready.eq(timer_done),
+            timer.enable.eq(1),
+            sink.ready.eq(timer.done),
             If(sink.valid,
                 self.encoder.d[0].eq(sink.data),
             ).Else(
@@ -175,23 +182,10 @@ class PCSRX(LiteXModule):
 
         # SGMII Timer.
         # ------------
-        timer        = Signal(max=100)
-        timer_enable = Signal()
-        timer_done   = Signal()
-        self.comb += timer_done.eq(timer == 0)
-        self.sync += [
-            timer.eq(timer - 1),
-            If(~timer_enable | timer_done,
-                Case(self.sgmii_speed, {
-                    SGMII_10MBPS_SPEED   : timer.eq(99),
-                    SGMII_100MBPS_SPEED  : timer.eq( 9),
-                    SGMII_1000MBPS_SPEED : timer.eq( 0),
-                })
-            )
-        ]
+        self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed)
 
         # Speed adaptation
-        self.comb += source.ce.eq(source.valid & timer_done)
+        self.comb += source.ce.eq(source.valid & timer.done)
 
         # FSM.
         # ----
@@ -206,7 +200,7 @@ class PCSRX(LiteXModule):
                 ),
                 # K-character is Start-of-packet /S/.
                 If(self.decoder.d == K(27, 7),
-                    timer_enable.eq(1),
+                    timer.enable.eq(1),
                     source.valid.eq(1),
                     source.data.eq(0x55), # First Preamble Byte.
                     NextState("DATA")
@@ -250,7 +244,7 @@ class PCSRX(LiteXModule):
             NextState("START"),
             If(~self.decoder.k,
                 # Receive Data.
-                timer_enable.eq(1),
+                timer.enable.eq(1),
                 source.valid.eq(1),
                 source.data.eq(self.decoder.d),
                 NextState("DATA")
