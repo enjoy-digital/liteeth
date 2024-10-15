@@ -64,7 +64,7 @@ class PCSTX(LiteXModule):
         self.sgmii_speed  = Signal(2)                              # SGMII speed.
         self.sink         = sink = stream.Endpoint([("data", 8)])  # Data input.
 
-        self.encoder = Encoder(lsb_first=lsb_first)  # 8b/10b Encoder.
+        self.encoder = Encoder(lsb_first=lsb_first) # 8b/10b Encoder.
 
         # Signals.
         # --------
@@ -161,18 +161,13 @@ class PCSTX(LiteXModule):
 
 class PCSRX(LiteXModule):
     def __init__(self, lsb_first=False):
-        self.rx_en     = Signal()
-        self.rx_data   = Signal(8)
-        self.sample_en = Signal()
+        self.seen_valid_ci   = Signal()   # CI seen.
+        self.seen_config_reg = Signal()   # Config seen.
+        self.config_reg      = Signal(16) # Config register (16-bit).
+        self.sgmii_speed     = Signal(2)  # SGMII speed.
+        self.source          = source = stream.Endpoint([("data", 8), ("ce", 1)])  # Data output.
 
-        self.seen_valid_ci   = Signal()
-        self.seen_config_reg = Signal()
-        self.config_reg      = Signal(16)
-
-        self.decoder = Decoder(lsb_first=lsb_first)
-
-        # SGMII Speed Adaptation.
-        self.sgmii_speed = Signal(2)
+        self.decoder = Decoder(lsb_first=lsb_first) # 8b/10b Decoder.
 
         # # #
 
@@ -198,7 +193,7 @@ class PCSRX(LiteXModule):
         ]
 
         # Speed adaptation
-        self.comb += self.sample_en.eq(self.rx_en & timer_done)
+        self.comb += source.ce.eq(source.valid & timer_done)
 
         # FSM.
         # ----
@@ -214,8 +209,8 @@ class PCSRX(LiteXModule):
                 # K-character is Start-of-packet /S/.
                 If(self.decoder.d == K(27, 7),
                     timer_enable.eq(1),
-                    self.rx_en.eq(1),
-                    self.rx_data.eq(0x55), # First Preamble Byte.
+                    source.valid.eq(1),
+                    source.data.eq(0x55), # First Preamble Byte.
                     NextState("DATA")
                 )
             )
@@ -258,8 +253,8 @@ class PCSRX(LiteXModule):
             If(~self.decoder.k,
                 # Receive Data.
                 timer_enable.eq(1),
-                self.rx_en.eq(1),
-                self.rx_data.eq(self.decoder.d),
+                source.valid.eq(1),
+                source.data.eq(self.decoder.d),
                 NextState("DATA")
             )
         )
@@ -293,13 +288,13 @@ class PCS(LiteXModule):
         self.comb += self.sink.connect(self.tx.sink, omit={"last_be", "error"})
 
         # RX -> Source.
-        rx_en_d = Signal()
+        rx_source_valid_d = Signal()
         self.sync.eth_rx += [
-            rx_en_d.eq(self.rx.rx_en),
-            self.source.valid.eq(self.rx.sample_en),
-            self.source.data.eq(self.rx.rx_data),
+            rx_source_valid_d.eq(self.rx.source.valid),
+            self.source.valid.eq(self.rx.source.ce),
+            self.source.data.eq(self.rx.source.data),
         ]
-        self.comb += self.source.last.eq(~self.rx.rx_en & rx_en_d)
+        self.comb += self.source.last.eq(~self.rx.source.valid & rx_source_valid_d)
 
         # Seen Valid Synchronizer.
         seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
