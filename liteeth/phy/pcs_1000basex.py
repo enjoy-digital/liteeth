@@ -49,13 +49,11 @@ class PCSTX(LiteXModule):
         timer_en = Signal()
         self.sync += [
             If(~timer_en | (timer == 0),
-                If(self.sgmii_speed == 0b00,
-                    timer.eq(99)
-                ).Elif(self.sgmii_speed == 0b01,
-                    timer.eq(9)
-                ).Elif(self.sgmii_speed == 0b10,
-                    timer.eq(0)
-                )
+                Case(self.sgmii_speed, {
+                    0b00: timer.eq(99),
+                    0b01: timer.eq( 9),
+                    0b10: timer.eq( 0),
+                })
             ).Elif(timer_en,
                 timer.eq(timer - 1)
             )
@@ -185,13 +183,11 @@ class PCSRX(LiteXModule):
         timer_en = Signal()
         self.sync += [
             If(~timer_en | (timer == 0),
-                If(self.sgmii_speed == 0b00,
-                    timer.eq(99)
-                ).Elif(self.sgmii_speed == 0b01,
-                    timer.eq(9)
-                ).Elif(self.sgmii_speed == 0b10,
-                    timer.eq(0)
-                )
+                Case(self.sgmii_speed, {
+                    0b00: timer.eq(99),
+                    0b01: timer.eq( 9),
+                    0b10: timer.eq( 0),
+                })
             ).Elif(timer_en,
                 timer.eq(timer - 1)
             )
