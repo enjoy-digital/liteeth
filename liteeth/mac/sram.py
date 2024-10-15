@@ -40,8 +40,8 @@ class LiteEthMACSRAMWriter(LiteXModule):
             self._timestamp = CSRStatus(timestampbits)
 
         # Event Manager.
-        self.ev = EventManager()
-        self.ev.available  = EventSourceLevel()
+        self.ev           = EventManager()
+        self.ev.available = EventSourceLevel()
         self.ev.finalize()
 
         # # #
@@ -195,8 +195,8 @@ class LiteEthMACSRAMReader(LiteXModule):
             self._timestamp      = CSRStatus(timestampbits)
 
         # Event Manager.
-        self.ev = EventManager()
-        self.ev.done       = EventSourcePulse() if timestamp is None else EventSourceLevel()
+        self.ev      = EventManager()
+        self.ev.done = EventSourcePulse() if timestamp is None else EventSourceLevel()
         self.ev.finalize()
 
         # # #
