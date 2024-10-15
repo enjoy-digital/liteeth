@@ -297,6 +297,8 @@ class PCS(LiteXModule):
 
         self.link_up = Signal()
         self.restart = Signal()
+        self.align   = Signal()
+
 
         self.lp_abi = BusSynchronizer(16, "eth_rx", "eth_tx")
 
@@ -387,6 +389,7 @@ class PCS(LiteXModule):
         )
         # ABILITY_DETECT
         fsm.act("AUTONEG_WAIT_ABI",
+            self.align.eq(1),
             self.tx.config_valid.eq(1),
             If(rx_config_reg_abi.o,
                 NextState("AUTONEG_WAIT_ACK")

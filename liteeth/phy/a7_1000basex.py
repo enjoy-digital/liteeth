@@ -505,9 +505,9 @@ class A7_1000BASEX(LiteXModule):
             o_RXBYTEISALIGNED      = Open(),
             o_RXBYTEREALIGN        = Open(),
             o_RXCOMMADET           = Open(),
-            i_RXCOMMADETEN         = 0,
-            i_RXMCOMMAALIGNEN      = 0,
-            i_RXPCOMMAALIGNEN      = 0,
+            i_RXCOMMADETEN         = 0b1,
+            i_RXMCOMMAALIGNEN      = pcs.align,
+            i_RXPCOMMAALIGNEN      = pcs.align,
             i_RXSLIDE              = 0,
             # Receive Ports - RX Channel Bonding Ports
             o_RXCHANBONDSEQ        = Open(),
