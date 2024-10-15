@@ -19,128 +19,120 @@ from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
 from liteeth.common import *
 
+# Constants / Helpers ------------------------------------------------------------------------------
+
+SGMII_1000MBPS_SPEED = 0b10
+SGMII_100MBPS_SPEED  = 0b01
+SGMII_10MBPS_SPEED   = 0b00
+
+CTYPE_C1 = 0b0
+CTYPE_C2 = 0b1
+
+ITYPE_I1 = 0b0
+ITYPË_I2 = 0b1
+
 # PCS TX -------------------------------------------------------------------------------------------
 
 class PCSTX(LiteXModule):
     def __init__(self, lsb_first=False):
         self.config_valid = Signal()
-        self.config_reg   = Signal(16)
-        self.tx_valid     = Signal()
-        self.tx_ready     = Signal()
-        self.tx_data      = Signal(8)
+        self.config_reg   = Signal(16)        # Config register (16-bit).
+        self.sgmii_speed  = Signal(2)         # SGMII speed.
+        self.sink         = sink = stream.Endpoint([("data", 8)])  # Data input.
 
-        self.encoder = Encoder(lsb_first=lsb_first)
+        self.encoder = Encoder(lsb_first=lsb_first)  # 8b/10b encoder.
 
-        # SGMII Speed Adaptation
-        self.sgmii_speed = Signal(2)
+        # Signals.
+        # --------
+        count  = Signal()   # Byte counter for config register.
+        parity = Signal()   # Parity for /R/ extension.
+        ctype  = Signal()   # Toggles config type.
 
-        # # #
-
-        parity = Signal()
-        c_type = Signal()
-        self.sync += parity.eq(~parity)
-
-        config_reg_buffer      = Signal(16)
-        load_config_reg_buffer = Signal()
-        self.sync += If(load_config_reg_buffer, config_reg_buffer.eq(self.config_reg))
-
-        # Timer for SGMII data rates.
-        timer    = Signal(max=1000)
-        timer_en = Signal()
+        # SGMII timer.
+        # ------------
+        timer        = Signal(max=100)
+        timer_done   = Signal()
+        timer_enable = Signal()
+        self.comb += timer_done.eq(timer == 0)
         self.sync += [
-            If(~timer_en | (timer == 0),
+            timer.eq(timer - 1),
+            If(~timer_enable | timer_done,
                 Case(self.sgmii_speed, {
-                    0b00: timer.eq(99),
-                    0b01: timer.eq( 9),
-                    0b10: timer.eq( 0),
+                    SGMII_10MBPS_SPEED   : timer.eq(99),
+                    SGMII_100MBPS_SPEED  : timer.eq(9),
+                    SGMII_1000MBPS_SPEED : timer.eq(0),
                 })
-            ).Elif(timer_en,
-                timer.eq(timer - 1)
             )
         ]
 
+        # FSM.
+        # ----
         self.fsm = fsm = FSM()
         fsm.act("START",
             If(self.config_valid,
-                self.tx_ready.eq(1),  # Discard TX data if we are in config_reg phase.
-                load_config_reg_buffer.eq(1),
                 self.encoder.k[0].eq(1),
                 self.encoder.d[0].eq(K(28, 5)),
-                NextState("CONFIG_D")
+                NextValue(count, 0),
+                NextState("CONFIG-D")
             ).Else(
-                If(self.tx_valid,
-                    # The first byte sent is replaced by /S/.
-                    self.tx_ready.eq((timer == 0)),
-                    timer_en.eq(1),
+                If(sink.valid,
                     self.encoder.k[0].eq(1),
-                    self.encoder.d[0].eq(K(27, 7)),
+                    self.encoder.d[0].eq(K(27, 7)), # Start-of-packet /S/.
                     NextState("DATA")
                 ).Else(
-                    self.tx_ready.eq(1),  # Discard TX data.
                     self.encoder.k[0].eq(1),
                     self.encoder.d[0].eq(K(28, 5)),
                     NextState("IDLE")
                 )
             )
         )
-        fsm.act("CONFIG_D",
-            If(c_type,
-                self.encoder.d[0].eq(D(2, 2))
-            ).Else(
-                self.encoder.d[0].eq(D(21, 5))
-            ),
-            NextValue(c_type, ~c_type),
-            NextState("CONFIG_REG_LSB")
+        fsm.act("CONFIG-D",
+            # Send Configuration Word.
+            Case(ctype, {
+                CTYPE_C1 : self.encoder.d[0].eq(D(21, 5)), # C1.
+                CTYPE_C2 : self.encoder.d[0].eq(D( 2, 2)), # C2.
+            }),
+            NextValue(ctype, ~ctype),
+            NextState("CONFIG-REG")
         ),
-        fsm.act("CONFIG_REG_LSB",
-            self.encoder.d[0].eq(config_reg_buffer[:8]),
-            NextState("CONFIG_REG_MSB")
-        )
-        fsm.act("CONFIG_REG_MSB",
-            self.encoder.d[0].eq(config_reg_buffer[8:]),
-            NextState("START")
+        fsm.act("CONFIG-REG",
+            # Send Configuration Register.
+            NextValue(count, count + 1),
+            Case(count, {
+                0 : self.encoder.d[0].eq(self.config_reg[:8]), # LSB.
+                1 : self.encoder.d[0].eq(self.config_reg[8:]), # MSB.
+            }),
+            If(count == (2 - 1), NextState("START"))
         )
         fsm.act("IDLE",
-            # Due to latency in the encoder, we read here the disparity
-            # just before the K28.5 was sent. K28.5 flips the disparity.
-            If(self.encoder.disparity[0],
-                # Correcting /I1/ (D5.6 preserves the disparity).
-                self.encoder.d[0].eq(D(5, 6))
-            ).Else(
-                # Preserving /I2/ (D16.2 flips the disparity).
-                self.encoder.d[0].eq(D(16, 2))
-            ),
+            # Send Idle characters and handle disparity.
+            Case(self.encoder.disparity[0], {
+                ITYPE_I1 : self.encoder.d[0].eq(D(5, 6)),   # /I1/ preserves disparity.
+                ITYPË_I2 : self.encoder.d[0].eq(D(16, 2)),  # /I2/ flips disparity.
+            }),
             NextState("START")
         )
         fsm.act("DATA",
-            If(self.tx_valid,
-                self.tx_ready.eq((timer == 0)),
-                timer_en.eq(1),
-                self.encoder.d[0].eq(self.tx_data)
+            # Send Data frame.
+            timer_enable.eq(1),
+            sink.ready.eq(timer_done),
+            If(sink.valid,
+                self.encoder.d[0].eq(sink.data),
             ).Else(
-                self.tx_ready.eq(1),
-                # /T/
                 self.encoder.k[0].eq(1),
-                self.encoder.d[0].eq(K(29, 7)),
-                NextState("CARRIER_EXTEND_1")
+                self.encoder.d[0].eq(K(29, 7)), # End-of-frame /T/.
+                NextState("CARRIER-EXTEND")
             )
         )
-        fsm.act("CARRIER_EXTEND_1",
-            # /R/
+        fsm.act("CARRIER-EXTEND",
+            # Extend carrier with /R/ symbols.
             self.encoder.k[0].eq(1),
-            self.encoder.d[0].eq(K(23, 7)),
+            self.encoder.d[0].eq(K(23, 7)), # Carrier Extend /R/.
             If(parity,
                 NextState("START")
-            ).Else(
-                NextState("CARRIER_EXTEND_2")
             )
         )
-        fsm.act("CARRIER_EXTEND_2",
-            # /R/
-            self.encoder.k[0].eq(1),
-            self.encoder.d[0].eq(K(23, 7)),
-            NextState("START")
-        )
+        self.sync += parity.eq(~parity) # Toggle parity for /R/ extension.
 
 # PCS RX -------------------------------------------------------------------------------------------
 
@@ -178,23 +170,25 @@ class PCSRX(LiteXModule):
         first_preamble_byte = Signal()
         self.comb += self.rx_data.eq(Mux(first_preamble_byte, 0x55, self.decoder.d))
 
-        # Timer for SGMII data rates.
-        timer    = Signal(max=1000)
-        timer_en = Signal()
+        # SGMII Timer.
+        # ------------
+        timer        = Signal(max=100)
+        timer_enable = Signal()
+        timer_done   = Signal()
+        self.comb += timer_done.eq(timer == 0)
         self.sync += [
-            If(~timer_en | (timer == 0),
+            timer.eq(timer - 1),
+            If(~timer_enable | timer_done,
                 Case(self.sgmii_speed, {
-                    0b00: timer.eq(99),
-                    0b01: timer.eq( 9),
-                    0b10: timer.eq( 0),
+                    SGMII_10MBPS_SPEED   : timer.eq(99),
+                    SGMII_100MBPS_SPEED  : timer.eq( 9),
+                    SGMII_1000MBPS_SPEED : timer.eq( 0),
                 })
-            ).Elif(timer_en,
-                timer.eq(timer - 1)
             )
         ]
 
         # Speed adaptation
-        self.comb += self.sample_en.eq(self.rx_en & (timer == 0))
+        self.comb += self.sample_en.eq(self.rx_en & timer_done)
 
         self.fsm = fsm = FSM()
         fsm.act("START",
@@ -204,7 +198,7 @@ class PCSRX(LiteXModule):
                 ),
                 If(self.decoder.d == K(27, 7),
                     self.rx_en.eq(1),
-                    timer_en.eq(1),
+                    timer_enable.eq(1),
                     first_preamble_byte.eq(1),
                     NextState("DATA")
                 )
@@ -228,7 +222,7 @@ class PCSRX(LiteXModule):
             If(self.decoder.k,
                 If(self.decoder.d == K(27, 7),
                     self.rx_en.eq(1),
-                    timer_en.eq(1),
+                    timer_enable.eq(1),
                     first_preamble_byte.eq(1),
                     NextState("DATA")
                 ).Else(
@@ -250,7 +244,7 @@ class PCSRX(LiteXModule):
                 NextState("START")
             ).Else(
                 self.rx_en.eq(1),
-                timer_en.eq(1)
+                timer_enable.eq(1)
             )
         )
 
@@ -305,11 +299,7 @@ class PCS(LiteXModule):
         # # #
         
         # Endpoint interface.
-        self.comb += [
-            self.tx.tx_valid.eq(self.sink.valid),
-            self.sink.ready.eq(self.tx.tx_ready),
-            self.tx.tx_data.eq(self.sink.data),
-        ]
+        self.comb += self.sink.connect(self.tx.sink, omit={"last_be", "error"})
 
         rx_en_d = Signal()
         self.sync.eth_rx += [
