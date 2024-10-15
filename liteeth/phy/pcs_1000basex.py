@@ -259,7 +259,7 @@ class PCSRX(LiteXModule):
 # FIXME: Needs similar cleanup than PCSTX/RX.
 
 class PCS(LiteXModule):
-    def __init__(self, lsb_first=False, check_period=6e-3, more_ack_time=10e-3):
+    def __init__(self, lsb_first=False, check_period=6e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -319,69 +319,72 @@ class PCS(LiteXModule):
             # Detect that link is down:
             # - 1000BASE-X : linkup can be inferred by non-empty reg.
             # - SGMII      : linkup is indicated with bit 15.
-            linkdown.eq((is_sgmii & ~self.lp_abi.o[15]) | (self.lp_abi.o == 0)),
-            self.tx.sgmii_speed.eq(Mux(is_sgmii,
-                self.lp_abi.o[10:12], 0b10)),
-            self.rx.sgmii_speed.eq(Mux(self.lp_abi.i[0],
-                self.lp_abi.i[10:12], 0b10))
+            If(~is_sgmii,
+                linkdown.eq(self.lp_abi.o == 0),
+                self.tx.sgmii_speed.eq(0b10),
+                self.rx.sgmii_speed.eq(0b10),
+            ).Else(
+                linkdown.eq(is_sgmii & ~self.lp_abi.o[15]),
+                self.tx.sgmii_speed.eq(self.lp_abi.o[10:12]),
+                self.rx.sgmii_speed.eq(self.lp_abi.i[10:12]),
+            )
         ]
         autoneg_ack = Signal()
         self.comb += [
-            self.tx.config_reg.eq(Mux(tx_config_empty, 0,
-                (is_sgmii)                          | # SGMII: SGMII in-use
-                (~is_sgmii << 5)                    | # 1000BASE-X: Full-duplex
-                (Mux(is_sgmii,                        # SGMII: Speed
-                    self.lp_abi.o[10:12], 0) << 10) |
-                (is_sgmii << 12)                    | # SGMII: Full-duplex
-                (autoneg_ack << 14)                 | # SGMII/1000BASE-X: Acknowledge Bit
-                (is_sgmii & self.link_up)             # SGMII: Link-up
-            ))
+            If(~tx_config_empty,
+                self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
+                self.tx.config_reg[5].eq(~is_sgmii),                    # 1000BASE-X: Full-duplex.
+                If(is_sgmii,
+                    self.tx.config_reg[10:12].eq(self.lp_abi.o[10:12]), # SGMII: Speed.
+                ),
+                self.tx.config_reg[12].eq(is_sgmii),                    # SGMII: Full-duplex.
+                self.tx.config_reg[14].eq(autoneg_ack),                 # SGMII/1000BASE-X: Acknowledge Bit.
+                self.tx.config_reg[15].eq(is_sgmii & self.link_up),     # SGMII: Link-up.
+            )
         ]
 
-        rx_config_reg_abi = PulseSynchronizer("eth_rx", "eth_tx")
-        rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
-        self.submodules += rx_config_reg_abi, rx_config_reg_ack
+        self.rx_config_reg_abi = rx_config_reg_abi = PulseSynchronizer("eth_rx", "eth_tx")
+        self.rx_config_reg_ack = rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
 
-        self.more_ack_timer = more_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time*125e6))
-        # SGMII: use 1.6ms link_timer
-        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(1.6e-3*125e6))
+        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * 125e6))
+        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * 125e6))
 
         self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
         # AN_ENABLE
-        fsm.act("AUTONEG_BREAKLINK",
+        fsm.act("AUTONEG-BREAKLINK",
             self.tx.config_valid.eq(1),
             tx_config_empty.eq(1),
             more_ack_timer.wait.eq(1),
             If(more_ack_timer.done,
-                NextState("AUTONEG_WAIT_ABI")
+                NextState("AUTONEG-WAIT-ABI")
             )
         )
         # ABILITY_DETECT
-        fsm.act("AUTONEG_WAIT_ABI",
+        fsm.act("AUTONEG-WAIT-ABI",
             self.align.eq(1),
             self.tx.config_valid.eq(1),
             If(rx_config_reg_abi.o,
-                NextState("AUTONEG_WAIT_ACK")
+                NextState("AUTONEG-WAIT-ACK")
             ),
             If((checker_tick & checker_error) | rx_config_reg_ack.o,
                 self.restart.eq(1),
-                NextState("AUTONEG_BREAKLINK")
+                NextState("AUTONEG-BREAKLINK")
             )
         )
         # ACKNOWLEDGE_DETECT
-        fsm.act("AUTONEG_WAIT_ACK",
+        fsm.act("AUTONEG-WAIT-ACK",
             self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
             If(rx_config_reg_ack.o,
-                NextState("AUTONEG_SEND_MORE_ACK")
+                NextState("AUTONEG-SEND-MORE-ACK")
             ),
             If(checker_tick & checker_error,
                 self.restart.eq(1),
-                NextState("AUTONEG_BREAKLINK")
+                NextState("AUTONEG-BREAKLINK")
             )
         )
         # COMPLETE_ACKNOWLEDGE
-        fsm.act("AUTONEG_SEND_MORE_ACK",
+        fsm.act("AUTONEG-SEND-MORE-ACK",
             self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
             more_ack_timer.wait.eq(~is_sgmii),
@@ -392,7 +395,7 @@ class PCS(LiteXModule):
             ),
             If(checker_tick & checker_error,
                 self.restart.eq(1),
-                NextState("AUTONEG_BREAKLINK")
+                NextState("AUTONEG-BREAKLINK")
             )
         )
         # LINK_OK
@@ -400,7 +403,7 @@ class PCS(LiteXModule):
             self.link_up.eq(1),
             If((checker_tick & checker_error) | linkdown,
                 self.restart.eq(1),
-                NextState("AUTONEG_BREAKLINK")
+                NextState("AUTONEG-BREAKLINK")
             )
         )
 
