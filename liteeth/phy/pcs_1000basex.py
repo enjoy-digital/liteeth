@@ -64,20 +64,20 @@ class PCSGearbox(LiteXModule):
 
 class PCSTX(LiteXModule):
     def __init__(self, lsb_first=False):
-        self.config_valid = Signal()
-        self.config_reg   = Signal(16)        # Config register (16-bit).
-        self.sgmii_speed  = Signal(2)         # SGMII speed.
+        self.config_valid = Signal()                               # Config valid.
+        self.config_reg   = Signal(16)                             # Config register (16-bit).
+        self.sgmii_speed  = Signal(2)                              # SGMII speed.
         self.sink         = sink = stream.Endpoint([("data", 8)])  # Data input.
 
-        self.encoder = Encoder(lsb_first=lsb_first)  # 8b/10b encoder.
+        self.encoder = Encoder(lsb_first=lsb_first)  # 8b/10b Encoder.
 
         # Signals.
         # --------
-        count  = Signal()   # Byte counter for config register.
-        parity = Signal()   # Parity for /R/ extension.
-        ctype  = Signal()   # Toggles config type.
+        count  = Signal() # Byte counter for config register.
+        parity = Signal() # Parity for /R/ extension.
+        ctype  = Signal() # Toggles config type.
 
-        # SGMII timer.
+        # SGMII Timer.
         # ------------
         timer        = Signal(max=100)
         timer_done   = Signal()
@@ -98,19 +98,18 @@ class PCSTX(LiteXModule):
         # ----
         self.fsm = fsm = FSM()
         fsm.act("START",
+            self.encoder.k[0].eq(1),
+            self.encoder.d[0].eq(K(28, 5)),
+            # Wait for valid Config.
             If(self.config_valid,
-                self.encoder.k[0].eq(1),
-                self.encoder.d[0].eq(K(28, 5)),
                 NextValue(count, 0),
                 NextState("CONFIG-D")
+            # Wait for valid Data.
             ).Else(
                 If(sink.valid,
-                    self.encoder.k[0].eq(1),
                     self.encoder.d[0].eq(K(27, 7)), # Start-of-packet /S/.
                     NextState("DATA")
                 ).Else(
-                    self.encoder.k[0].eq(1),
-                    self.encoder.d[0].eq(K(28, 5)),
                     NextState("IDLE")
                 )
             )
