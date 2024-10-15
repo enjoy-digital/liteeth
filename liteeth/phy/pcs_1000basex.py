@@ -348,8 +348,8 @@ class PCS(LiteXModule):
             # Detect that link is down:
             # - 1000BASE-X : linkup can be inferred by non-empty reg.
             # - SGMII      : linkup is indicated with bit 15.
-            linkdown.eq((self.lp_abi.o[0] & ~self.lp_abi.o[15]) | (self.lp_abi.o == 0)),
-            self.tx.sgmii_speed.eq(Mux(self.lp_abi.o[0],
+            linkdown.eq((is_sgmii & ~self.lp_abi.o[15]) | (self.lp_abi.o == 0)),
+            self.tx.sgmii_speed.eq(Mux(is_sgmii,
                 self.lp_abi.o[10:12], 0b10)),
             self.rx.sgmii_speed.eq(Mux(self.lp_abi.i[0],
                 self.lp_abi.i[10:12], 0b10))
@@ -359,7 +359,7 @@ class PCS(LiteXModule):
             self.tx.config_reg.eq(Mux(tx_config_empty, 0,
                 (is_sgmii)                          | # SGMII: SGMII in-use
                 (~is_sgmii << 5)                    | # 1000BASE-X: Full-duplex
-                (Mux(self.lp_abi.o[0],                # SGMII: Speed
+                (Mux(is_sgmii,                        # SGMII: Speed
                     self.lp_abi.o[10:12], 0) << 10) |
                 (is_sgmii << 12)                    | # SGMII: Full-duplex
                 (autoneg_ack << 14)                 | # SGMII/1000BASE-X: Acknowledge Bit
