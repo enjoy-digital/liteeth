@@ -25,12 +25,6 @@ SGMII_1000MBPS_SPEED = 0b10
 SGMII_100MBPS_SPEED  = 0b01
 SGMII_10MBPS_SPEED   = 0b00
 
-CTYPE_C1 = 0b0
-CTYPE_C2 = 0b1
-
-ITYPE_I1 = 0b0
-ITYPË_I2 = 0b1
-
 # PCS Gearbox --------------------------------------------------------------------------------------
 
 class PCSGearbox(LiteXModule):
@@ -117,8 +111,8 @@ class PCSTX(LiteXModule):
         fsm.act("CONFIG-D",
             # Send Configuration Word.
             Case(ctype, {
-                CTYPE_C1 : self.encoder.d[0].eq(D(21, 5)), # C1.
-                CTYPE_C2 : self.encoder.d[0].eq(D( 2, 2)), # C2.
+                0b0 : self.encoder.d[0].eq(D(21, 5)), # /C1/.
+                0b1 : self.encoder.d[0].eq(D( 2, 2)), # /C2/.
             }),
             NextValue(ctype, ~ctype),
             NextState("CONFIG-REG")
@@ -133,15 +127,15 @@ class PCSTX(LiteXModule):
             If(count == (2 - 1), NextState("START"))
         )
         fsm.act("IDLE",
-            # Send Idle characters and handle disparity.
+            # Send Idle words and handle disparity.
             Case(self.encoder.disparity[0], {
-                ITYPE_I1 : self.encoder.d[0].eq(D(5, 6)),   # /I1/ preserves disparity.
-                ITYPË_I2 : self.encoder.d[0].eq(D(16, 2)),  # /I2/ flips disparity.
+                0b0 : self.encoder.d[0].eq(D(5, 6)),   # /I1/ (Preserves disparity).
+                0b1 : self.encoder.d[0].eq(D(16, 2)),  # /I2/ (Flips disparity).
             }),
             NextState("START")
         )
         fsm.act("DATA",
-            # Send Data frame.
+            # Send Data.
             timer_enable.eq(1),
             sink.ready.eq(timer_done),
             If(sink.valid,
@@ -166,8 +160,9 @@ class PCSTX(LiteXModule):
 
 class PCSRX(LiteXModule):
     def __init__(self, lsb_first=False):
-        self.rx_en   = Signal()
-        self.rx_data = Signal(8)
+        self.rx_en     = Signal()
+        self.rx_data   = Signal(8)
+        self.sample_en = Signal()
 
         self.seen_valid_ci   = Signal()
         self.seen_config_reg = Signal()
@@ -177,26 +172,12 @@ class PCSRX(LiteXModule):
 
         # SGMII Speed Adaptation.
         self.sgmii_speed = Signal(2)
-        self.sample_en   = Signal()
 
         # # #
 
-        config_reg_lsb      = Signal(8)
-        load_config_reg_lsb = Signal()
-        load_config_reg_msb = Signal()
-        self.sync += [
-            self.seen_config_reg.eq(0),
-            If(load_config_reg_lsb, 
-                config_reg_lsb.eq(self.decoder.d)
-            ),
-            If(load_config_reg_msb,
-                self.config_reg.eq(Cat(config_reg_lsb, self.decoder.d)),
-                self.seen_config_reg.eq(1)
-            )
-        ]
-
-        first_preamble_byte = Signal()
-        self.comb += self.rx_data.eq(Mux(first_preamble_byte, 0x55, self.decoder.d))
+        # Signals.
+        # --------
+        count = Signal() # Byte counter for config register.
 
         # SGMII Timer.
         # ------------
@@ -218,65 +199,76 @@ class PCSRX(LiteXModule):
         # Speed adaptation
         self.comb += self.sample_en.eq(self.rx_en & timer_done)
 
+        # FSM.
+        # ----
         self.fsm = fsm = FSM()
         fsm.act("START",
+            # Wait for a K-character.
             If(self.decoder.k,
+                # K-character is Config or Idle K28.5.
                 If(self.decoder.d == K(28, 5),
-                    NextState("K28_5")
+                    NextValue(count, 0),
+                    NextState("CONFIG-D-OR-IDLE")
                 ),
+                # K-character is Start-of-packet /S/.
                 If(self.decoder.d == K(27, 7),
-                    self.rx_en.eq(1),
                     timer_enable.eq(1),
-                    first_preamble_byte.eq(1),
+                    self.rx_en.eq(1),
+                    self.rx_data.eq(0x55), # First Preamble Byte.
                     NextState("DATA")
                 )
             )
         )
-        fsm.act("K28_5",
-            NextState("START"),
+        fsm.act("CONFIG-D-OR-IDLE",
+            NextState("ERROR"),
             If(~self.decoder.k,
-                If((self.decoder.d == D(21, 5)) | (self.decoder.d == D(2, 2)),
+                # Check for Configuration Word.
+                If((self.decoder.d == D(21, 5)) | # /C1/.
+                   (self.decoder.d == D( 2, 2)),  # /C2/.
                     self.seen_valid_ci.eq(1),
-                    NextState("CONFIG_REG_LSB")
+                    NextState("CONFIG-REG")
                 ),
-                If((self.decoder.d == D(5, 6)) | (self.decoder.d == D(16, 2)),
-                    # idle
+                # Check for Idle Word.
+                If((self.decoder.d == D( 5, 6)) | # /I1/.
+                   (self.decoder.d == D(16, 2)),  # /I2/.
                     self.seen_valid_ci.eq(1),
                     NextState("START")
-                ),
-            )
-        )
-        fsm.act("CONFIG_REG_LSB",
-            If(self.decoder.k,
-                If(self.decoder.d == K(27, 7),
-                    self.rx_en.eq(1),
-                    timer_enable.eq(1),
-                    first_preamble_byte.eq(1),
-                    NextState("DATA")
-                ).Else(
-                    NextState("START")  # error
                 )
-            ).Else(
-                load_config_reg_lsb.eq(1),
-                NextState("CONFIG_REG_MSB")
             )
         )
-        fsm.act("CONFIG_REG_MSB",
+        fsm.act("CONFIG-REG",
+            NextState("ERROR"),
             If(~self.decoder.k,
-                load_config_reg_msb.eq(1)
-            ),
-            NextState("START")
+                # Receive for Configuration Register.
+                NextState("CONFIG-REG"),
+                NextValue(count, count + 1),
+                Case(count, {
+                    0b0 : NextValue(self.config_reg[:8], self.decoder.d), # LSB.
+                    0b1 : NextValue(self.config_reg[8:], self.decoder.d), # MSB.
+                }),
+                If(count == (2 - 1),
+                    self.seen_config_reg.eq(1),
+                    NextState("START")
+                )
+            )
         )
         fsm.act("DATA",
-            If(self.decoder.k,
-                NextState("START")
-            ).Else(
+            NextState("START"),
+            If(~self.decoder.k,
+                # Receive Data.
+                timer_enable.eq(1),
                 self.rx_en.eq(1),
-                timer_enable.eq(1)
+                self.rx_data.eq(self.decoder.d),
+                NextState("DATA")
             )
+        )
+        fsm.act("ERROR",
+            NextState("START")
         )
 
 # PCS ----------------------------------------------------------------------------------------------
+
+# FIXME: Needs similar cleanup than PCSTX/RX.
 
 class PCS(LiteXModule):
     def __init__(self, lsb_first=False, check_period=6e-3, more_ack_time=10e-3):
@@ -292,14 +284,14 @@ class PCS(LiteXModule):
         self.restart = Signal()
         self.align   = Signal()
 
-
         self.lp_abi = BusSynchronizer(16, "eth_rx", "eth_tx")
 
         # # #
-        
-        # Endpoint interface.
+
+        # Sink  -> TX.
         self.comb += self.sink.connect(self.tx.sink, omit={"last_be", "error"})
 
+        # RX -> Source.
         rx_en_d = Signal()
         self.sync.eth_rx += [
             rx_en_d.eq(self.rx.rx_en),
@@ -308,11 +300,12 @@ class PCS(LiteXModule):
         ]
         self.comb += self.source.last.eq(~self.rx.rx_en & rx_en_d)
 
-        # Main module.
+        # Seen Valid Synchronizer.
         seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
         self.submodules += seen_valid_ci
         self.comb += seen_valid_ci.i.eq(self.rx.seen_valid_ci)
 
+        # Checker.
         checker_max_val = ceil(check_period*125e6)
         checker_counter = Signal(max=checker_max_val+1)
         checker_tick = Signal()
