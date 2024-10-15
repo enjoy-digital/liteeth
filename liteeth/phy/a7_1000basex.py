@@ -90,7 +90,7 @@ class A7_1000BASEX(LiteXModule):
             # RX Byte and Word Alignment Attributes
             p_ALIGN_COMMA_DOUBLE         = "FALSE",
             p_ALIGN_COMMA_ENABLE         = 0b1111111111,
-            p_ALIGN_COMMA_WORD           = 1,
+            p_ALIGN_COMMA_WORD           = 2,
             p_ALIGN_MCOMMA_DET           = "TRUE",
             p_ALIGN_MCOMMA_VALUE         = 0b1010000011,
             p_ALIGN_PCOMMA_DET           = "TRUE",
@@ -212,7 +212,7 @@ class A7_1000BASEX(LiteXModule):
 
             # CDR Attributes
             p_RXCDR_CFG                  = {
-                1.25e9  : 0x0001107FE086021101010,
+                1.25e9  : 0x0000107FE106001041010,
                 3.125e9 : 0x0000107FE206001041010,
             }[self.linerate],
             p_RXCDR_FR_RESET_ON_EIDLE    = 0b0,
