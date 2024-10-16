@@ -281,17 +281,33 @@ class PCS(LiteXModule):
 
         # # #
 
+        # Signals.
+        # --------
+        config_empty = Signal()
+        is_sgmii     = Signal()
+        linkdown     = Signal()
+        autoneg_ack  = Signal()
+
         # Sink -> TX / RX -> Source.
         self.comb += [
             self.sink.connect(self.tx.sink,     omit={"last_be", "error"}),
             self.rx.source.connect(self.source, omit={"last_be", "error"}),
         ]
 
-        # Seen Valid Synchronizer.
-        self.seen_valid_ci = seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
+        # Pulse Synchronizers.
+        # --------------------
+        self.seen_valid_ci     = seen_valid_ci     = PulseSynchronizer("eth_rx", "eth_tx")
+        self.rx_config_reg_abi = rx_config_reg_abi = PulseSynchronizer("eth_rx", "eth_tx")
+        self.rx_config_reg_ack = rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
         self.comb += seen_valid_ci.i.eq(self.rx.seen_valid_ci)
 
+        # Timers.
+        # -------
+        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * 125e6))
+        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * 125e6))
+
         # Checker.
+        # --------
         checker_max   = int(check_period*125e6)
         checker_count = Signal(max=checker_max + 1)
         checker_tick  = Signal()
@@ -308,11 +324,8 @@ class PCS(LiteXModule):
             If(checker_tick,    checker_error.eq(1))
         ]
 
-        # Control if tx_config_reg should be empty.
-        tx_config_empty = Signal()
-        # Detections in SGMII mode.
-        is_sgmii = Signal()
-        linkdown = Signal()
+        # Linkdown/Speed Detection.
+        # -------------------------
         self.comb += [
             is_sgmii.eq(self.lp_abi.o[0]),
             # Detect that link is down:
@@ -328,9 +341,11 @@ class PCS(LiteXModule):
                 self.rx.sgmii_speed.eq(self.lp_abi.i[10:12]),
             )
         ]
-        autoneg_ack = Signal()
+
+        # Config Reg.
+        # -----------
         self.comb += [
-            If(~tx_config_empty,
+            If(~config_empty,
                 self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
                 self.tx.config_reg[5].eq(~is_sgmii),                    # 1000BASE-X: Full-duplex.
                 If(is_sgmii,
@@ -342,23 +357,19 @@ class PCS(LiteXModule):
             )
         ]
 
-        self.rx_config_reg_abi = rx_config_reg_abi = PulseSynchronizer("eth_rx", "eth_tx")
-        self.rx_config_reg_ack = rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
-
-        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * 125e6))
-        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * 125e6))
-
+        # FSM.
+        # ----
         self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
-        # AN_ENABLE
+        # AN_ENABLE.
         fsm.act("AUTONEG-BREAKLINK",
             self.tx.config_valid.eq(1),
-            tx_config_empty.eq(1),
+            config_empty.eq(1),
             more_ack_timer.wait.eq(1),
             If(more_ack_timer.done,
                 NextState("AUTONEG-WAIT-ABI")
             )
         )
-        # ABILITY_DETECT
+        # ABILITY_DETECT.
         fsm.act("AUTONEG-WAIT-ABI",
             self.align.eq(1),
             self.tx.config_valid.eq(1),
@@ -370,7 +381,7 @@ class PCS(LiteXModule):
                 NextState("AUTONEG-BREAKLINK")
             )
         )
-        # ACKNOWLEDGE_DETECT
+        # ACKNOWLEDGE_DETECT.
         fsm.act("AUTONEG-WAIT-ACK",
             self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
@@ -382,7 +393,7 @@ class PCS(LiteXModule):
                 NextState("AUTONEG-BREAKLINK")
             )
         )
-        # COMPLETE_ACKNOWLEDGE
+        # COMPLETE_ACKNOWLEDGE.
         fsm.act("AUTONEG-SEND-MORE-ACK",
             self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
@@ -397,7 +408,7 @@ class PCS(LiteXModule):
                 NextState("AUTONEG-BREAKLINK")
             )
         )
-        # LINK_OK
+        # LINK_OK.
         fsm.act("RUNNING",
             self.link_up.eq(1),
             If((checker_tick & checker_error) | linkdown,
