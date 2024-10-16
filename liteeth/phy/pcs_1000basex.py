@@ -170,7 +170,7 @@ class PCSRX(LiteXModule):
         self.seen_config_reg = Signal()   # Config seen.
         self.config_reg      = Signal(16) # Config register (16-bit).
         self.sgmii_speed     = Signal(2)  # SGMII speed.
-        self.source          = source = stream.Endpoint([("data", 8), ("ce", 1)])  # Data output.
+        self.source          = source = stream.Endpoint([("data", 8)]) # Data output.
 
         self.decoder = Decoder(lsb_first=lsb_first) # 8b/10b Decoder.
 
@@ -184,8 +184,13 @@ class PCSRX(LiteXModule):
         # ------------
         self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed)
 
-        # Speed adaptation
-        self.comb += source.ce.eq(source.valid & timer.done)
+        # Buffer.
+        # -------
+        self.buffer = buffer = stream.Buffer([("data", 8)])
+        self.comb += If(timer.done,
+            buffer.source.connect(source),
+            source.last.eq(buffer.source.valid & ~buffer.sink.valid), # Last when next is not valid.
+        )
 
         # FSM.
         # ----
@@ -201,8 +206,8 @@ class PCSRX(LiteXModule):
                 # K-character is Start-of-packet /S/.
                 If(self.decoder.d == K(27, 7),
                     timer.enable.eq(1),
-                    source.valid.eq(1),
-                    source.data.eq(0x55), # First Preamble Byte.
+                    buffer.sink.valid.eq(1),
+                    buffer.sink.data.eq(0x55), # First Preamble Byte.
                     NextState("DATA")
                 )
             )
@@ -245,8 +250,8 @@ class PCSRX(LiteXModule):
             If(~self.decoder.k,
                 # Receive Data.
                 timer.enable.eq(1),
-                source.valid.eq(1),
-                source.data.eq(self.decoder.d),
+                buffer.sink.valid.eq(timer.done),
+                buffer.sink.data.eq(self.decoder.d),
                 NextState("DATA")
             )
         )
@@ -276,17 +281,11 @@ class PCS(LiteXModule):
 
         # # #
 
-        # Sink  -> TX.
-        self.comb += self.sink.connect(self.tx.sink, omit={"last_be", "error"})
-
-        # RX -> Source.
-        rx_source_valid_d = Signal()
-        self.sync.eth_rx += [
-            rx_source_valid_d.eq(self.rx.source.valid),
-            self.source.valid.eq(self.rx.source.ce),
-            self.source.data.eq(self.rx.source.data),
+        # Sink -> TX / RX -> Source.
+        self.comb += [
+            self.sink.connect(self.tx.sink,     omit={"last_be", "error"}),
+            self.rx.source.connect(self.source, omit={"last_be", "error"}),
         ]
-        self.comb += self.source.last.eq(~self.rx.source.valid & rx_source_valid_d)
 
         # Seen Valid Synchronizer.
         self.seen_valid_ci = seen_valid_ci = PulseSynchronizer("eth_rx", "eth_tx")
