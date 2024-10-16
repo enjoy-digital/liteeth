@@ -261,8 +261,6 @@ class PCSRX(LiteXModule):
 
 # PCS ----------------------------------------------------------------------------------------------
 
-# FIXME: Needs similar cleanup than PCSTX/RX.
-
 class PCS(LiteXModule):
     def __init__(self, lsb_first=False, check_period=6e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
@@ -342,8 +340,8 @@ class PCS(LiteXModule):
             )
         ]
 
-        # Config Reg.
-        # -----------
+        # TX Config.
+        # ----------
         self.comb += [
             If(~config_empty,
                 self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
@@ -417,33 +415,31 @@ class PCS(LiteXModule):
             )
         )
 
-        c_counter       = Signal(max=5)
-        prev_config_reg = Signal(16)
+        # RX Config (and consistency check).
+        # ----------------------------------
+        rx_config_reg_count  = Signal(4)
+        rx_config_reg_last   = Signal(16)
         self.sync.eth_rx += [
-            # Restart consistency counter
             If(self.rx.seen_config_reg,
-                c_counter.eq(4)
-            ).Elif(c_counter != 0,
-                c_counter.eq(c_counter - 1)
-            ),
-
-            rx_config_reg_abi.i.eq(0),
-            rx_config_reg_ack.i.eq(0),
-            If(self.rx.seen_config_reg,
-                # Record current config_reg for comparison in the next clock cycle
-                prev_config_reg.eq(self.rx.config_reg),
-                # Compare consecutive values of config_reg
-                If((c_counter == 1) & (prev_config_reg&0xbfff == self.rx.config_reg&0xbfff),
-                    # Acknowledgement/Consistency match
-                    If(prev_config_reg[14] & self.rx.config_reg[14],
-                        rx_config_reg_ack.i.eq(1),
+                # Consistency Count/Check.
+                rx_config_reg_last.eq(self.rx.config_reg),
+                If(self.rx.config_reg != rx_config_reg_last,
+                    rx_config_reg_count.eq(2 - 1)
+                ).Else(
+                    If(rx_config_reg_count != 0,
+                        rx_config_reg_count.eq(rx_config_reg_count - 1),
                     )
-                    # Ability match
-                    .Else(
+                ),
+                # When RX Config is consistent.
+                If(rx_config_reg_count == 0,
+                    # Acknowledgement.
+                    If(self.rx.config_reg[14],
+                        rx_config_reg_ack.i.eq(1),
+                    # Ability match.
+                    ).Else(
                         rx_config_reg_abi.i.eq(1),
                     )
                 ),
-                # Record advertised ability of link partner
                 self.lp_abi.i.eq(self.rx.config_reg)
             )
         ]
