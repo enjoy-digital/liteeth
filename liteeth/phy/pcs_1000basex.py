@@ -262,7 +262,7 @@ class PCSRX(LiteXModule):
 # PCS ----------------------------------------------------------------------------------------------
 
 class PCS(LiteXModule):
-    def __init__(self, lsb_first=False, check_period=6e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3):
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -301,6 +301,7 @@ class PCS(LiteXModule):
 
         # Timers.
         # -------
+        self.breaklink_timer = breaklink_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(breaklink_time * 125e6))
         self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * 125e6))
         self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * 125e6))
 
@@ -362,8 +363,8 @@ class PCS(LiteXModule):
         fsm.act("AUTONEG-BREAKLINK",
             self.tx.config_valid.eq(1),
             config_empty.eq(1),
-            more_ack_timer.wait.eq(1),
-            If(more_ack_timer.done,
+            breaklink_timer.wait.eq(1),
+            If(breaklink_timer.done,
                 NextState("AUTONEG-WAIT-ABI")
             )
         )
@@ -424,7 +425,7 @@ class PCS(LiteXModule):
                 # Consistency Count/Check.
                 rx_config_reg_last.eq(self.rx.config_reg),
                 If(self.rx.config_reg != rx_config_reg_last,
-                    rx_config_reg_count.eq(2 - 1)
+                    rx_config_reg_count.eq(8 - 1)
                 ).Else(
                     If(rx_config_reg_count != 0,
                         rx_config_reg_count.eq(rx_config_reg_count - 1),
