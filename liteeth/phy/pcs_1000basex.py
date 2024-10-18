@@ -107,6 +107,7 @@ class PCSTX(LiteXModule):
             # Wait for valid Data.
             ).Else(
                 If(sink.valid,
+                    sink.ready.eq(timer.done),
                     self.encoder.d[0].eq(K(27, 7)), # Start-of-packet /S/.
                     NextState("DATA")
                 ).Else(
@@ -186,9 +187,9 @@ class PCSRX(LiteXModule):
 
         # Buffer.
         # -------
-        self.buffer = buffer = stream.Buffer([("data", 8)])
+        self.buffer = buffer = stream.Buffer([("data", 8)], pipe_valid=True, pipe_ready=False)
         self.comb += If(timer.done,
-            buffer.source.connect(source),
+            buffer.source.connect(source, omit={"last"}),
             source.last.eq(buffer.source.valid & ~buffer.sink.valid), # Last when next is not valid.
         )
 
