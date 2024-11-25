@@ -293,12 +293,15 @@ class PHYCore(SoCMini):
                 with_hw_init_reset = False) # FIXME: required since sys_clk = eth_rx_clk.
         # SGMII.
         elif phy in [
+            # 7-Series GTP/GTX.
             liteeth_phys.A7_1000BASEX,
             liteeth_phys.A7_2500BASEX,
             liteeth_phys.K7_1000BASEX,
             liteeth_phys.K7_2500BASEX,
+            # Ultrascale GTHE3.
             liteeth_phys.KU_1000BASEX,
             liteeth_phys.KU_2500BASEX,
+            # Ultrascale+ GTHE4/GTYE4
             liteeth_phys.USP_GTH_1000BASEX,
             liteeth_phys.USP_GTH_2500BASEX,
             liteeth_phys.USP_GTY_1000BASEX,
@@ -352,13 +355,17 @@ class PHYCore(SoCMini):
             # Other 7-Series/Ultrascale(+).
             else:
                 ethphy = phy(
-                    refclk_or_clk_pads = ethphy_pads.refclk,
+                    # General.
                     data_pads          = ethphy_pads,
                     sys_clk_freq       = self.clk_freq,
-                    refclk_freq        = core_config.get("refclk_freq", 200e6),
                     with_csr           = False,
-                    rx_polarity        = core_config.get("phy_rx_polarity", 0),
+                    # Clocking.
+                    refclk_or_clk_pads = ethphy_pads.refclk,
+                    refclk_freq        = core_config.get("refclk_freq", 200e6),
+                    # TX.
                     tx_polarity        = core_config.get("phy_tx_polarity", 0),
+                    # RX.
+                    rx_polarity        = core_config.get("phy_rx_polarity", 0),
                 )
             self.comb += [
                 ethphy.reset.eq(ethphy_pads.rst),
