@@ -362,6 +362,7 @@ class PHYCore(SoCMini):
                     # Clocking.
                     refclk_or_clk_pads = ethphy_pads.refclk,
                     refclk_freq        = core_config.get("refclk_freq", 200e6),
+                    refclk_from_fabric = core_config.get("refclk_from_fabric", True),
                     # TX.
                     tx_polarity        = core_config.get("phy_tx_polarity", 0),
                     # RX.

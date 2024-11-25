@@ -22,7 +22,7 @@ class USP_GTH_1000BASEX(LiteXModule):
     linerate    = 1.25e9
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False):
         from liteiclink.serdes.gth4_ultrascale import GTHChannelPLL
         assert refclk_freq in [200e6, 156.25e6]
         self.pcs = pcs = PCS(lsb_first=True)
@@ -579,12 +579,12 @@ class USP_GTH_1000BASEX(LiteXModule):
             i_DRPWE               = 0b0,
             i_EYESCANRESET        = 0b0,
             i_EYESCANTRIGGER      = 0b0,
-            i_GTGREFCLK           = refclk,
+            i_GTGREFCLK           = refclk if refclk_from_fabric else 0b0,
             i_GTHRXN              = data_pads.rxn,
             i_GTHRXP              = data_pads.rxp,
             i_GTNORTHREFCLK0      = 0b0,
             i_GTNORTHREFCLK1      = 0b0,
-            i_GTREFCLK0           = 0b0,
+            i_GTREFCLK0           = refclk if not refclk_from_fabric else 0b0,
             i_GTREFCLK1           = 0b0,
             i_GTRSVD              = 0b0000000000000000,
             i_GTRXRESET           = rx_reset,
