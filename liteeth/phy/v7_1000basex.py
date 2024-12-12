@@ -343,8 +343,6 @@ class V7_1000BASEX(LiteXModule):
             # TX Configurable Driver Attributes
             p_TX_QPI_STATUS_EN             = 0b0,
 
-        )
-        gth_params.update(
             # CPLL Ports
             o_CPLLFBCLKLOST    = Open(),
             o_CPLLLOCK         = pll.lock,
