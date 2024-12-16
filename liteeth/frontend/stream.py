@@ -11,7 +11,7 @@ from liteeth.common import *
 # Stream to UDP TX ---------------------------------------------------------------------------------
 
 class LiteEthStream2UDPTX(LiteXModule):
-    def __init__(self, ip_address, udp_port, data_width=8, fifo_depth=None, with_csr=False):
+    def __init__(self, ip_address=0, udp_port=0, data_width=8, fifo_depth=None, with_csr=False):
         self.sink   = sink   = stream.Endpoint(eth_tty_tx_description(data_width))
         self.source = source = stream.Endpoint(eth_udp_user_description(data_width))
 
