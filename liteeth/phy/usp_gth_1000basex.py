@@ -565,7 +565,7 @@ class USP_GTH_1000BASEX(LiteXModule):
             i_CPLLLOCKDETCLK       = 0b0,
             i_CPLLLOCKEN           = 0b1,
             i_CPLLPD               = pll_reset,
-            i_CPLLREFCLKSEL        = 0b001,
+            i_CPLLREFCLKSEL        = 0b111 if refclk_from_fabric else 0b001,
             i_CPLLRESET            = 0b0,
             i_DMONFIFORESET        = 0b0,
             i_DMONITORCLK          = 0b0,
