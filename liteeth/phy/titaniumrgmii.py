@@ -22,7 +22,7 @@ from liteeth.phy.common import *
 # LiteEth PHY RGMII TX -----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIITX(LiteXModule):
-    def __init__(self, platform, pads, n=0):
+    def __init__(self, pads, clk):
         self.sink = sink = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -31,13 +31,12 @@ class LiteEthPHYRGMIITX(LiteXModule):
         # ------------
         tx_data_h = Signal(4)
         tx_data_l = Signal(4)
-        for i in range(4):
-            self.specials += DDROutput(
-                i1  = tx_data_h[i],
-                i2  = tx_data_l[i],
-                o   = pads.tx_data[i],
-                clk = ClockSignal("eth_tx"),
-            )
+        self.specials += DDROutput(
+            i1  = tx_data_h,
+            i2  = tx_data_l,
+            o   = pads.tx_data,
+            clk = clk,
+        )
 
         # TX Ctl IOs.
         # -----------
@@ -47,7 +46,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
             i1  = tx_ctl_h,
             i2  = tx_ctl_l,
             o   = pads.tx_ctl,
-            clk = ClockSignal("eth_tx"),
+            clk = clk,
         )
 
         # Logic.
@@ -56,17 +55,14 @@ class LiteEthPHYRGMIITX(LiteXModule):
         self.sync += [
             tx_ctl_h.eq(sink.valid),
             tx_ctl_l.eq(sink.valid),
+            tx_data_h.eq(sink.data[:4]),
+            tx_data_l.eq(sink.data[4:]),
         ]
-        for i in range(4):
-            self.sync += [
-                tx_data_h[i].eq(sink.data[i + 0]),
-                tx_data_l[i].eq(sink.data[i + 4]),
-            ]
 
 # LiteEth PHY RGMII RX -----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIIRX(LiteXModule):
-    def __init__(self, platform, pads, n=0):
+    def __init__(self, pads, clk):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -75,13 +71,12 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         # ------------
         rx_data_h = Signal(4)
         rx_data_l = Signal(4)
-        for i in range(4):
-            self.specials += DDRInput(
-                i   = pads.rx_data[i],
-                o1  = rx_data_h[i],
-                o2  = rx_data_l[i],
-                clk = ClockSignal("eth_rx"),
-            )
+        self.specials += DDRInput(
+            i   = pads.rx_data,
+            o1  = rx_data_h,
+            o2  = rx_data_l,
+            clk = clk,
+        )
 
         # RX Ctl IOs.
         # -----------
@@ -91,7 +86,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
             i   = pads.rx_ctl,
             o1  = rx_ctl_h,
             o2  = rx_ctl_l,
-            clk = ClockSignal("eth_rx"),
+            clk = clk,
         )
 
         rx_ctl   = rx_ctl_h
@@ -103,9 +98,8 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         last    = Signal()
         rx_data_lsb = Signal(4)
         rx_data_msb = Signal(4)
-        for i in range(4):
-            self.comb += rx_data_msb[i + 0].eq(rx_data_l[i])
-            self.sync += rx_data_lsb[i + 0].eq(rx_data_h[i])
+        self.comb += rx_data_msb.eq(rx_data_l)
+        self.sync += rx_data_lsb.eq(rx_data_h)
         self.sync += [
             last.eq(~rx_ctl & rx_ctl_d),
             source.valid.eq(rx_ctl_d),
@@ -173,8 +167,8 @@ class LiteEthPHYRGMII(LiteXModule):
     rx_clk_freq = 125e6
     def __init__(self, platform, clock_pads, pads, with_hw_init_reset=True, hw_reset_cycles=256):
         self.crg = LiteEthPHYRGMIICRG(platform, clock_pads, with_hw_init_reset, hw_reset_cycles, n=self.n)
-        self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(platform, pads, n=self.n))
-        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(platform, pads, n=self.n))
+        self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads, self.crg.cd_eth_tx.clk))
+        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, self.crg.cd_eth_rx.clk))
         self.sink, self.source = self.tx.sink, self.rx.source
         LiteEthPHYRGMII.n += 1 # FIXME: Improve.
 
