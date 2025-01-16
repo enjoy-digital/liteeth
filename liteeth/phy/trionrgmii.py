@@ -41,13 +41,6 @@ class LiteEthPHYRGMIICRG(LiteXModule):
             o = self.cd_eth_rx.clk,
         )
 
-        # TX Clk.
-        # -------
-        self.specials += ClkOutput(
-            i = ClockSignal("eth_tx_delayed"),
-            o = clock_pads.tx
-        )
-
         # TX PLL.
         # -------
         self.pll = pll = TRIONPLL(platform)
@@ -55,6 +48,13 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         pll.create_clkout(self.cd_eth_rx,         freq=125e6, phase=0,  with_reset=False, is_feedback=True)
         pll.create_clkout(self.cd_eth_tx,         freq=125e6, phase=0,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, freq=125e6, phase=45)
+
+        # TX Clk.
+        # -------
+        self.specials += ClkOutput(
+            i = self.cd_eth_tx_delayed.clk,
+            o = clock_pads.tx
+        )
 
         # Reset.
         # ------
