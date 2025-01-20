@@ -20,14 +20,16 @@ XGMII_END   = Constant(0xFD, bits_sign=8)
 # Pads/Interfaces ----------------------------------------------------------------------------------
 
 class LiteEthPHYXGMIIClkPads:
-    rx = Signal()
-    tx = Signal()
+    def __init__(self):
+        self.rx = Signal()
+        self.tx = Signal()
 
 class LiteEthPHYXGMIIPads:
-    rx_ctl  = Signal(8)
-    rx_data = Signal(64)
-    tx_ctl  = Signal(8)
-    tx_data = Signal(64)
+    def __init__(self):
+        self.rx_ctl  = Signal(8)
+        self.rx_data = Signal(64)
+        self.tx_ctl  = Signal(8)
+        self.tx_data = Signal(64)
 
 # LiteEth PHY XGMII TX -----------------------------------------------------------------------------
 
