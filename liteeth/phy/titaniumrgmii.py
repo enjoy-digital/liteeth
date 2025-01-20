@@ -121,17 +121,23 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         self.cd_eth_tx         = ClockDomain(name=f"eth{n}_tx")
         self.cd_eth_tx_delayed = ClockDomain(name=f"eth{n}_tx_delayed", reset_less=True)
 
-        # RX Clk.
-        # -------
-        self.specials += ClkInput(
-            i = clock_pads.rx,
-            o = self.cd_eth_rx.clk,
-        )
+        # Check if RX Clk is connected to a PLL. If it is, we have to use it directly.
+        pad_name = platform.get_pin_location(clock_pads.rx)[0]
+        if platform.parser.get_pll_inst_from_pin(pad_name) is not None:
+            clkin = clock_pads.rx
+        else:
+            # RX Clk.
+            # -------
+            self.specials += ClkInput(
+                i = clock_pads.rx,
+                o = self.cd_eth_rx.clk,
+            )
+            clkin = self.cd_eth_rx.clk
 
         # TX PLL.
         # -------
         self.pll = pll = TITANIUMPLL(platform)
-        pll.register_clkin(self.cd_eth_rx.clk,    freq=125e6)
+        pll.register_clkin(clkin,                 freq=125e6)
         pll.create_clkout(self.cd_eth_rx,         freq=125e6, phase=0,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx,         freq=125e6, phase=0,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, freq=125e6, phase=90)
