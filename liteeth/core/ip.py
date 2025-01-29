@@ -6,6 +6,7 @@
 
 from litex.gen import *
 
+from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SINK
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 
@@ -267,6 +268,9 @@ class LiteEthIP(LiteXModule):
     def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8):
         self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
         self.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
+
+        rx = BufferizeEndpoints({"source": DIR_SOURCE}, pipe_valid=True, pipe_ready=False)(rx)
+
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [
             tx.source.connect(mac_port.sink),
