@@ -386,27 +386,64 @@ class _EfinixSerdesClocking(LiteXModule):
         pll.create_clkout(self.cd_eth_rx,              rx_clk_freq)
         pll.create_clkout(self.cd_eth_trx_fast,        fast_clk_freq, phase=90)
 
+class Decoder8b10bChecker(LiteXModule):
+    def __init__(self, data_in, valid):
+
+        ones_1 = Signal(4, reset_less=True)
+        self.comb += ones_1.eq(Reduce("ADD", [data_in[i] for i in range(10)]))
+        invalid_1 = (ones_1 != 4) & (ones_1 != 5) & (ones_1 != 6)
+
+        ones_2 = Signal(4, reset_less=True)
+        self.comb += ones_2.eq(Reduce("ADD", [data_in[i] for i in range(10,20)]))
+        invalid_2 = (ones_2 != 4) & (ones_2 != 5) & (ones_2 != 6)
+
+        ones_3 = Signal(5, reset_less=True)
+        self.comb += ones_3.eq(ones_1 + ones_2)
+        invalid_3 = (ones_3 != 9) & (ones_3 != 10) & (ones_3 != 11)
+
+        input_msb_first = Signal(10)
+        for i in range(10):
+            self.comb += input_msb_first[i].eq(data_in[9-i])
+
+        code6b = input_msb_first[4:]
+
+        invalid_4 = (code6b != 0b001111) & (code6b != 0b110000)
+        
+        self.comb += valid.eq(~(invalid_1 | invalid_2 | invalid_3 | invalid_4))
+
 class EfinixAlligner(LiteXModule):
-    def __init__(self, align, data_out, data_valid_out):
-        buffer = Signal(10)
+    def __init__(self, align, data_out, data_valid):
+        buffer = Signal(30)
+        data = Signal(30)
         pos = Signal(max=10)
         self.data_in = data_in = Signal(10)
-        self.data_valid_in = data_valid_in = Signal()
+
+        self.comb += [
+            data_out.eq(data >> pos),
+            If(data_valid,
+                data.eq(Cat(data_in, buffer)),
+            ).Else(
+                data.eq(buffer),
+            )
+        ]
 
         self.sync += [
-            If(data_valid_in,
-                buffer.eq(data_in),
-                data_out.eq(Cat(data_in, buffer) >> pos),
-            ),
-            If(align,
-                If(pos >= 9,
-                    pos.eq(0)
-                ).Else(
-                    pos.eq(pos + 1)
-                )
-            ),
-            data_valid_out.eq(data_valid_in),
+            If(data_valid,
+                buffer.eq(Cat(data_in, buffer[:20])),
+            )
         ]
+
+        valid_8b10b = Signal(10)
+
+        for i in range(10):
+            checker = Decoder8b10bChecker(data[i:20+i], valid_8b10b[i])
+            self.submodules += checker
+
+            self.sync += [
+                If(align & valid_8b10b[i],
+                    pos.eq(i),
+                )
+            ]
 
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
@@ -441,16 +478,16 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             self.crg.cd_eth_trx_fast.clk,
         )
 
-        self.alligner = alligner = ClockDomainsRenamer("eth_rx")(EfinixAlligner(pcs.align, pcs.tbi_rx, pcs.tbi_rx_ce))
+        self.alligner = alligner = ClockDomainsRenamer("eth_rx")(EfinixAlligner(pcs.align, pcs.tbi_rx, pcs.tbi_rx_valid))
 
         self.rx = rx = ClockDomainsRenamer("eth_rx")(EfinixSerdesDiffRxClockRecovery(
             pads.rx_p,
             pads.rx_n,
             alligner.data_in,
-            alligner.data_valid_in,
-            self.cd_eth_tx.clk,
-            self.cd_eth_trx_fast.clk,
-            self.cd_eth_rx.clk,
+            pcs.tbi_rx_valid,
+            self.crg.cd_eth_tx.clk,
+            self.crg.cd_eth_trx_fast.clk,
+            self.crg.cd_eth_rx.clk,
         ))
 
     def add_csr(self):
