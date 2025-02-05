@@ -12,17 +12,7 @@ from migen import *
 from litex.soc.interconnect.stream import *
 from liteeth.packet import *
 
-from .test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets
-
-def mask_last_be(dw, data, last_be):
-    masked_data = 0
-
-    for byte in range(dw // 8):
-        if 2**byte > last_be:
-            break
-        masked_data |= data & (0xFF << (byte * 8))
-
-    return masked_data
+from .test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets, mask_last_be
 
 class TestPacket(unittest.TestCase):
     def loopback_test(self, dw, seed=42, with_last_be=False, debug_print=False):
