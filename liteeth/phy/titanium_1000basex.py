@@ -182,20 +182,19 @@ class EfinixSerdesDiffRxDynamicDelay(LiteXModule):
         platform.toolchain.excluded_ios.append(rx_p)
         platform.toolchain.excluded_ios.append(rx_n)
 
-class EfinixSerdesReducer(LiteXModule):
+class EfinixSerdesBuffer(LiteXModule):
     def __init__(self, data_in, data_in_len, data_out, data_out_valid):
         
-        data_out_buffer_1 = Signal(len(data_out))
+        data_out_buffer_1 = Signal(3000)
 
-        data_out_buffer = Signal(len(data_out)*2)
+        data_out_buffer = Signal(len(data_out)+len(data_out_buffer_1))
 
-        buffer_pos = Signal(max=len(data_out)*2)
+        buffer_pos = Signal(max=len(data_out_buffer), reset=0)# len(data_out_buffer)//2)
         
         cases_buffer = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
-        for i in range(1,len(data_in)):
-            cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in[:len(data_in)-i]))
-
+        for i in range(1,len(data_out_buffer)):
+            cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
 
         self.comb += [
             Case(buffer_pos, cases_buffer)
@@ -207,7 +206,7 @@ class EfinixSerdesReducer(LiteXModule):
                 data_out_valid.eq(0),
                 buffer_pos.eq(buffer_pos + data_in_len),
 
-                data_out_buffer_1.eq(data_out_buffer[:len(data_out)]),
+                data_out_buffer_1.eq(data_out_buffer[:len(data_out_buffer_1)]),
             ).Else(
                 data_out.eq(data_out_buffer[:len(data_out)]),
                 data_out_valid.eq(1),
@@ -216,10 +215,9 @@ class EfinixSerdesReducer(LiteXModule):
                 data_out_buffer_1.eq(data_out_buffer[len(data_out):]),
             )
         ]
-            
 
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, data_valid, clk, fast_clk, fifo_clk):
+    def __init__(self, rx_p, rx_n, data, data_valid, clk, fast_clk):
         
         assert len(rx_p) == len(rx_n)
         assert len(rx_p) == 4
@@ -227,9 +225,6 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         _data = Array([Signal(len(data)*2) for i in range(len(rx_p))])
 
         data_before = Array([Signal(len(data)) for i in range(len(rx_p))])
-
-        _rx_fifo_rd = Signal(reset=1)
-        _rx_fifo_empty = Signal()
 
         data_1_len = Signal(max=12)
         data_0 = Signal(10)
@@ -250,22 +245,15 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         staic_delay = 4
 
         for i in range(4):
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][:len(data)], staic_delay * i, clk, fast_clk, fifo_clk, rx_term=(i == 0))
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][:len(data)], staic_delay * i, clk, fast_clk, rx_term=(i == 0))
             self.submodules += serdesrx
 
-            self.comb += [
-                serdesrx.rx_fifo_rd.eq(_rx_fifo_rd),
-                _rx_fifo_empty.eq(serdesrx.rx_fifo_empty),
-                _data[i][len(data):].eq(data_before[i])
-            ]
+            self.comb += _data[i][len(data):].eq(data_before[i])
 
-            self.sync += [
-                If(_rx_fifo_rd & ~_rx_fifo_empty,
-                    data_before[i].eq(_data[i][:len(data)]),
-                )
-            ]
+            self.sync += data_before[i].eq(_data[i][:len(data)])
+            
 
-        self.reducer = EfinixSerdesReducer(data_1, data_1_len, data, data_valid)
+        self.reducer = EfinixSerdesBuffer(data_1, data_1_len, data, data_valid)
 
         self.comb += [
             data_0_eq.eq(data_0 ^ data_1[:10]),
@@ -283,75 +271,63 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         self.fsm = fsm = FSM(reset_state="USE_2")
 
         fsm.act("USE_0",
-            If(~_rx_fifo_empty,
-                data_1.eq(_data[0][1:11]),
-                data_1_len.eq(10),
-                data_0.eq(_data[3][0:10]),
-                data_2.eq(_data[1][1:11]),
-                If(up,
-                    NextState("USE_1"),
-                ).Elif(down,
-                    NextState("0_TO_3"),
-                )
+            data_1.eq(_data[0][1:11]),
+            data_1_len.eq(10),
+            data_0.eq(_data[3][0:10]),
+            data_2.eq(_data[1][1:11]),
+            If(up,
+                NextState("USE_1"),
+            ).Elif(down,
+                NextState("0_TO_3"),
             )
         )
 
         fsm.act("USE_1",
-            If(~_rx_fifo_empty,
-                data_1.eq(_data[1][1:11]),
-                data_1_len.eq(10),
-                data_0.eq(_data[0][1:11]),
-                data_2.eq(_data[2][1:11]),
-                If(up,
-                    NextState("USE_2"),
-                ).Elif(down,
-                    NextState("USE_0"),
-                )
-            )
-        )
-
-        fsm.act("USE_2",
-            If(~_rx_fifo_empty,
-                data_1.eq(_data[2][1:11]),
-                data_1_len.eq(10),
-                data_0.eq(_data[1][1:11]),
-                data_2.eq(_data[3][1:11]),
-                If(up,
-                    NextState("USE_3"),
-                ).Elif(down,
-                    NextState("USE_1"),
-                )
-            )
-        )
-
-        fsm.act("USE_3",
-            If(~_rx_fifo_empty,
-                data_1.eq(_data[3][1:11]),
-                data_1_len.eq(10),
-                data_0.eq(_data[2][1:11]),
-                data_2.eq(_data[0][2:12]),
-                If(up,
-                    NextState("3_TO_0"),
-                ).Elif(down,
-                    NextState("USE_2"),
-                )
-            )
-        )
-
-        fsm.act("3_TO_0",
-            If(~_rx_fifo_empty,
-                data_1.eq(_data[0][2:11]),
-                data_1_len.eq(9),
+            data_1.eq(_data[1][1:11]),
+            data_1_len.eq(10),
+            data_0.eq(_data[0][1:11]),
+            data_2.eq(_data[2][1:11]),
+            If(up,
+                NextState("USE_2"),
+            ).Elif(down,
                 NextState("USE_0"),
             )
         )
 
-        fsm.act("0_TO_3",
-            If(~_rx_fifo_empty,
-                data_1.eq(_data[3][1:12]),
-                data_1_len.eq(10),
+        fsm.act("USE_2",
+            data_1.eq(_data[2][1:11]),
+            data_1_len.eq(10),
+            data_0.eq(_data[1][1:11]),
+            data_2.eq(_data[3][1:11]),
+            If(up,
                 NextState("USE_3"),
+            ).Elif(down,
+                NextState("USE_1"),
             )
+        )
+
+        fsm.act("USE_3",
+            data_1.eq(_data[3][1:11]),
+            data_1_len.eq(10),
+            data_0.eq(_data[2][1:11]),
+            data_2.eq(_data[0][2:12]),
+            If(up,
+                NextState("3_TO_0"),
+            ).Elif(down,
+                NextState("USE_2"),
+            )
+        )
+
+        fsm.act("3_TO_0",
+            data_1.eq(_data[0][2:11]),
+            data_1_len.eq(9),
+            NextState("USE_0"),
+        )
+
+        fsm.act("0_TO_3",
+            data_1.eq(_data[3][1:12]),
+            data_1_len.eq(10),
+            NextState("USE_3"),
         )
 
 # Efinix SerDes Clocking ---------------------------------------------------------------------------
@@ -364,7 +340,7 @@ class _EfinixSerdesClocking(LiteXModule):
         fast_clk_freq    = 625e6
         clk_freq = fast_clk_freq / 5
 
-        rx_clk_freq = clk_freq * 1.2
+        rx_clk_freq = clk_freq #* 2
 
         assert platform.family in ["Titanium"]
 
@@ -485,9 +461,8 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             pads.rx_n,
             alligner.data_in,
             pcs.tbi_rx_valid,
-            self.crg.cd_eth_tx.clk,
-            self.crg.cd_eth_trx_fast.clk,
             self.crg.cd_eth_rx.clk,
+            self.crg.cd_eth_trx_fast.clk,
         ))
 
     def add_csr(self):

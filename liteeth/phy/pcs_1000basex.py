@@ -54,7 +54,7 @@ SGMII_100MBPS_SPEED  = 0b01
 SGMII_10MBPS_SPEED   = 0b00
 
 class PCSSGMIITimer(LiteXModule):
-    def __init__(self, speed):
+    def __init__(self, speed, valid=True):
         self.enable = Signal()
         self.done   = Signal()
 
@@ -63,13 +63,16 @@ class PCSSGMIITimer(LiteXModule):
         count = Signal(max=100)
         self.comb += self.done.eq(count == 0)
         self.sync += [
-            count.eq(count - 1),
-            If(~self.enable | self.done,
-                Case(speed, {
-                    SGMII_10MBPS_SPEED   : count.eq(99),
-                    SGMII_100MBPS_SPEED  : count.eq(9),
-                    SGMII_1000MBPS_SPEED : count.eq(0),
-                })
+            If(valid,
+                If(~self.enable | self.done,
+                    Case(speed, {
+                        SGMII_10MBPS_SPEED   : count.eq(99),
+                        SGMII_100MBPS_SPEED  : count.eq(9),
+                        SGMII_1000MBPS_SPEED : count.eq(0),
+                    })
+                ).Else(
+                    count.eq(count - 1),
+                )
             )
         ]
 
@@ -172,6 +175,8 @@ class PCSRX(LiteXModule):
         self.config_reg      = Signal(16) # Config register (16-bit).
         self.sgmii_speed     = Signal(2)  # SGMII speed.
         self.source          = source = stream.Endpoint([("data", 8)]) # Data output.
+        self.input_valid     = Signal(reset=1)   # Data input valid.
+        self.skip            = Signal()          # Skip next byte.
 
         self.decoder = Decoder(lsb_first=lsb_first) # 8b/10b Decoder.
 
@@ -183,12 +188,12 @@ class PCSRX(LiteXModule):
 
         # SGMII Timer.
         # ------------
-        self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed)
+        self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed, valid=self.input_valid)
 
         # Buffer.
         # -------
         self.buffer = buffer = stream.Buffer([("data", 8)], pipe_valid=True, pipe_ready=False)
-        self.comb += If(timer.done,
+        self.comb += If(timer.done & self.input_valid,
             buffer.source.connect(source, omit={"last"}),
             source.last.eq(buffer.source.valid & ~buffer.sink.valid), # Last when next is not valid.
         )
@@ -198,7 +203,7 @@ class PCSRX(LiteXModule):
         self.fsm = fsm = FSM()
         fsm.act("START",
             # Wait for a K-character.
-            If(self.decoder.k,
+            If(self.input_valid & self.decoder.k,
                 # K-character is Config or Idle K28.5.
                 If(self.decoder.d == K(28, 5),
                     NextValue(count, 0),
@@ -214,50 +219,60 @@ class PCSRX(LiteXModule):
             )
         )
         fsm.act("CONFIG-D-OR-IDLE",
-            NextState("ERROR"),
-            If(~self.decoder.k,
-                # Check for Configuration Word.
-                If((self.decoder.d == D(21, 5)) | # /C1/.
-                   (self.decoder.d == D( 2, 2)),  # /C2/.
-                    self.seen_valid_ci.eq(1),
-                    NextState("CONFIG-REG")
-                ),
-                # Check for Idle Word.
-                If((self.decoder.d == D( 5, 6)) | # /I1/.
-                   (self.decoder.d == D(16, 2)),  # /I2/.
-                    self.seen_valid_ci.eq(1),
-                    NextState("START")
+            If(self.input_valid,
+                NextState("ERROR"),
+                If(~self.decoder.k,
+                    # Check for Configuration Word.
+                    If((self.decoder.d == D(21, 5)) | # /C1/.
+                    (self.decoder.d == D( 2, 2)),  # /C2/.
+                        self.seen_valid_ci.eq(1),
+                        NextState("CONFIG-REG")
+                    ),
+                    # Check for Idle Word.
+                    If((self.decoder.d == D( 5, 6)) | # /I1/.
+                    (self.decoder.d == D(16, 2)),  # /I2/.
+                        self.seen_valid_ci.eq(1),
+                        NextState("START")
+                    )
                 )
             )
         )
         fsm.act("CONFIG-REG",
-            NextState("ERROR"),
-            If(~self.decoder.k,
-                # Receive for Configuration Register.
-                NextState("CONFIG-REG"),
-                NextValue(count, count + 1),
-                Case(count, {
-                    0b0 : NextValue(self.config_reg[:8], self.decoder.d), # LSB.
-                    0b1 : NextValue(self.config_reg[8:], self.decoder.d), # MSB.
-                }),
-                If(count == (2 - 1),
-                    self.seen_config_reg.eq(1),
-                    NextState("START")
+            If(self.input_valid,
+                NextState("ERROR"),
+                If(~self.decoder.k,
+                    # Receive for Configuration Register.
+                    NextState("CONFIG-REG"),
+                    NextValue(count, count + 1),
+                    Case(count, {
+                        0b0 : NextValue(self.config_reg[:8], self.decoder.d), # LSB.
+                        0b1 : NextValue(self.config_reg[8:], self.decoder.d), # MSB.
+                    }),
+                    If(count == (2 - 1),
+                        self.seen_config_reg.eq(1),
+                        NextState("START")
+                    )
                 )
             )
         )
         fsm.act("DATA",
-            NextState("START"),
-            If(~self.decoder.k,
-                # Receive Data.
-                timer.enable.eq(1),
-                buffer.sink.valid.eq(timer.done),
-                buffer.sink.data.eq(self.decoder.d),
-                NextState("DATA")
+            If(self.input_valid,
+                NextState("START"),
+                If(~self.decoder.k,
+                    # Receive Data.
+                    timer.enable.eq(1),
+                    buffer.sink.valid.eq(timer.done),
+                    buffer.sink.data.eq(self.decoder.d),
+                    NextState("DATA")
+                ).Else(
+                    self.skip.eq(1),
+                )
             )
         )
         fsm.act("ERROR",
-            NextState("START")
+            If(self.input_valid,
+                NextState("START")
+            )
         )
 
 # PCS ----------------------------------------------------------------------------------------------
@@ -269,7 +284,7 @@ class PCS(LiteXModule):
 
         self.tbi_tx = self.tx.encoder.output[0]
         self.tbi_rx = self.rx.decoder.input
-        self.tbi_rx_ce = self.rx.decoder.ce
+        self.tbi_rx_valid = self.rx.input_valid
         self.sink   = stream.Endpoint(eth_phy_description(8))
         self.source = stream.Endpoint(eth_phy_description(8))
 
