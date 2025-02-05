@@ -42,11 +42,12 @@ class EfinixSerdesDiffTx(LiteXModule):
             "sig"       : _data,
             "location"  : io_pad,
             "size"      : len(data),
-            "slow_clk"  : ClockSignal(clk),
-            "fast_clk"  : ClockSignal(fast_clk),
+            "slow_clk"  : clk,
+            "fast_clk"  : fast_clk,
             "half_rate" : "1",
-            "oe_pin"    : _oe,
-            "rst_pin"   : _rst,
+            "oe"        : _oe,
+            "rst"       : _rst,
+            "tx_vod"    : "LARGE",
         }
 
         platform.toolchain.ifacewriter.blocks.append(block)
@@ -56,7 +57,7 @@ class EfinixSerdesDiffTx(LiteXModule):
 # Efinix Serdes Diff RX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffRx(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, static_delay, clk, fast_clk, fifo_clk):
+    def __init__(self, rx_p, rx_n, data, static_delay, clk, fast_clk, fifo_clk=None, rx_term=True):
         platform = LiteXContext.platform
 
         self.rx_fifo_empty = Signal()
@@ -73,8 +74,9 @@ class EfinixSerdesDiffRx(LiteXModule):
         _ena  = platform.add_iface_io(io_name + "_ena")
         _rst  = platform.add_iface_io(io_name + "_rst")
 
-        _rx_fifo_empty = platform.add_iface_io(io_name + "_rx_fifo_empty")
-        _rx_fifo_rd = platform.add_iface_io(io_name + "_rx_fifo_rd")
+        if fifo_clk is not None:
+            self.rx_fifo_empty = rx_fifo_empty = platform.add_iface_io(io_name + "_rx_fifo_empty")
+            self.rx_fifo_rd = rx_fifo_rd = platform.add_iface_io(io_name + "_rx_fifo_rd")
 
         assert platform.family in ["Titanium"]
         # _p has _P_ and _n has _N_ followed by an optional function
@@ -87,8 +89,6 @@ class EfinixSerdesDiffRx(LiteXModule):
             _rst.eq(0),
             _ena.eq(1),
             data.eq(_data),
-            self.rx_fifo_empty.eq(_rx_fifo_empty),
-            _rx_fifo_rd.eq(self.rx_fifo_rd),
             ]
         block = {
             "type"      : "LVDS",
@@ -98,22 +98,29 @@ class EfinixSerdesDiffRx(LiteXModule):
             "sig"       : _data,
             "location"  : io_pad,
             "size"      : len(data),
-            "slow_clk"  : ClockSignal(clk),
-            "fast_clk"  : ClockSignal(fast_clk),
+            "slow_clk"  : clk,
+            "fast_clk"  : fast_clk,
             "half_rate" : "1",
-            "ena_pin"   : _ena,
-            "rst_pin"   : _rst,
+            "ena"       : _ena,
+            "rst"       : _rst,
             "rx_delay"  : "STATIC",
             "delay"     : static_delay,
-            "rx_fifo"   : True,
-            "rx_fifo_empty" : _rx_fifo_empty,
-            "rx_fifo_rd"    : _rx_fifo_rd,
-            "rx_fifoclk"   : ClockSignal(fifo_clk),
+            "rx_voc_driver": "1",
+            "rx_term"      : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
         }
 
+        if fifo_clk is not None:
+            block.update({
+                "rx_fifo"       : True,
+                "rx_fifo_empty" : rx_fifo_empty,
+                "rx_fifo_rd"    : rx_fifo_rd,
+                "rx_fifoclk"    : fifo_clk,
+            })
+
+
         platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(rx_p)
-        platform.toolchain.excluded_ios.append(rx_n)
+        platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
+        platform.toolchain.excluded_ios.append(platform.get_pin(rx_n))
 
 class EfinixSerdesDiffRxDynamicDelay(LiteXModule):
     def __init__(self, rx_p, rx_n, data, clk, fast_clk):
@@ -219,6 +226,8 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
 
         _data = Array([Signal(len(data)*2) for i in range(len(rx_p))])
 
+        data_before = Array([Signal(len(data)) for i in range(len(rx_p))])
+
         _rx_fifo_rd = Signal(reset=1)
         _rx_fifo_empty = Signal()
 
@@ -228,9 +237,9 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         data_2 = Signal(10)
 
         data_0_sum = Signal(max=11)
-        data_0_eq = Signal(max=11)
+        data_0_eq = Signal(11)
         data_2_sum = Signal(max=11)
-        data_2_eq = Signal(max=11)
+        data_2_eq = Signal(11)
 
         up_level = 2
         down_level = 2
@@ -238,18 +247,21 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         up =Signal()
         down = Signal()
 
+        staic_delay = 4
+
         for i in range(4):
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][:len(data)], clk, fast_clk, fifo_clk)
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][:len(data)], staic_delay * i, clk, fast_clk, fifo_clk, rx_term=(i == 0))
             self.submodules += serdesrx
 
             self.comb += [
                 serdesrx.rx_fifo_rd.eq(_rx_fifo_rd),
-                _rx_fifo_empty.eq(serdesrx.rx_fifo_empty)
+                _rx_fifo_empty.eq(serdesrx.rx_fifo_empty),
+                _data[i][len(data):].eq(data_before[i])
             ]
 
             self.sync += [
                 If(_rx_fifo_rd & ~_rx_fifo_empty,
-                    _data[i][len(data):].eq(_data[i][:len(data)])
+                    data_before[i].eq(_data[i][:len(data)]),
                 )
             ]
 
@@ -369,6 +381,7 @@ class _EfinixSerdesClocking(LiteXModule):
         self.pll = pll = TITANIUMPLL(platform)
         pll.register_clkin(refclk, freq=refclk_freq)
 
+        pll.create_clkout(None,                        refclk_freq)
         pll.create_clkout(self.cd_eth_tx,              clk_freq)
         pll.create_clkout(self.cd_eth_rx,              rx_clk_freq)
         pll.create_clkout(self.cd_eth_trx_fast,        fast_clk_freq, phase=90)
@@ -424,8 +437,8 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             pcs.tbi_tx,
             pads.tx_p,
             pads.tx_n,
-            self.cd_eth_tx.clk,
-            self.cd_eth_trx_fast.clk,
+            self.crg.cd_eth_tx.clk,
+            self.crg.cd_eth_trx_fast.clk,
         )
 
         self.alligner = alligner = ClockDomainsRenamer("eth_rx")(EfinixAlligner(pcs.align, pcs.tbi_rx, pcs.tbi_rx_ce))
