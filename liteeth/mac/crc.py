@@ -26,8 +26,10 @@ class LiteEthMACCRCEngine(LiteXModule):
 
     Parameters
     ----------
+    data_width : int
+        The bit width of the data bus
     width : int
-        The bit width of the data bus and CRC value.
+        The bit width of CRC value.
     polynom : int
         The polynomial used for the CRC calculation, specified as an integer (e.g., 0x04C11DB7 for IEEE 802.3).
     """
@@ -66,6 +68,53 @@ class LiteEthMACCRCEngine(LiteXModule):
         """Return items with odd occurrences for XOR optimization."""
         from collections import Counter
         return [bit for bit, count in Counter(bits).items() if count % 2 == 1]
+
+def crc_calc(data_width, width, polynom, crc_prev, data):
+    """
+    Calculate the next CRC value. Functionally equivalent to the migen CRCEngine, but as a python function
+
+    Parameters
+    ----------
+    data_width : int
+        The bit width of data
+    width : int
+        The bit width of the CRC value
+    polynom : int
+        The polynomial used for the CRC calculation, specified as an integer (e.g., 0x04C11DB7 for IEEE 802.3).
+    crc_prev : int
+        The previous CRC value
+    data : int
+        The new data word
+
+    Returns
+    -------
+    int
+        The next CRC value
+    """
+    # Convert crc_prev into a list of bits (LSB first) for easier bitwise operations
+    state = [(crc_prev >> i) & 1 for i in range(width)]
+
+    # Process each bit of the input data (assumed LSB-first).
+    for n in range(data_width):
+        d = (data >> n) & 1
+        feedback = state[-1] ^ d
+        state.pop()
+
+        # For each remaining bit position (positions 0 .. width-2),
+        # if the corresponding tap (at bit position pos+1 in the polynomial)
+        # is active, XOR the feedback into that bit.
+        for pos in range(width - 1):
+            if (polynom >> (pos + 1)) & 1:
+                state[pos] ^= feedback
+        # Insert the feedback at the beginning of the state (this is equivalent
+        # to shifting the register and feeding in the new bit).
+        state.insert(0, feedback)
+
+    crc_next = 0
+    for i, bit in enumerate(state):
+        if bit:
+            crc_next |= (1 << i)
+    return crc_next
 
 # MAC CRC32 ----------------------------------------------------------------------------------------
 
@@ -128,6 +177,70 @@ class LiteEthMACCRC32(LiteXModule):
                 If(self.be[n],
                     self.value.eq(engines[n].crc_next[::-1] ^ self.init),
                     self.error.eq(engines[n].crc_next != self.check),
+                )
+            ]
+
+# MAC CRC32 ----------------------------------------------------------------------------------------
+
+@ResetInserter()
+@CEInserter()
+class LiteEthMACCRC32Check(LiteXModule):
+    """IEEE 802.3 CRC
+
+    Implement an IEEE 802.3 CRC checker.
+
+    Parameters
+    ----------
+    data_width : int
+        Width of the data bus.
+
+    Attributes
+    ----------
+    data : in
+        Data input.
+    be : in
+        Data byte enable (optional, defaults to full word).
+    error : out
+        CRC error (used for checker).
+    """
+    width   = 32
+    polynom = 0x04c11db7
+    init    = 2**width - 1
+    check   = 0xc704dd7b
+    def __init__(self, data_width):
+        self.data  = Signal(data_width)
+        self.be    = Signal(data_width//8, reset=2**data_width//8 - 1)
+        self.value = Signal(self.width)
+        self.error = Signal()
+
+        check_be = [self.check]
+        for _ in range(1, data_width//8):
+            check_be.append(crc_calc(8, self.width, self.polynom, check_be[-1], 0))
+
+        # # #
+
+        # Create a CRC Engine for the data_width
+        self.submodules.engine = engine = LiteEthMACCRCEngine(
+            data_width = data_width,
+            width      = self.width,
+            polynom    = self.polynom,
+        )
+
+        # Register Full-Word CRC Engine (last one).
+        reg = Signal(self.width, reset=self.init)
+        self.sync += reg.eq(engine.crc_next)
+
+        # Select CRC Engine/Result.
+        self.comb += [
+            # TODO mask data
+            engine.data.eq(self.data),
+            engine.crc_prev.eq(reg),
+        ]
+        for n in range(data_width//8):
+            self.comb += [
+                If(self.be[n],
+                   engine.data.eq(self.data & (2**((n + 1)*8) - 1)),
+                   self.error.eq(engine.crc_next != check_be[-(n + 1)]),
                 )
             ]
 
@@ -282,7 +395,7 @@ class LiteEthMACCRC32Checker(LiteXModule):
         assert data_width in [8, 32, 64]
 
         # CRC32 Checker.
-        self.crc = crc = LiteEthMACCRC32(data_width)
+        self.crc = crc = LiteEthMACCRC32Check(data_width)
 
         # FIFO.
         self.fifo = fifo = ResetInserter()(stream.SyncFIFO(description, ratio + 1))
