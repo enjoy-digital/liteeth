@@ -116,7 +116,9 @@ class LiteEthMACPreambleChecker(Module):
                     NextValue(count, count + 1)
                 )
             ),
-            If(sink.valid & sink.last, self.error.eq(1))
+            If(sink.valid & sink.last, 
+               NextValue(count, 0),
+               self.error.eq(1))
         )
         self.comb += [
             source.data.eq(sink.data),
