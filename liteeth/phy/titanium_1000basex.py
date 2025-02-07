@@ -129,7 +129,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         self.alligner = alligner = EfinixAlligner(allign)
 
-        data_out_alligner = Signal(20)
+        data_out_alligner = Signal(30)
         
         data_out_buffer_1 = Signal(3000)
 
@@ -137,7 +137,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         buffer_pos = Signal(max=len(data_out_buffer), reset=0)
 
-        self.idle_remover = Decoder8b10bIdleChecker(data_out_alligner)
+        self.idle_remover = Decoder8b10bIdleChecker(data_out_alligner[10:])
         
         cases_buffer = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
@@ -146,7 +146,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         cases_alligner = {}
         for i in range(10):
-            cases_alligner[i] = data_out_alligner.eq(data_out_buffer[i:20+i])
+            cases_alligner[i] = data_out_alligner.eq(data_out_buffer[i:30+i])
 
         self.comb += [
             Case(buffer_pos, cases_buffer),
@@ -164,10 +164,10 @@ class EfinixSerdesBuffer(LiteXModule):
             ).Else(
                 data_out.eq(data_out_alligner[:10]),
                 data_out_valid.eq(1),
-                If(self.idle_remover.is_i2 & (data_in_len + buffer_pos >= 10+30 +10),
-                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out)*2)),
+                If(self.idle_remover.is_i2 & (data_in_len + buffer_pos >= 10+30 +20),
+                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out)*3)),
 
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out)*2:]),
+                    data_out_buffer_1.eq(data_out_buffer[len(data_out)*3:]),
                 ).Else(
                     buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
 
