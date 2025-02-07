@@ -122,93 +122,43 @@ class EfinixSerdesDiffRx(LiteXModule):
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_n))
 
-class EfinixSerdesDiffRxDynamicDelay(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, clk, fast_clk):
-        platform = LiteXContext.platform
-
-        self.delay_ena = Signal()
-        self.delay_inc = Signal()
-        self.delay_rst = Signal()
-
-        # # #
-
-        # Only keep _p.
-        io_name = platform.get_pin_name(rx_p)
-        io_pad  = platform.get_pad_name(rx_p) # need real pad name
-        io_prop = platform.get_pin_properties(rx_p)
-
-        _data = platform.add_iface_io(io_name + "_gen", len(data))
-        _ena  = platform.add_iface_io(io_name + "_ena")
-        _rst  = platform.add_iface_io(io_name + "_rst")
-
-        assert platform.family in ["Titanium"]
-        # _p has _P_ and _n has _N_ followed by an optional function
-        # lvds block needs _PN_
-        pad_split = io_pad.split('_')
-        assert pad_split[1] == 'P'
-        io_pad = f"{pad_split[0]}_PN_{pad_split[2]}"
-        delay_ena = platform.add_iface_io(io_name + "_delay_ena")
-        delay_rst = platform.add_iface_io(io_name + "_delay_rst")
-        delay_inc = platform.add_iface_io(io_name + "_delay_inc")
-
-        self.comb += [
-            _rst.eq(0),
-            _ena.eq(1),
-            data.eq(_data),
-            delay_inc.eq(self.delay_inc),
-            delay_ena.eq(self.delay_ena),
-            delay_rst.eq(self.delay_rst),
-            ]
-        block = {
-            "type"      : "LVDS",
-            "mode"      : "INPUT",
-            "rx_mode"   : "NORMAL",
-            "name"      : io_name,
-            "sig"       : _data,
-            "location"  : io_pad,
-            "size"      : len(data),
-            "slow_clk"  : ClockSignal(clk),
-            "fast_clk"  : ClockSignal(fast_clk),
-            "half_rate" : "1",
-            "ena_pin"   : _ena,
-            "rst_pin"   : _rst,
-            "rx_delay"  : "DYNAMIC",
-            "delay_ena" : delay_ena,
-            "delay_rst" : delay_rst,
-            "delay_inc" : delay_inc,
-        }
-
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(rx_p)
-        platform.toolchain.excluded_ios.append(rx_n)
-
 class EfinixSerdesBuffer(LiteXModule):
-    def __init__(self, data_in, data_in_len, data_out, data_out_valid):
+    def __init__(self, data_in, data_in_len, data_out, data_out_valid, allign):
+
+        self.alligner = alligner = EfinixAlligner(allign)
+
+        data_out_alligner = Signal(10)
         
         data_out_buffer_1 = Signal(3000)
 
-        data_out_buffer = Signal(len(data_out)+len(data_out_buffer_1))
+        data_out_buffer = Signal(len(data_in)+len(data_out_buffer_1))
 
-        buffer_pos = Signal(max=len(data_out_buffer), reset=0)# len(data_out_buffer)//2)
+        buffer_pos = Signal(max=len(data_out_buffer), reset=0)
         
         cases_buffer = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
         for i in range(1,len(data_out_buffer)):
             cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
 
+        cases_alligner = {}
+        for i in range(10):
+            cases_alligner[i] = data_out_alligner.eq(data_out_buffer[i:10+i])
+
         self.comb += [
-            Case(buffer_pos, cases_buffer)
+            Case(buffer_pos, cases_buffer),
+            Case(alligner.pos, cases_alligner),
+            alligner.data.eq(data_out_buffer[10:40]),
         ]
 
         self.sync += [
-            If(data_in_len + buffer_pos < len(data_out),
+            If(data_in_len + buffer_pos < 10+30,
                 data_out.eq(0),
                 data_out_valid.eq(0),
                 buffer_pos.eq(buffer_pos + data_in_len),
 
                 data_out_buffer_1.eq(data_out_buffer[:len(data_out_buffer_1)]),
             ).Else(
-                data_out.eq(data_out_buffer[:len(data_out)]),
+                data_out.eq(data_out_alligner),
                 data_out_valid.eq(1),
                 buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
 
@@ -217,7 +167,7 @@ class EfinixSerdesBuffer(LiteXModule):
         ]
 
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, data_valid, clk, fast_clk):
+    def __init__(self, rx_p, rx_n, data, data_valid, allign, clk, fast_clk):
         
         assert len(rx_p) == len(rx_n)
         assert len(rx_p) == 4
@@ -245,15 +195,15 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         staic_delay = 4
 
         for i in range(4):
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][:len(data)], staic_delay * i, clk, fast_clk, rx_term=(i == 0))
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], staic_delay * i, clk, fast_clk, rx_term=(i == 0))
             self.submodules += serdesrx
 
-            self.comb += _data[i][len(data):].eq(data_before[i])
+            self.comb += _data[i][:10].eq(data_before[i])
 
-            self.sync += data_before[i].eq(_data[i][:len(data)])
-            
+            self.sync += data_before[i].eq(_data[i][10:])
 
-        self.reducer = EfinixSerdesBuffer(data_1, data_1_len, data, data_valid)
+
+        self.reducer = EfinixSerdesBuffer(data_1, data_1_len, data, data_valid, allign)
 
         self.comb += [
             data_0_eq.eq(data_0 ^ data_1[:10]),
@@ -325,8 +275,8 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         )
 
         fsm.act("0_TO_3",
-            data_1.eq(_data[3][1:12]),
-            data_1_len.eq(10),
+            data_1.eq(_data[3][0:11]),
+            data_1_len.eq(11),
             NextState("USE_3"),
         )
 
@@ -379,7 +329,7 @@ class Decoder8b10bChecker(LiteXModule):
 
         input_msb_first = Signal(10)
         for i in range(10):
-            self.comb += input_msb_first[i].eq(data_in[9-i])
+            self.comb += input_msb_first[i].eq(data_in[19-i])
 
         code6b = input_msb_first[4:]
 
@@ -388,26 +338,9 @@ class Decoder8b10bChecker(LiteXModule):
         self.comb += valid.eq(~(invalid_1 | invalid_2 | invalid_3 | invalid_4))
 
 class EfinixAlligner(LiteXModule):
-    def __init__(self, align, data_out, data_valid):
-        buffer = Signal(30)
-        data = Signal(30)
-        pos = Signal(max=10)
-        self.data_in = data_in = Signal(10)
-
-        self.comb += [
-            data_out.eq(data >> pos),
-            If(data_valid,
-                data.eq(Cat(data_in, buffer)),
-            ).Else(
-                data.eq(buffer),
-            )
-        ]
-
-        self.sync += [
-            If(data_valid,
-                buffer.eq(Cat(data_in, buffer[:20])),
-            )
-        ]
+    def __init__(self, align):
+        self.data = data = Signal(30)
+        self.pos = pos = Signal(max=10)
 
         valid_8b10b = Signal(10)
 
@@ -431,6 +364,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
     linerate    = 1.25e9
     rx_clk_freq = 150e6
     tx_clk_freq = 125e6
+    with_preamble_crc = True
     def __init__(self, refclk, pads, refclk_freq=200e6, with_csr=True):
         self.pcs = pcs = PCS(lsb_first=True)
 
@@ -454,13 +388,12 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             self.crg.cd_eth_trx_fast.clk,
         )
 
-        self.alligner = alligner = ClockDomainsRenamer("eth_rx")(EfinixAlligner(pcs.align, pcs.tbi_rx, pcs.tbi_rx_valid))
-
         self.rx = rx = ClockDomainsRenamer("eth_rx")(EfinixSerdesDiffRxClockRecovery(
             pads.rx_p,
             pads.rx_n,
-            alligner.data_in,
+            pcs.tbi_rx,
             pcs.tbi_rx_valid,
+            pcs.align,
             self.crg.cd_eth_rx.clk,
             self.crg.cd_eth_trx_fast.clk,
         ))
