@@ -4,6 +4,8 @@ from litex.gen import *
 
 from litex.build.io import *
 
+from litex.soc.cores.code_8b10b import K, D, DecoderComb
+
 from litex.soc.cores.clock.efinix import TITANIUMPLL
 
 
@@ -127,13 +129,15 @@ class EfinixSerdesBuffer(LiteXModule):
 
         self.alligner = alligner = EfinixAlligner(allign)
 
-        data_out_alligner = Signal(10)
+        data_out_alligner = Signal(20)
         
         data_out_buffer_1 = Signal(3000)
 
         data_out_buffer = Signal(len(data_in)+len(data_out_buffer_1))
 
         buffer_pos = Signal(max=len(data_out_buffer), reset=0)
+
+        self.idle_remover = Decoder8b10bIdleChecker(data_out_alligner)
         
         cases_buffer = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
@@ -142,7 +146,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         cases_alligner = {}
         for i in range(10):
-            cases_alligner[i] = data_out_alligner.eq(data_out_buffer[i:10+i])
+            cases_alligner[i] = data_out_alligner.eq(data_out_buffer[i:20+i])
 
         self.comb += [
             Case(buffer_pos, cases_buffer),
@@ -158,11 +162,17 @@ class EfinixSerdesBuffer(LiteXModule):
 
                 data_out_buffer_1.eq(data_out_buffer[:len(data_out_buffer_1)]),
             ).Else(
-                data_out.eq(data_out_alligner),
+                data_out.eq(data_out_alligner[:10]),
                 data_out_valid.eq(1),
-                buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
+                If(self.idle_remover.is_i2 & (data_in_len + buffer_pos >= 10+30 +10),
+                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out)*2)),
 
-                data_out_buffer_1.eq(data_out_buffer[len(data_out):]),
+                    data_out_buffer_1.eq(data_out_buffer[len(data_out)*2:]),
+                ).Else(
+                    buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
+
+                    data_out_buffer_1.eq(data_out_buffer[len(data_out):]),
+                )
             )
         ]
 
@@ -353,6 +363,24 @@ class EfinixAlligner(LiteXModule):
                     pos.eq(i),
                 )
             ]
+
+class Decoder8b10bIdleChecker(LiteXModule):
+    def __init__(self, data_in):
+
+        self.is_i2 = is_i2 = Signal()
+
+        self.decoder1= decoder1 = DecoderComb(lsb_first=True)
+        self.decoder2= decoder2 = DecoderComb(lsb_first=True)
+
+        self.comb += [
+            decoder1.input.eq(data_in[:10]),
+            decoder2.input.eq(data_in[10:20]),
+        ]
+
+        first_ok = decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
+        second_ok = ~decoder2.k & ~decoder2.invalid & (decoder2.d == D(16, 2))
+        
+        self.comb += is_i2.eq(first_ok & second_ok)
 
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
