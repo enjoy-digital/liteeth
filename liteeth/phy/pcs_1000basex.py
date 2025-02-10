@@ -14,7 +14,7 @@ from litex.gen.genlib.misc import WaitTimer
 from litex.gen.genlib.cdc import BusSynchronizer
 
 from litex.soc.interconnect import stream
-from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
+from litex.soc.cores.code_8b10b import K, D, Encoder, DecoderComb
 
 from liteeth.common import *
 
@@ -176,9 +176,8 @@ class PCSRX(LiteXModule):
         self.sgmii_speed     = Signal(2)  # SGMII speed.
         self.source          = source = stream.Endpoint([("data", 8)]) # Data output.
         self.input_valid     = Signal(reset=1)   # Data input valid.
-        self.skip            = Signal()          # Skip next byte.
 
-        self.decoder = Decoder(lsb_first=lsb_first) # 8b/10b Decoder.
+        self.decoder = DecoderComb(lsb_first=lsb_first) # 8b/10b Decoder.
 
         # # #
 
@@ -220,8 +219,7 @@ class PCSRX(LiteXModule):
         )
         fsm.act("CONFIG-D-OR-IDLE",
             If(self.input_valid,
-                NextState("ERROR"),
-                If(~self.decoder.k,
+                If(~self.decoder.k & ~self.decoder.invalid,
                     # Check for Configuration Word.
                     If((self.decoder.d == D(21, 5)) | # /C1/.
                     (self.decoder.d == D( 2, 2)),  # /C2/.
@@ -232,15 +230,15 @@ class PCSRX(LiteXModule):
                     If((self.decoder.d == D( 5, 6)) | # /I1/.
                     (self.decoder.d == D(16, 2)),  # /I2/.
                         self.seen_valid_ci.eq(1),
-                        NextState("START")
                     )
+                ).Else(
+                    NextState("ERROR"),
                 )
             )
         )
         fsm.act("CONFIG-REG",
             If(self.input_valid,
-                NextState("ERROR"),
-                If(~self.decoder.k,
+                If(~self.decoder.k & ~self.decoder.invalid,
                     # Receive for Configuration Register.
                     NextState("CONFIG-REG"),
                     NextValue(count, count + 1),
@@ -252,20 +250,20 @@ class PCSRX(LiteXModule):
                         self.seen_config_reg.eq(1),
                         NextState("START")
                     )
+                ).Else(
+                    NextState("ERROR"),
                 )
             )
         )
         fsm.act("DATA",
             If(self.input_valid,
-                NextState("START"),
-                If(~self.decoder.k,
+                If(~self.decoder.k & ~self.decoder.invalid,
                     # Receive Data.
                     timer.enable.eq(1),
                     buffer.sink.valid.eq(timer.done),
                     buffer.sink.data.eq(self.decoder.d),
-                    NextState("DATA")
                 ).Else(
-                    self.skip.eq(1),
+                    NextState("START"),
                 )
             )
         )
