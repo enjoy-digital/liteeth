@@ -174,7 +174,7 @@ class PCSRX(LiteXModule):
         self.seen_config_reg = Signal()   # Config seen.
         self.config_reg      = Signal(16) # Config register (16-bit).
         self.sgmii_speed     = Signal(2)  # SGMII speed.
-        self.source          = source = stream.Endpoint([("data", 8)]) # Data output.
+        self.source          = source = stream.Endpoint([("data", 8), ("error", 1)]) # Data output.
         self.input_valid     = Signal(reset=1)   # Data input valid.
 
         self.decoder = DecoderComb(lsb_first=lsb_first) # 8b/10b Decoder.
@@ -193,7 +193,7 @@ class PCSRX(LiteXModule):
         # -------
         self.buffer = buffer = stream.Buffer([("data", 8)], pipe_valid=True, pipe_ready=False)
         self.comb += If(timer.done & self.input_valid,
-            buffer.source.connect(source, omit={"last"}),
+            buffer.source.connect(source, omit={"last", "error"}),
             source.last.eq(buffer.source.valid & ~buffer.sink.valid), # Last when next is not valid.
         )
 
@@ -240,7 +240,6 @@ class PCSRX(LiteXModule):
             If(self.input_valid,
                 If(~self.decoder.k & ~self.decoder.invalid,
                     # Receive for Configuration Register.
-                    NextState("CONFIG-REG"),
                     NextValue(count, count + 1),
                     Case(count, {
                         0b0 : NextValue(self.config_reg[:8], self.decoder.d), # LSB.
@@ -262,8 +261,15 @@ class PCSRX(LiteXModule):
                     timer.enable.eq(1),
                     buffer.sink.valid.eq(timer.done),
                     buffer.sink.data.eq(self.decoder.d),
-                ).Else(
+                ).Elif(self.decoder.k & (self.decoder.d == K(29, 7)) & ~self.decoder.invalid,
+                    # K-character is End-of-packet /S/.
                     NextState("START"),
+                ).Else(
+                    source.error.eq(1),
+                    source.last.eq(1),
+                    If(source.ready,
+                       NextState("ERROR"),
+                    )
                 )
             )
         )
@@ -304,7 +310,7 @@ class PCS(LiteXModule):
         # Sink -> TX / RX -> Source.
         self.comb += [
             self.sink.connect(self.tx.sink,     omit={"last_be", "error"}),
-            self.rx.source.connect(self.source, omit={"last_be", "error"}),
+            self.rx.source.connect(self.source, omit={"last_be"}),
         ]
 
         # Pulse Synchronizers.
