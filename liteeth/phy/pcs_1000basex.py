@@ -267,6 +267,7 @@ class PCSRX(LiteXModule):
                 ).Else(
                     source.error.eq(1),
                     source.last.eq(1),
+                    source.valid.eq(1),
                     If(source.ready,
                        NextState("ERROR"),
                     )
