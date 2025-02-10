@@ -98,14 +98,27 @@ class LiteEthMACPreambleChecker(Module):
         # # #
 
         preamble = Signal(64, reset=eth_preamble)
+        preamble_part = Signal(dw)
+        # For 64 bits, `count` doesn't need to change. But migen won't create a
+        # signal with a width of 0 bits, so add an unused bit for 64 bit path
+        count    = Signal(max=(64//dw) if dw != 64 else 2)
+
         self.submodules.fsm = fsm = FSM(reset_state="PREAMBLE")
         fsm.act("PREAMBLE",
             sink.ready.eq(1),
-            # Match to end of preamble
-            If(sink.valid & ~sink.last & (sink.data == preamble[-dw:]),
-                NextState("COPY")
+            chooser(preamble, count, preamble_part, n=64//dw),
+            # Match to current part of preamble
+            If(sink.valid & ~sink.last & (sink.data == preamble_part),
+                If(count == (64//dw)-1,
+                    NextValue(count, 0),
+                    NextState("COPY")
+                ).Else(
+                    NextValue(count, count + 1)
+                )
             ),
-            If(sink.valid & sink.last, self.error.eq(1))
+            If(sink.valid & sink.last, 
+               NextValue(count, 0),
+               self.error.eq(1))
         )
         self.comb += [
             source.data.eq(sink.data),
