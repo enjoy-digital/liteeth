@@ -41,22 +41,18 @@ class LiteEthPHYRMIITimer(LiteXModule):
 # LiteEth PHY RMII Speed Detect --------------------------------------------------------------------
 
 class LiteEthPHYRMIISpeedDetect(LiteXModule):
-    def __init__(self):
-        self.crs_dv   = Signal()
-        self.rx_data  = Signal()
-        self.crs_last = Signal()
-        self.speed    = Signal() # 0: 10Mbps, 1: 100Mbps.
+    def __init__(self, crs_dv, rx_data, crs_last):
+        self.speed  = Signal() # 0: 10Mbps, 1: 100Mbps.
 
         # # #
 
         # Signals.
-        rx_data_d = Signal()
-        count     = Signal(10)
+        count = Signal(10)
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(self.crs_dv,
+            If(crs_dv,
                 NextValue(count, 0),
                 NextState("DETECT")
             )
@@ -64,7 +60,7 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
 
         fsm.act("DETECT",
             NextValue(count, count + 1),
-            If(~rx_data_d & self.rx_data,
+            If(rx_data[0],
                 If(count < 20,
                     NextValue(self.speed, 1), # 100Mbps
                 ).Else(
@@ -72,13 +68,14 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
                 ),
                 NextState("HOLD_SPEED"),
             ),
-            If(~self.crs_dv,  # If packet ends too soon
+            If(~crs_dv,
+                # If packet ends too soon, hold speed.
                 NextState("HOLD_SPEED")
             )
         )
 
         fsm.act("HOLD_SPEED",
-            If(self.crs_last,
+            If(crs_last,
                 NextState("IDLE")
             )
         )
@@ -185,13 +182,12 @@ class LiteEthPHYRMIIRX(LiteXModule):
 
         # Speed Detection.
         # ----------------
-        self.speed_detect = LiteEthPHYRMIISpeedDetect()
-        self.comb += [
-            self.speed_detect.crs_dv.eq(crs_dv_i),
-            self.speed_detect.rx_data.eq(rx_data_i),
-            self.speed_detect.crs_last.eq(crs_last),
-            self.speed.eq(self.speed_detect.speed),
-        ]
+        self.speed_detect = LiteEthPHYRMIISpeedDetect(
+            crs_dv   = crs_dv_i,
+            rx_data  = rx_data_i,
+            crs_last = crs_last,
+        )
+        self.comb += self.speed.eq(self.speed_detect.speed)
 
 # LiteEth PHY RMII CRG -----------------------------------------------------------------------------
 
