@@ -42,30 +42,30 @@ class LiteEthPHYRMIITimer(LiteXModule):
 
 class LiteEthPHYRMIISpeedDetect(LiteXModule):
     def __init__(self):
-        self.crs_dv     = Signal()
-        self.rx_data    = Signal()
-        self.fsm_rst    = Signal()
-        self.speed      = Signal() # 0: 10Mbps, 1: 100Mbps.
+        self.crs_dv   = Signal()
+        self.rx_data  = Signal()
+        self.crs_last = Signal()
+        self.speed    = Signal() # 0: 10Mbps, 1: 100Mbps.
 
         # # #
 
         # Signals.
-        self.rx_data_d = Signal()
-        self.cnt       = Signal(10)
+        rx_data_d = Signal()
+        count     = Signal(10)
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(self.crs_dv,
-                NextValue(self.cnt, 0),
+                NextValue(count, 0),
                 NextState("DETECT")
             )
         )
 
         fsm.act("DETECT",
-            NextValue(self.cnt, self.cnt + 1),
-            If(~self.rx_data_d & self.rx_data,
-                If(self.cnt < 20,
+            NextValue(count, count + 1),
+            If(~rx_data_d & self.rx_data,
+                If(count < 20,
                     NextValue(self.speed, 1), # 100Mbps
                 ).Else(
                     NextValue(self.speed, 0), # 10Mbps
@@ -78,7 +78,9 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
         )
 
         fsm.act("HOLD_SPEED",
-            If(self.fsm_rst, NextState("IDLE"))
+            If(self.crs_last,
+                NextState("IDLE")
+            )
         )
 
 # LiteEth PHY RMII TX ------------------------------------------------------------------------------
@@ -187,7 +189,7 @@ class LiteEthPHYRMIIRX(LiteXModule):
         self.comb += [
             self.speed_detect.crs_dv.eq(crs_dv_i),
             self.speed_detect.rx_data.eq(rx_data_i),
-            self.speed_detect.fsm_rst.eq(crs_last),
+            self.speed_detect.crs_last.eq(crs_last),
             self.speed.eq(self.speed_detect.speed),
         ]
 
