@@ -52,8 +52,7 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
         count     = Signal(10)
 
         # FSM.
-        self.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
-        self.comb += fsm.reset.eq(crs_last)
+        self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(crs_dv,
                 NextValue(count, 0),
@@ -78,7 +77,9 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
         )
 
         fsm.act("HOLD",
-            NextState("HOLD")
+            If(crs_last,
+                NextState("IDLE")
+            )
         )
 
 # LiteEth PHY RMII TX ------------------------------------------------------------------------------
