@@ -41,45 +41,47 @@ class LiteEthPHYRMIITimer(LiteXModule):
 # LiteEth PHY RMII Speed Detect --------------------------------------------------------------------
 
 class LiteEthPHYRMIISpeedDetect(LiteXModule):
-    def __init__(self, crs_dv, crs_last, rx_data):
-        self.speed = Signal() # 0: 10Mbps, 1: 100Mbps.
+    def __init__(self, speed_counter_threshold=20):
+        self.crs_dv     = Signal()
+        self.rx_data    = Signal()
+        self.fsm_rst    = Signal()
+        self.speed      = Signal() # 0: 10Mbps, 1: 100Mbps.
+
+        self._speed_cnt = CSRStatus(10, description="CRS_DV to RX_DATA0 Delay.")
 
         # # #
 
-        # Signals.
-        crs_dv_d  = Signal()
-        rx_data_d = Signal()
-        count     = Signal(10)
+        self.crs_dv_d   = Signal()
+        self.rx_data0_d = Signal()
+        self.cnt        = Signal(10) # FIXME: too big
 
-        # FSM.
+        self.comb += self._speed_cnt.status.eq(self.cnt)
+
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(crs_dv,
-                NextValue(count, 0),
+            If(self.crs_dv,
+                NextValue(self.cnt, 0),
                 NextState("DETECT")
             )
         )
 
         fsm.act("DETECT",
-            NextValue(count, count + 1),
-            If(~rx_data_d & rx_data,
-                If(count < 20,
+            NextValue(self.cnt, self.cnt + 1),
+            If(~self.rx_data0_d & self.rx_data,
+                If((self.cnt < speed_counter_threshold),
                     NextValue(self.speed, 1), # 100Mbps
                 ).Else(
                     NextValue(self.speed, 0), # 10Mbps
                 ),
-                NextState("HOLD"),
+                NextState("HOLD_SPEED"),
             ),
-            # If packet ends too soon, hold speed.
-            If(~crs_dv,
-                NextState("HOLD")
+            If(~self.crs_dv,  # If packet ends too soon
+                NextState("HOLD_SPEED")
             )
         )
 
-        fsm.act("HOLD",
-            If(crs_last,
-                NextState("IDLE")
-            )
+        fsm.act("HOLD_SPEED",
+            If(self.fsm_rst, NextState("IDLE"))
         )
 
 # LiteEth PHY RMII TX ------------------------------------------------------------------------------
@@ -168,15 +170,6 @@ class LiteEthPHYRMIIRX(LiteXModule):
             If(crs_last,  crs_run.eq(0)),
         ]
 
-        # Speed Detection.
-        # ----------------
-        self.speed_detect = LiteEthPHYRMIISpeedDetect(
-            crs_dv   = crs_dv_i,
-            crs_last = crs_last,
-            rx_data  = rx_data_i,
-        )
-        self.comb += self.speed.eq(self.speed_detect.speed)
-
         # Datapath: Input -> Delay -> Converter -> Source.
         # ------------------------------------------------
         self.comb += [
@@ -189,6 +182,16 @@ class LiteEthPHYRMIIRX(LiteXModule):
                 converter.sink.last.eq(crs_last),
             ),
             converter.source.connect(source),
+        ]
+
+        # Speed Detection.
+        # ----------------
+        self.speed_detect = LiteEthPHYRMIISpeedDetect(speed_counter_threshold)
+        self.comb += [
+            self.speed_detect.crs_dv.eq(crs_dv_i),
+            self.speed_detect.rx_data.eq(rx_data_i),
+            self.speed_detect.fsm_rst.eq(crs_last),
+            self.speed.eq(self.speed_detect.speed),
         ]
 
 # LiteEth PHY RMII CRG -----------------------------------------------------------------------------
@@ -246,7 +249,7 @@ class LiteEthPHYRMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 50e6
     rx_clk_freq = 50e6
-    def __init__(self, clock_pads, pads, refclk_cd="eth",
+    def __init__(self, clock_pads, pads, refclk_cd="eth", speed_counter_threshold=20,
         with_hw_init_reset     = True,
         with_refclk_ddr_output = True):
 
@@ -260,8 +263,11 @@ class LiteEthPHYRMII(LiteXModule):
         # TX/RX.
         # ------
         self.tx = ClockDomainsRenamer("eth_tx")(LiteEthPHYRMIITX(pads, self.crg.clk_signal))
-        self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads, self.crg.clk_signal))
-        self.comb += self.tx.speed.eq(self.rx.speed)
+        self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads,
+            clk_signal              = self.crg.clk_signal,
+            speed_counter_threshold = speed_counter_threshold
+        ))
+        self.comb             += self.tx.speed.eq(self.rx.speed)
         self.sink, self.source = self.tx.sink, self.rx.source
 
         # MDIO.
