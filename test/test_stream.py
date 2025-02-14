@@ -22,6 +22,16 @@ def grouper(iterable, n, fillvalue=None):
     args = [iter(iterable)] * n
     return itertools.zip_longest(*args, fillvalue=fillvalue)
 
+def mask_last_be(dw, data, last_be):
+    masked_data = 0
+
+    for byte in range(dw // 8):
+        if 2**byte > last_be:
+            break
+        masked_data |= data & (0xFF << (byte * 8))
+
+    return masked_data
+
 class StreamPacket:
     def __init__(self, data, params={}):
         # Data must be a list of bytes
@@ -251,6 +261,7 @@ def stream_collector(
                 if (yield source.last) == 1:
                     read_last = True
                     if hasattr(source, "last_be") and \
+                       dw != 8 and \
                        2**byte > (yield source.last_be):
                         break
                 collected_bytes += [((data >> (byte * 8)) & 0xFF)]
