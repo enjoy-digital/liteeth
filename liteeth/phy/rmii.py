@@ -108,9 +108,8 @@ class LiteEthPHYRMIITX(LiteXModule):
 
         # Output (Sync).
         # --------------
-        self.specials += SDROutput(i=converter.source.valid, o=pads.tx_en, clk=clk_signal)
-        for i in range(2):
-            self.specials += SDROutput(i=converter.source.data[i], o=pads.tx_data[i], clk=clk_signal)
+        self.specials += SDROutput(i=converter.source.valid, o=pads.tx_en,   clk=clk_signal)
+        self.specials += SDROutput(i=converter.source.data,  o=pads.tx_data, clk=clk_signal)
 
 
 # LiteEth PHY RMII RX ------------------------------------------------------------------------------
@@ -126,9 +125,8 @@ class LiteEthPHYRMIIRX(LiteXModule):
         # -------------
         crs_dv_i  = Signal()
         rx_data_i = Signal(2)
-        self.specials += SDRInput(i=pads.crs_dv, o=crs_dv_i, clk=clk_signal)
-        for i in range(2):
-            self.specials += SDRInput(i=pads.rx_data[i], o=rx_data_i[i], clk=clk_signal)
+        self.specials += SDRInput(i=pads.crs_dv,  o=crs_dv_i,  clk=clk_signal)
+        self.specials += SDRInput(i=pads.rx_data, o=rx_data_i, clk=clk_signal)
 
         # Speed Timer for 10Mbps/100Mbps.
         # -------------------------------
