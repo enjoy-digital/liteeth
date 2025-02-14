@@ -41,7 +41,7 @@ class LiteEthPHYRMIITimer(LiteXModule):
 # LiteEth PHY RMII Speed Detect --------------------------------------------------------------------
 
 class LiteEthPHYRMIISpeedDetect(LiteXModule):
-    def __init__(self, csr_dv, crs_last, rx_data):
+    def __init__(self, crs_dv, crs_last, rx_data):
         self.speed = Signal() # 0: 10Mbps, 1: 100Mbps.
 
         # # #
@@ -49,7 +49,7 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
         # Signals.
         crs_dv_d  = Signal()
         rx_data_d = Signal()
-        count     = Signal(8)
+        count     = Signal(10)
 
         # FSM.
         self.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
@@ -170,7 +170,7 @@ class LiteEthPHYRMIIRX(LiteXModule):
         # Speed Detection.
         # ----------------
         self.speed_detect = LiteEthPHYRMIISpeedDetect(
-            crs_dv   = csr_dv_i,
+            crs_dv   = crs_dv_i,
             crs_last = crs_last,
             rx_data  = rx_data_i,
         )
