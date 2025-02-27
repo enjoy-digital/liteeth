@@ -335,6 +335,101 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             NextState("USE_3"),
         )
 
+class EfinixSerdesDiffRxTestDynamic(LiteXModule):
+    def __init__(self, rx_p, rx_n, data, clk, fast_clk, rx_term=True):
+
+        data_int = Signal(10)
+        data_last = Signal(10)
+        data_full = Signal(20)
+        data_buffered = Signal(20)
+        show = Signal()
+
+        self.serdesrx = serdesrx = EfinixSerdesDiffRx(rx_p, rx_n, data_int, "dynamic", clk, fast_clk, rx_term=rx_term)
+
+        self.match = Signal()
+
+        self.comb += [
+            self.match.eq(data_int == data),
+            data_full.eq(Cat(data_last, data_int)),
+        ]
+
+        self.sync.eth_rx += [
+            data_last.eq(data_int),
+            show.eq(~show),
+            If(show,
+               data_buffered.eq(data_full),
+            ),
+        ]
+
+        self.status = CSRStatus(fields=[
+            CSRField("data", size=20, description="Data", offset=0),
+        ])
+
+        self.settings = CSRStorage(fields=[
+            CSRField("delay", size=6, description="delay", offset=0, reset=31),
+        ])
+
+        self.delayset = PulseSynchronizer("sys", "eth_rx")
+
+        self.comb += [
+            self.delayset.i.eq(self.settings.re),
+            self.status.fields.data.eq(data_buffered),
+            serdesrx.delay_rst.eq(ResetSignal("sys")),
+        ]
+
+        current_delay = Signal(6)
+
+        fsm = FSM(reset_state="IDLE")
+
+        fsm.act("IDLE",
+            If(self.delayset.o,
+                serdesrx.delay_rst.eq(1),
+                NextValue(current_delay, 31),
+                NextState("DELAY")
+            )
+        )
+
+        fsm.act("DELAY",
+            If(current_delay == self.settings.fields.delay,
+                NextState("IDLE"),
+            ).Elif(current_delay < self.settings.fields.delay,
+                serdesrx.delay_ena.eq(1),
+                serdesrx.delay_inc.eq(1),
+                NextValue(current_delay, current_delay + 1)
+            ).Else(
+                serdesrx.delay_ena.eq(1),
+                serdesrx.delay_inc.eq(0),
+                NextValue(current_delay, current_delay - 1)
+            )
+        )
+
+        self.fsm = ClockDomainsRenamer("eth_rx")(fsm)
+            
+class EfinixSerdesDiffRxTestDynamicBus(LiteXModule):
+    def __init__(self, rx_p, rx_n, data, clk, fast_clk):
+
+        for i in range(4):
+            rx = EfinixSerdesDiffRxTestDynamic(rx_p[i], rx_n[i], data, clk, fast_clk, rx_term=True) #(i == 0))
+            setattr(self, f"rx{i}", rx)
+
+class EfinixSerdesDiffRxTestDPA(LiteXModule):
+    def __init__(self, rx_p, rx_n, clk, fast_clk):
+
+        self.delay_ena = delay_ena = Signal(reset=1)
+        self.delay_rst = delay_rst = Signal()
+
+        self.comb += delay_rst.eq(ResetSignal("sys"))
+
+        for i in range(4):
+            data_int = Signal(10)
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], data_int, "dpa", clk, fast_clk, rx_term=(i == 0))
+            setattr(self, f"serdesrx{i}", serdesrx)
+
+            self.comb += [
+                serdesrx.delay_ena.eq(delay_ena),
+                serdesrx.delay_rst.eq(delay_rst),
+            ]
+
 # Efinix SerDes Clocking ---------------------------------------------------------------------------
 
 class EfinixSerdesClocking(LiteXModule):
@@ -445,6 +540,25 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         self.source  = pcs.source
         self.link_up = pcs.link_up
 
+        # self.data = Signal(10)
+
+        # toogle = Signal()
+
+        # self.storage = CSRStorage(fields=[
+        #     CSRField("data", size=20, description="Data", offset=0, reset=0x03FF),
+        # ])
+
+        # self.comb += [
+        #     If(toogle,
+        #         self.data.eq(self.storage.fields.data[0:10]),
+        #     ).Else(
+        #         self.data.eq(self.storage.fields.data[10:20]),
+        #     ),
+        # ]
+
+        # self.sync.eth_tx += [
+        #     toogle.eq(~toogle),
+        # ]
         # # #
 
         if crg is None:
@@ -453,6 +567,14 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         else:
             self.crg = crg
 
+        # self.tx = EfinixSerdesDiffTx(
+        #     self.data, # pcs.tbi_tx,
+        #     pads.tx_p,
+        #     pads.tx_n,
+        #     self.crg.cd_eth_tx.clk,
+        #     self.crg.cd_eth_trx_fast.clk,
+        # )
+
         self.tx = EfinixSerdesDiffTx(
             pcs.tbi_tx,
             pads.tx_p,
@@ -460,6 +582,21 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             self.crg.cd_eth_tx.clk,
             self.crg.cd_eth_trx_fast.clk,
         )
+
+        # self.rx = EfinixSerdesDiffRxTestDynamicBus(
+        #     pads.rx_p,
+        #     pads.rx_n,
+        #     self.data,
+        #     self.crg.cd_eth_rx.clk,
+        #     self.crg.cd_eth_trx_fast.clk,
+        # )
+
+        # self.rx = EfinixSerdesDiffRxTestDPA(
+        #     pads.rx_p,
+        #     pads.rx_n,
+        #     self.crg.cd_eth_rx.clk,
+        #     self.crg.cd_eth_trx_fast.clk,
+        # )
 
         rx = EfinixSerdesDiffRxClockRecovery(
             pads.rx_p,
