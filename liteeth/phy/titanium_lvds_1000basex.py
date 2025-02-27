@@ -62,11 +62,11 @@ class EfinixSerdesDiffTx(LiteXModule):
 # Efinix Serdes Diff RX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffRx(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, static_delay, clk, fast_clk, fifo_clk=None, rx_term=True):
+    def __init__(self, rx_p, rx_n, data, delay, clk, fast_clk, fifo_clk=None, rx_term=True, debug=False):
         platform = LiteXContext.platform
 
-        self.rx_fifo_empty = Signal()
-        self.rx_fifo_rd = Signal()
+        dynamic_delay = bool(delay == "dynamic")
+        dpa = bool(delay == "dpa")
 
         # # #
 
@@ -82,6 +82,27 @@ class EfinixSerdesDiffRx(LiteXModule):
         if fifo_clk is not None:
             self.rx_fifo_empty = rx_fifo_empty = platform.add_iface_io(io_name + "_rx_fifo_empty")
             self.rx_fifo_rd = rx_fifo_rd = platform.add_iface_io(io_name + "_rx_fifo_rd")
+
+        if dynamic_delay or dpa:
+            self.delay_ena = delay_ena = platform.add_iface_io(io_name + "_delay_ena")
+            self.delay_rst = delay_rst = platform.add_iface_io(io_name + "_delay_rst")
+
+            if dynamic_delay:
+                self.delay_inc = delay_inc = platform.add_iface_io(io_name + "_delay_inc")
+            else:
+                self.dpa_dbg  = dpa_dbg = platform.add_iface_io(io_name + "_dpa_dbg", 6)
+                self.dpa_lock = dpa_lock = platform.add_iface_io(io_name + "_dpa_lock")
+
+                if debug:
+                    self.dpa_debug = dpa_debug = CSRStatus(fields=[
+                        CSRField("dpa_dbg", size=6, description="DPA Debug", offset=0),
+                        CSRField("dpa_lock", size=1, description="DPA Lock", offset=8),
+                    ])
+
+                    self.comb += [
+                        dpa_debug.fields.dpa_dbg.eq(dpa_dbg),
+                        dpa_debug.fields.dpa_lock.eq(dpa_lock),
+                    ]
 
         assert platform.family in ["Titanium"]
         # _p has _P_ and _n has _N_ followed by an optional function
@@ -105,11 +126,9 @@ class EfinixSerdesDiffRx(LiteXModule):
             "size"      : len(data),
             "slow_clk"  : clk,
             "fast_clk"  : fast_clk,
-            "half_rate" : "1",
+            "half_rate" : "1" if not dpa else "0",
             "ena"       : _ena,
             "rst"       : _rst,
-            "rx_delay"  : "STATIC",
-            "delay"     : static_delay,
             "rx_voc_driver": "1",
             "rx_term"      : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
         }
@@ -122,6 +141,26 @@ class EfinixSerdesDiffRx(LiteXModule):
                 "rx_fifoclk"    : fifo_clk,
             })
 
+        if dynamic_delay:
+            block.update({
+                "rx_delay"     : "DYNAMIC",
+                "delay_ena"    : delay_ena,
+                "delay_rst"    : delay_rst,
+                "delay_inc"    : delay_inc,
+            })
+        elif dpa:
+            block.update({
+                "rx_delay"     : "DPA",
+                "delay_ena"    : delay_ena,
+                "delay_rst"    : delay_rst,
+                "dpa_dbg"      : dpa_dbg,
+                "dpa_lock"     : dpa_lock,
+            })
+        else:
+            block.update({
+                "rx_delay"     : "STATIC",
+                "delay"        : delay,
+            })
 
         platform.toolchain.ifacewriter.blocks.append(block)
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
@@ -180,10 +219,13 @@ class EfinixSerdesBuffer(LiteXModule):
         ]
 
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk):
+    def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None):
         
         assert len(rx_p) == len(rx_n)
         assert len(rx_p) == 4
+
+        if delay is None:
+            delay = [0, 0, 0, 0]
 
         _data = Array([Signal(len(data)*2) for i in range(len(rx_p))])
 
@@ -199,17 +241,17 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         data_2_sum = Signal(max=11)
         data_2_eq = Signal(10)
 
-        up_level = 2
-        down_level = 2
+        up_level = 1
+        down_level = 1
 
         up = Signal()
         down = Signal()
 
-        staic_delay = 4
+        staic_delay = 8
 
         for i in range(4):
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], staic_delay * i, clk, fast_clk, rx_term=(i == 0))
-            self.submodules += serdesrx
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], (staic_delay * i) + delay[i], clk, fast_clk, rx_term=True) #(i == 0))
+            setattr(self, f"serdesrx{i}", serdesrx)
 
             self.comb += _data[i][:10].eq(data_before[i])
 
@@ -323,6 +365,8 @@ class EfinixSerdesClocking(LiteXModule):
         pll.create_clkout(self.cd_eth_rx,              clk_freq)
         pll.create_clkout(self.cd_eth_trx_fast,        fast_clk_freq, phase=90)
 
+        self.comb += pll.reset.eq(ResetSignal("sys"))
+
 class Decoder8b10bChecker(LiteXModule):
     def __init__(self, data_in, valid):
 
@@ -391,10 +435,10 @@ from liteeth.phy.pcs_1000basex import *
 class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
     dw          = 8
     linerate    = 1.25e9
-    rx_clk_freq = 150e6
+    rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     with_preamble_crc = True
-    def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None):
+    def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None):
         self.pcs = pcs = PCS(lsb_first=True)
 
         self.sink    = pcs.sink
@@ -409,7 +453,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         else:
             self.crg = crg
 
-        self.tx = tx = EfinixSerdesDiffTx(
+        self.tx = EfinixSerdesDiffTx(
             pcs.tbi_tx,
             pads.tx_p,
             pads.tx_n,
@@ -417,7 +461,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             self.crg.cd_eth_trx_fast.clk,
         )
 
-        self.rx = rx = ClockDomainsRenamer("eth_rx")(EfinixSerdesDiffRxClockRecovery(
+        rx = EfinixSerdesDiffRxClockRecovery(
             pads.rx_p,
             pads.rx_n,
             pcs.tbi_rx,
@@ -425,4 +469,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             pcs.align,
             self.crg.cd_eth_rx.clk,
             self.crg.cd_eth_trx_fast.clk,
-        ))
+            delay = rx_delay,
+        )
+
+        self.rx = ClockDomainsRenamer("eth_rx")(rx)
