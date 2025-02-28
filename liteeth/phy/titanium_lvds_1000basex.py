@@ -264,8 +264,8 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         self.reducer = EfinixSerdesBuffer(data_buffer, data_buffer_len, data, data_valid, align)
 
         self.comb += [
-            data_0_eq.eq(data_0 ^ data_1[:10]),
-            data_2_eq.eq(data_2 ^ data_1[:10]),
+            data_0_eq.eq(data_0 ^ data_1),
+            data_2_eq.eq(data_2 ^ data_1),
             data_0_sum.eq(Reduce("ADD", [data_0_eq[i] for i in range(10)])),
             data_2_sum.eq(Reduce("ADD", [data_2_eq[i] for i in range(10)])),
             If((data_0_sum > data_2_sum) & (data_0_sum >= down_level),
