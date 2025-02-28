@@ -166,6 +166,12 @@ class EfinixSerdesDiffRx(LiteXModule):
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_n))
 
+class EfinixSerdesDiffRxDummy(LiteXModule):
+    def __init__(self, data):
+        self.data = Signal(10)
+
+        self.comb += data.eq(self.data)
+
 class EfinixSerdesBuffer(LiteXModule):
     def __init__(self, data_in, data_in_len, data_out, data_out_valid, align):
 
@@ -219,7 +225,7 @@ class EfinixSerdesBuffer(LiteXModule):
         ]
 
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None):
+    def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None, dummy=False):
         
         assert len(rx_p) == len(rx_n)
         assert len(rx_p) == 4
@@ -233,16 +239,26 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
 
         data_buffer_len = Signal(max=12)
         data_buffer = Signal(11)
-        data_0 = Signal(10)
         data_1 = Signal(10)
         data_2 = Signal(10)
+        data_3 = Signal(10)
+
+        data_0 = Signal(10)
+        data_4 = Signal(10)
+
+        data_1_sum = Signal(max=11)
+        data_1_eq = Signal(10)
+        data_3_sum = Signal(max=11)
+        data_3_eq = Signal(10)
 
         data_0_sum = Signal(max=11)
         data_0_eq = Signal(10)
-        data_2_sum = Signal(max=11)
-        data_2_eq = Signal(10)
+        data_4_sum = Signal(max=11)
+        data_4_eq = Signal(10)
 
         data_1_corr = Signal(10)
+        data_2_corr = Signal(10)
+        data_3_corr = Signal(10)
 
         up_level = 1
         down_level = 1
@@ -250,10 +266,10 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         up = Signal()
         down = Signal()
 
-        staic_delay = 8
+        static_delay = 8
 
         for i in range(4):
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], (staic_delay * i) + delay[i], clk, fast_clk, rx_term=True) #(i == 0))
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], (static_delay * (3-i)) + delay[i], clk, fast_clk, rx_term=True) if not dummy else EfinixSerdesDiffRxDummy(_data[i][10:])
             setattr(self, f"serdesrx{i}", serdesrx)
 
             self.comb += _data[i][:10].eq(data_before[i])
@@ -264,28 +280,36 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         self.reducer = EfinixSerdesBuffer(data_buffer, data_buffer_len, data, data_valid, align)
 
         self.comb += [
-            data_0_eq.eq(data_0 ^ data_1),
-            data_2_eq.eq(data_2 ^ data_1),
+            data_1_eq.eq(data_1 ^ data_2),
+            data_3_eq.eq(data_3 ^ data_2),
+            data_1_sum.eq(Reduce("ADD", [data_1_eq[i] for i in range(10)])),
+            data_3_sum.eq(Reduce("ADD", [data_3_eq[i] for i in range(10)])),
+            data_0_eq.eq(data_1 ^ data_0),
+            data_4_eq.eq(data_3 ^ data_4),
             data_0_sum.eq(Reduce("ADD", [data_0_eq[i] for i in range(10)])),
-            data_2_sum.eq(Reduce("ADD", [data_2_eq[i] for i in range(10)])),
-            If((data_0_sum > data_2_sum) & (data_0_sum >= down_level),
+            data_4_sum.eq(Reduce("ADD", [data_4_eq[i] for i in range(10)])),
+            If((data_1_sum > data_3_sum) & (data_1_sum >= down_level) & (data_1_sum > data_4_sum),
                 up.eq(1),
-            ).Elif((data_0_sum < data_2_sum) & (data_2_sum >= up_level),
+            ).Elif((data_1_sum < data_3_sum) & (data_3_sum >= up_level) & (data_3_sum > data_0_sum),
                 down.eq(1),
             ),
 
             data_1_corr.eq((data_0 & data_1) | (data_2 & data_1) | (data_0 & data_2)),
+            data_2_corr.eq((data_1 & data_2) | (data_3 & data_2) | (data_1 & data_3)),
+            data_3_corr.eq((data_2 & data_3) | (data_4 & data_3) | (data_2 & data_4)),
         ]
         
 
         self.fsm = fsm = FSM(reset_state="USE_2")
 
         fsm.act("USE_0",
-            data_1.eq(_data[0][1:11]),
-            data_0.eq(_data[3][0:10]),
-            data_2.eq(_data[1][1:11]),
+            data_0.eq(_data[2][0:10]),
+            data_1.eq(_data[3][0:10]),
+            data_2.eq(_data[0][1:11]),
+            data_3.eq(_data[1][1:11]),
+            data_4.eq(_data[2][1:11]),
             If(up,
-                NextValue(data_buffer, data_2),
+                NextValue(data_buffer, data_3_corr),
                 NextValue(data_buffer_len, 10),
                 NextState("USE_1"),
             ).Elif(down,
@@ -293,57 +317,63 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
                 NextValue(data_buffer_len, 11),
                 NextState("USE_3"),
             ).Else(
-                NextValue(data_buffer, data_1_corr),
+                NextValue(data_buffer, data_2_corr),
                 NextValue(data_buffer_len, 10),
             )
         )
 
         fsm.act("USE_1",
-            data_1.eq(_data[1][1:11]),
-            data_0.eq(_data[0][1:11]),
-            data_2.eq(_data[2][1:11]),
+            data_0.eq(_data[3][0:10]),
+            data_1.eq(_data[0][1:11]),
+            data_2.eq(_data[1][1:11]),
+            data_3.eq(_data[2][1:11]),
+            data_4.eq(_data[3][1:11]),
             NextValue(data_buffer_len, 10),
             If(up,
-                NextValue(data_buffer, data_2),
+                NextValue(data_buffer, data_3_corr),
                 NextState("USE_2"),
             ).Elif(down,
-                NextValue(data_buffer, data_0),
+                NextValue(data_buffer, data_1_corr),
                 NextState("USE_0"),
             ).Else(
-                NextValue(data_buffer, data_1_corr),
+                NextValue(data_buffer, data_2_corr),
             )
         )
 
         fsm.act("USE_2",
-            data_1.eq(_data[2][1:11]),
-            data_0.eq(_data[1][1:11]),
-            data_2.eq(_data[3][1:11]),
+            data_0.eq(_data[0][1:11]),
+            data_1.eq(_data[1][1:11]),
+            data_2.eq(_data[2][1:11]),
+            data_3.eq(_data[3][1:11]),
+            data_4.eq(_data[0][2:12]),
             NextValue(data_buffer_len, 10),
             If(up,
-                NextValue(data_buffer, data_2),
+                NextValue(data_buffer, data_3_corr),
                 NextState("USE_3"),
             ).Elif(down,
-                NextValue(data_buffer, data_0),
+                NextValue(data_buffer, data_1_corr),
                 NextState("USE_1"),
             ).Else(
-                NextValue(data_buffer, data_1_corr),
+                NextValue(data_buffer, data_2_corr),
             )
         )
 
         fsm.act("USE_3",
-            data_1.eq(_data[3][1:11]),
-            data_0.eq(_data[2][1:11]),
-            data_2.eq(_data[0][2:12]),
+            data_0.eq(_data[1][1:11]),
+            data_1.eq(_data[2][1:11]),
+            data_2.eq(_data[3][1:11]),
+            data_3.eq(_data[0][2:12]),
+            data_4.eq(_data[1][2:12]),
             If(up,
                 NextValue(data_buffer, _data[0][2:11]),
                 NextValue(data_buffer_len, 9),
                 NextState("USE_0"),
             ).Elif(down,
-                NextValue(data_buffer, data_0),
+                NextValue(data_buffer, data_1_corr),
                 NextValue(data_buffer_len, 10),
                 NextState("USE_2"),
             ).Else(
-                NextValue(data_buffer, data_1_corr),
+                NextValue(data_buffer, data_2_corr),
                 NextValue(data_buffer_len, 10),
             )
         )
