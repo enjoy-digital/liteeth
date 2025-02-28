@@ -242,6 +242,8 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         data_2_sum = Signal(max=11)
         data_2_eq = Signal(10)
 
+        data_1_corr = Signal(10)
+
         up_level = 1
         down_level = 1
 
@@ -270,7 +272,9 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
                 up.eq(1),
             ).Elif((data_0_sum < data_2_sum) & (data_2_sum >= up_level),
                 down.eq(1),
-            )
+            ),
+
+            data_1_corr.eq((data_0 & data_1) | (data_2 & data_1) | (data_0 & data_2)),
         ]
         
 
@@ -278,7 +282,6 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
 
         fsm.act("USE_0",
             data_1.eq(_data[0][1:11]),
-            data_1_len.eq(10),
             data_0.eq(_data[3][0:10]),
             data_2.eq(_data[1][1:11]),
             If(up,
@@ -290,14 +293,13 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
                 NextValue(data_buffer_len, 11),
                 NextState("USE_3"),
             ).Else(
-                NextValue(data_buffer, data_1),
+                NextValue(data_buffer, data_1_corr),
                 NextValue(data_buffer_len, 10),
             )
         )
 
         fsm.act("USE_1",
             data_1.eq(_data[1][1:11]),
-            data_1_len.eq(10),
             data_0.eq(_data[0][1:11]),
             data_2.eq(_data[2][1:11]),
             NextValue(data_buffer_len, 10),
@@ -308,13 +310,12 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
                 NextValue(data_buffer, data_0),
                 NextState("USE_0"),
             ).Else(
-                NextValue(data_buffer, data_1),
+                NextValue(data_buffer, data_1_corr),
             )
         )
 
         fsm.act("USE_2",
             data_1.eq(_data[2][1:11]),
-            data_1_len.eq(10),
             data_0.eq(_data[1][1:11]),
             data_2.eq(_data[3][1:11]),
             NextValue(data_buffer_len, 10),
@@ -325,13 +326,12 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
                 NextValue(data_buffer, data_0),
                 NextState("USE_1"),
             ).Else(
-                NextValue(data_buffer, data_1),
+                NextValue(data_buffer, data_1_corr),
             )
         )
 
         fsm.act("USE_3",
             data_1.eq(_data[3][1:11]),
-            data_1_len.eq(10),
             data_0.eq(_data[2][1:11]),
             data_2.eq(_data[0][2:12]),
             If(up,
@@ -343,7 +343,7 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
                 NextValue(data_buffer_len, 10),
                 NextState("USE_2"),
             ).Else(
-                NextValue(data_buffer, data_1),
+                NextValue(data_buffer, data_1_corr),
                 NextValue(data_buffer_len, 10),
             )
         )
