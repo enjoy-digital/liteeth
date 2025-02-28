@@ -231,9 +231,10 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
 
         data_before = Array([Signal(len(data)) for i in range(len(rx_p))])
 
-        data_1_len = Signal(max=12)
+        data_buffer_len = Signal(max=12)
+        data_buffer = Signal(11)
         data_0 = Signal(10)
-        data_1 = Signal(11)
+        data_1 = Signal(10)
         data_2 = Signal(10)
 
         data_0_sum = Signal(max=11)
@@ -258,7 +259,7 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             self.sync += data_before[i].eq(_data[i][10:])
 
 
-        self.reducer = EfinixSerdesBuffer(data_1, data_1_len, data, data_valid, align)
+        self.reducer = EfinixSerdesBuffer(data_buffer, data_buffer_len, data, data_valid, align)
 
         self.comb += [
             data_0_eq.eq(data_0 ^ data_1[:10]),
@@ -281,9 +282,16 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             data_0.eq(_data[3][0:10]),
             data_2.eq(_data[1][1:11]),
             If(up,
+                NextValue(data_buffer, data_2),
+                NextValue(data_buffer_len, 10),
                 NextState("USE_1"),
             ).Elif(down,
-                NextState("0_TO_3"),
+                NextValue(data_buffer, _data[3][0:11]),
+                NextValue(data_buffer_len, 11),
+                NextState("USE_3"),
+            ).Else(
+                NextValue(data_buffer, data_1),
+                NextValue(data_buffer_len, 10),
             )
         )
 
@@ -292,10 +300,15 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             data_1_len.eq(10),
             data_0.eq(_data[0][1:11]),
             data_2.eq(_data[2][1:11]),
+            NextValue(data_buffer_len, 10),
             If(up,
+                NextValue(data_buffer, data_2),
                 NextState("USE_2"),
             ).Elif(down,
+                NextValue(data_buffer, data_0),
                 NextState("USE_0"),
+            ).Else(
+                NextValue(data_buffer, data_1),
             )
         )
 
@@ -304,10 +317,15 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             data_1_len.eq(10),
             data_0.eq(_data[1][1:11]),
             data_2.eq(_data[3][1:11]),
+            NextValue(data_buffer_len, 10),
             If(up,
+                NextValue(data_buffer, data_2),
                 NextState("USE_3"),
             ).Elif(down,
+                NextValue(data_buffer, data_0),
                 NextState("USE_1"),
+            ).Else(
+                NextValue(data_buffer, data_1),
             )
         )
 
@@ -317,22 +335,17 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             data_0.eq(_data[2][1:11]),
             data_2.eq(_data[0][2:12]),
             If(up,
-                NextState("3_TO_0"),
+                NextValue(data_buffer, _data[0][2:11]),
+                NextValue(data_buffer_len, 9),
+                NextState("USE_0"),
             ).Elif(down,
+                NextValue(data_buffer, data_0),
+                NextValue(data_buffer_len, 10),
                 NextState("USE_2"),
+            ).Else(
+                NextValue(data_buffer, data_1),
+                NextValue(data_buffer_len, 10),
             )
-        )
-
-        fsm.act("3_TO_0",
-            data_1.eq(_data[0][2:11]),
-            data_1_len.eq(9),
-            NextState("USE_0"),
-        )
-
-        fsm.act("0_TO_3",
-            data_1.eq(_data[3][0:11]),
-            data_1_len.eq(11),
-            NextState("USE_3"),
         )
 
 class EfinixSerdesDiffRxTestDynamic(LiteXModule):
