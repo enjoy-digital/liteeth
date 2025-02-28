@@ -33,6 +33,7 @@ class LiteEthMACSRAMWriter(LiteXModule):
         self._slot   = CSRStatus(slotbits)
         self._length = CSRStatus(lengthbits)
         self._errors = CSRStatus(32)
+        self._discarded = CSRStatus(32)
 
         # Optional Timestamp of the incoming packets and expose value to software.
         if timestamp is not None:
@@ -48,6 +49,7 @@ class LiteEthMACSRAMWriter(LiteXModule):
 
         write   = Signal()
         errors  = self._errors.status
+        discarded = self._discarded.status
 
         slot       = Signal(slotbits)
         length     = Signal(lengthbits)
@@ -117,6 +119,7 @@ class LiteEthMACSRAMWriter(LiteXModule):
             )
         )
         fsm.act("DISCARD",
+            NextValue(discarded, discarded + 1),
             NextValue(length, 0),
             NextState("WRITE")
         )
