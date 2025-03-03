@@ -80,7 +80,7 @@ class A7_1000BASEX(LiteXModule):
 
 
         # Work around Python's 255 argument limitation.
-        gtp_params = dict(
+        self.gtp_params = gtp_params = dict(
             # Simulation-Only Attributes
             p_SIM_RECEIVER_DETECT_PASS   = "TRUE",
             p_SIM_TX_EIDLE_DRIVE_LEVEL   = "X",
@@ -698,7 +698,6 @@ class A7_1000BASEX(LiteXModule):
             )
         else:
             raise ValueError
-        self.specials += Instance("GTPE2_CHANNEL", **gtp_params)
 
         # Get 125MHz clocks back - the GTP is outputting 62.5MHz.
         txoutclk_rebuffer = Signal()
@@ -788,6 +787,9 @@ class A7_1000BASEX(LiteXModule):
     def add_csr(self):
         self._reset = CSRStorage()
         self.comb += self.reset.eq(self._reset.storage)
+
+    def do_finalize(self):
+        self.specials += Instance("GTPE2_CHANNEL", **self.gtp_params)
 
 # A7_2500BASEX PHY ---------------------------------------------------------------------------------
 
