@@ -5,6 +5,7 @@
 # Copyright (c) 2021 David Sawatzke <d-git@sawatzke.dev>
 # Copyright (c) 2015 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2018 whitequark <whitequark@whitequark.org>
+# Copyright (c) 2025 Fin Maaß <f.maass@vogl-electronic.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import math
@@ -74,7 +75,40 @@ class LiteEthMACPaddingChecker(Module):
 
         # # #
 
-        # TODO: see if we should drop the packet when
+        # drop the packet when
         # payload size < minimum ethernet payload size
-        self.comb += sink.connect(source)
 
+        length     = Signal(max=eth_mtu)
+        length_inc = Signal(4)
+
+        # Decode Length increment from from last_be.
+        self.comb += Case(sink.last_be, {
+            0b00000001 : length_inc.eq(1),
+            0b00000010 : length_inc.eq(2),
+            0b00000100 : length_inc.eq(3),
+            0b00001000 : length_inc.eq(4),
+            0b00010000 : length_inc.eq(5),
+            0b00100000 : length_inc.eq(6),
+            0b01000000 : length_inc.eq(7),
+            "default"  : length_inc.eq(dw//8)
+        })
+
+        self.sync += [
+            If(sink.valid & sink.ready,
+                If(sink.last,
+                    length.eq(0),
+                ).Else(
+                    length.eq(length + length_inc)
+                )
+            )
+        ]
+
+        self.comb += [
+            sink.connect(source, omit={"error"}),
+
+            If(sink.valid & sink.last & ((length + length_inc) < packet_min_length),
+                source.error.eq(Replicate(1, dw//8)),
+            ).Else(
+                source.error.eq(sink.error),
+            )
+        ]
