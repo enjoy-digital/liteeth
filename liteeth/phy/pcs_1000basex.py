@@ -14,6 +14,7 @@ from litex.gen.genlib.misc import WaitTimer
 from litex.gen.genlib.cdc import BusSynchronizer
 
 from litex.soc.interconnect import stream
+from litex.soc.interconnect.csr_eventmanager import *
 from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
 from liteeth.common import *
@@ -263,7 +264,8 @@ class PCSRX(LiteXModule):
 # PCS ----------------------------------------------------------------------------------------------
 
 class PCS(LiteXModule):
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3):
+    autocsr_exclude = {"ev"}
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, with_csr=False):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -283,7 +285,7 @@ class PCS(LiteXModule):
         # Signals.
         # --------
         config_empty = Signal()
-        is_sgmii     = Signal()
+        self.is_sgmii = is_sgmii = Signal()
         linkdown     = Signal()
         autoneg_ack  = Signal()
 
@@ -405,7 +407,7 @@ class PCS(LiteXModule):
         )
         # LINK_OK.
         fsm.act("RUNNING",
-            self.link_up.eq(1),
+            self.link_up.eq(~linkdown),
             If((checker_tick & checker_error) | linkdown,
                 self.restart.eq(1),
                 NextState("AUTONEG-BREAKLINK")
@@ -439,4 +441,31 @@ class PCS(LiteXModule):
                 ),
                 self.lp_abi.i.eq(self.rx.config_reg)
             )
+        ]
+
+        if with_csr:
+            self.add_csr()
+
+    def add_csr(self):
+        self.status = CSRStatus(fields=[
+            CSRField("link_up", description="Link is up.", offset=0),
+            CSRField("is_sgmii", description="SGMII in-use.", offset=1),
+            CSRField("config_reg", size=16, description="config_reg", offset=16),
+        ])
+        
+        self.lp_abi_csr = BusSynchronizer(16, "eth_rx", "sys")
+
+        self.ev           = EventManager()
+        self.ev.link      = EventSourceProcess(edge="any")
+        self.ev.finalize()
+
+        self.comb += [
+            self.lp_abi_csr.i.eq(self.lp_abi.i),
+            self.status.fields.config_reg.eq(self.lp_abi_csr.o)
+        ]
+
+        self.sync += [
+            self.status.fields.link_up.eq(self.link_up),
+            self.status.fields.is_sgmii.eq(self.is_sgmii),
+            self.ev.link.trigger.eq(self.link_up),
         ]
