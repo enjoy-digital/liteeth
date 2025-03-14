@@ -348,12 +348,7 @@ class PCS(LiteXModule):
             If(~config_empty,
                 self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
                 self.tx.config_reg[5].eq(~is_sgmii),                    # 1000BASE-X: Full-duplex.
-                If(is_sgmii,
-                    self.tx.config_reg[10:12].eq(self.lp_abi.o[10:12]), # SGMII: Speed.
-                ),
-                self.tx.config_reg[12].eq(is_sgmii),                    # SGMII: Full-duplex.
                 self.tx.config_reg[14].eq(autoneg_ack),                 # SGMII/1000BASE-X: Acknowledge Bit.
-                self.tx.config_reg[15].eq(is_sgmii & self.link_up),     # SGMII: Link-up.
             )
         ]
 
