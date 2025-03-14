@@ -473,11 +473,12 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
     tx_clk_freq = 125e6
     with_preamble_crc = True
     def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None, rx_term=True):
-        self.pcs = pcs = PCS(lsb_first=True)
+        self.pcs = pcs = PCS(lsb_first=True, with_csr=True)
 
         self.sink    = pcs.sink
         self.source  = pcs.source
         self.link_up = pcs.link_up
+        self.ev      = pcs.ev
 
         if crg is None:
             assert refclk is not None
