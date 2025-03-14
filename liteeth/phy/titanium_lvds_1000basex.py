@@ -285,7 +285,7 @@ class EfinixSerdesBuffer(LiteXModule):
         ]
 
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None, dummy=False):
+    def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None, rx_term=True, dummy=False):
         
         assert len(rx_p) == len(rx_n)
         assert len(rx_p) == 4
@@ -324,7 +324,7 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         for i in range(4):
             data_before = Signal(len(data))
                                         
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], (static_delay * (3-i)) + delay[i], clk, fast_clk, rx_term=True) if not dummy else EfinixSerdesDiffRxDummy(_data[i][10:])
+            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], (static_delay * (3-i)) + delay[i], clk, fast_clk, rx_term=rx_term) if not dummy else EfinixSerdesDiffRxDummy(_data[i][10:])
             setattr(self, f"serdesrx{i}", serdesrx)
 
             self.comb += _data[i][:10].eq(data_before)
@@ -472,7 +472,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     with_preamble_crc = True
-    def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None):
+    def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None, rx_term=True):
         self.pcs = pcs = PCS(lsb_first=True)
 
         self.sink    = pcs.sink
@@ -502,6 +502,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             self.crg.cd_eth_rx.clk,
             self.crg.cd_eth_trx_fast.clk,
             delay = rx_delay,
+            rx_term = rx_term,
         )
 
         self.rx = ClockDomainsRenamer("eth_rx")(rx)
