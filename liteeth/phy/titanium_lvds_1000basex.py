@@ -286,6 +286,7 @@ class EfinixSerdesBuffer(LiteXModule):
             )
         ]
 
+@ResetInserter()
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
     def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None, rx_term=True, dummy=False):
         
@@ -507,6 +508,8 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             delay = rx_delay,
             rx_term = rx_term,
         )
+
+        self.comb += rx.reset.eq(pcs.restart)
 
         self.rx = ClockDomainsRenamer("eth_rx")(rx)
 
