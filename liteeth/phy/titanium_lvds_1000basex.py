@@ -474,7 +474,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     with_preamble_crc = True
-    def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None, rx_term=True):
+    def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None, with_i2c=True, rx_term=True):
         self.pcs = pcs = PCS(lsb_first=True, with_csr=True)
 
         self.sink    = pcs.sink
@@ -509,3 +509,8 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         )
 
         self.rx = ClockDomainsRenamer("eth_rx")(rx)
+
+        if with_i2c and hasattr(pads, "scl") and hasattr(pads, "sda"):
+            from litei2c import LiteI2C
+
+            self.i2c = LiteI2C(LiteXContext.top.sys_clk_freq, pads=pads)
