@@ -479,6 +479,9 @@ class PCS(LiteXModule):
         self.ev.link      = EventSourceProcess(edge="any")
         self.ev.finalize()
 
+        delay_max=int(LiteXContext.top.sys_clk_freq)
+        link_up_delay_counter = Signal(bits_for(delay_max), reset=delay_max)
+
         self.comb += [
             self.lp_abi_csr.i.eq(self.lp_abi.i),
             self.status.fields.config_reg.eq(self.lp_abi_csr.o)
@@ -487,5 +490,25 @@ class PCS(LiteXModule):
         self.sync += [
             self.status.fields.link_up.eq(self.link_up),
             self.status.fields.is_sgmii.eq(self.is_sgmii),
-            self.ev.link.trigger.eq(self.link_up),
         ]
+
+        self.fsm = fsm = FSM()
+
+        fsm.act("DOWN",
+            If(self.link_up,
+                NextValue(link_up_delay_counter, link_up_delay_counter.reset),
+                NextState("UP")
+            )
+        )
+
+        fsm.act("UP",
+            If(~self.link_up,
+                NextState("DOWN"),
+            ).Else(
+                If(link_up_delay_counter == 0,
+                    self.ev.link.trigger.eq(1),
+                ).Else(
+                    NextValue(link_up_delay_counter, link_up_delay_counter - 1)
+                )
+            )
+        )
