@@ -238,8 +238,10 @@ class EfinixSerdesBuffer(LiteXModule):
         self.aligner = aligner = EfinixAligner(align)
 
         data_out_aligner = Signal(30)
-        
-        data_out_buffer_1 = Signal(3000)
+
+        # It might be possible to use a smaller buffer here.
+        # This has to be tested.        
+        data_out_buffer_1 = Signal(1000)
 
         data_out_buffer = Signal(len(data_in)+len(data_out_buffer_1))
 
