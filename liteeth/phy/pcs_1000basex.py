@@ -294,10 +294,10 @@ class PCS(LiteXModule):
 
         # Signals.
         # --------
-        config_empty = Signal()
-        self.is_sgmii = is_sgmii = Signal()
-        linkdown     = Signal()
-        autoneg_ack  = Signal()
+        self.config_empty = config_empty = Signal()
+        self.is_sgmii     = is_sgmii     = Signal()
+        self.linkdown     = linkdown     = Signal()
+        self.autoneg_ack  = autoneg_ack  = Signal()
 
         # Sink -> TX / RX -> Source.
         self.comb += [
@@ -358,9 +358,9 @@ class PCS(LiteXModule):
         # ----------
         self.comb += [
             If(~config_empty,
-                self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
-                self.tx.config_reg[5].eq(~is_sgmii),                    # 1000BASE-X: Full-duplex.
-                self.tx.config_reg[14].eq(autoneg_ack),                 # SGMII/1000BASE-X: Acknowledge Bit.
+                self.tx.config_reg[0].eq(is_sgmii),     # SGMII: SGMII in-use.
+                self.tx.config_reg[5].eq(~is_sgmii),    # 1000BASE-X: Full-duplex.
+                self.tx.config_reg[14].eq(autoneg_ack), # SGMII/1000BASE-X: Acknowledge Bit.
             )
         ]
 
@@ -458,19 +458,16 @@ class PCS(LiteXModule):
 
     def add_csr(self):
         self.status = CSRStatus(fields=[
-            CSRField("link_up", description="Link is up.", offset=0),
-            CSRField("is_sgmii", description="SGMII in-use.", offset=1),
-            CSRField("config_reg", size=16, description="config_reg", offset=16),
+            CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
+            CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
+            CSRField("config_reg", size=16, offset=16, description="config_reg"),
         ])
         
         self.lp_abi_csr = BusSynchronizer(16, "eth_rx", "sys")
 
-        self.ev           = EventManager()
-        self.ev.link      = EventSourceProcess(edge="any")
+        self.ev      = EventManager()
+        self.ev.link = EventSourceProcess(edge="any")
         self.ev.finalize()
-
-        delay_max=int(LiteXContext.top.sys_clk_freq)
-        link_up_delay_counter = Signal(bits_for(delay_max), reset=delay_max)
 
         self.comb += [
             self.lp_abi_csr.i.eq(self.lp_abi.i),
@@ -482,23 +479,18 @@ class PCS(LiteXModule):
             self.status.fields.is_sgmii.eq(self.is_sgmii),
         ]
 
-        self.fsm = fsm = FSM()
+        self.link_up_timer = link_up_timer = WaitTimer(int(LiteXContext.top.sys_clk_freq))
 
+        self.fsm = fsm = FSM()
         fsm.act("DOWN",
             If(self.link_up,
-                NextValue(link_up_delay_counter, link_up_delay_counter.reset),
                 NextState("UP")
             )
         )
-
         fsm.act("UP",
+            link_up_timer.wait.eq(1),
+            self.ev.link.trigger.eq(link_up_timer.done),
             If(~self.link_up,
                 NextState("DOWN"),
-            ).Else(
-                If(link_up_delay_counter == 0,
-                    self.ev.link.trigger.eq(1),
-                ).Else(
-                    NextValue(link_up_delay_counter, link_up_delay_counter - 1)
-                )
             )
         )
