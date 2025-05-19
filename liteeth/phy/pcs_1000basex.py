@@ -15,7 +15,7 @@ from litex.gen.genlib.cdc import BusSynchronizer
 
 from litex.soc.interconnect import stream
 from litex.soc.interconnect.csr_eventmanager import *
-from litex.soc.cores.code_8b10b import K, D, Encoder, DecoderComb
+from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
 from liteeth.common import *
 
@@ -178,7 +178,7 @@ class PCSRX(LiteXModule):
         self.source          = source = stream.Endpoint([("data", 8), ("error", 1)]) # Data output.
         self.input_valid     = Signal(reset=1)   # Data input valid.
 
-        self.decoder = DecoderComb(lsb_first=lsb_first) # 8b/10b Decoder.
+        self.decoder = Decoder(lsb_first=lsb_first) # 8b/10b Decoder.
 
         # # #
 
