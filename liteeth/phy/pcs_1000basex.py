@@ -278,11 +278,11 @@ class PCS(LiteXModule):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
-        self.tbi_tx = self.tx.encoder.output[0]
-        self.tbi_rx = self.rx.decoder.input
-        self.tbi_rx_valid = Signal(reset=1)
-        self.sink   = stream.Endpoint(eth_phy_description(8))
-        self.source = stream.Endpoint(eth_phy_description(8))
+        self.tbi_tx    = self.tx.encoder.output[0]
+        self.tbi_rx    = self.rx.decoder.input
+        self.tbi_rx_ce = self.rx.decoder.ce
+        self.sink      = stream.Endpoint(eth_phy_description(8))
+        self.source    = stream.Endpoint(eth_phy_description(8))
 
         self.link_up = Signal()
         self.restart = Signal()

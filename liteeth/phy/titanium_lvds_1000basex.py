@@ -199,7 +199,7 @@ class Decoder8b10bChecker(LiteXModule):
 class EfinixAligner(LiteXModule):
     def __init__(self, align):
         self.data = data = Signal(30)
-        self.pos = pos = Signal(max=10)
+        self.pos  = pos  = Signal(max=10)
 
         valid_8b10b = Signal(10)
 
@@ -503,7 +503,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             rx_p       = pads.rx_p,
             rx_n       = pads.rx_n,
             data       = pcs.tbi_rx,
-            data_valid = pcs.tbi_rx_valid,
+            data_valid = pcs.tbi_rx_ce,
             align      = pcs.align,
             clk        = self.crg.cd_eth_rx.clk,
             fast_clk   = self.crg.cd_eth_trx_fast.clk,
