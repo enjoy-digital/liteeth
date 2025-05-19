@@ -1,3 +1,6 @@
+#
+# This file is part of LiteEth.
+#
 # Copyright (c) 2025 Fin Maaß <f.maass@vogl-electronic.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
@@ -11,6 +14,8 @@ from litex.soc.cores.code_8b10b import K, D, Decoder
 
 from litex.soc.cores.clock.efinix import TITANIUMPLL
 
+from liteeth.common import *
+from liteeth.phy.pcs_1000basex import *
 
 # Efinix Serdes Diff TX ----------------------------------------------------------------------------
 
@@ -66,7 +71,7 @@ class EfinixSerdesDiffRx(LiteXModule):
         platform = LiteXContext.platform
 
         dynamic_delay = bool(delay == "dynamic")
-        dpa = bool(delay == "dpa")
+        dpa           = bool(delay == "dpa")
 
         # # #
 
@@ -117,20 +122,20 @@ class EfinixSerdesDiffRx(LiteXModule):
             data.eq(_data),
             ]
         block = {
-            "type"      : "LVDS",
-            "mode"      : "INPUT",
-            "rx_mode"   : "NORMAL",
-            "name"      : io_name,
-            "sig"       : _data,
-            "location"  : io_pad,
-            "size"      : len(data),
-            "slow_clk"  : clk,
-            "fast_clk"  : fast_clk,
-            "half_rate" : "1" if not dpa else "0",
-            "ena"       : _ena,
-            "rst"       : _rst,
-            "rx_voc_driver": "1",
-            "rx_term"      : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
+            "type"          : "LVDS",
+            "mode"          : "INPUT",
+            "rx_mode"       : "NORMAL",
+            "name"          : io_name,
+            "sig"           : _data,
+            "location"      : io_pad,
+            "size"          : len(data),
+            "slow_clk"      : clk,
+            "fast_clk"      : fast_clk,
+            "half_rate"     : "1" if not dpa else "0",
+            "ena"           : _ena,
+            "rst"           : _rst,
+            "rx_voc_driver" : "1",
+            "rx_term"       : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
         }
 
         if fifo_clk is not None:
@@ -143,23 +148,23 @@ class EfinixSerdesDiffRx(LiteXModule):
 
         if dynamic_delay:
             block.update({
-                "rx_delay"     : "DYNAMIC",
-                "delay_ena"    : delay_ena,
-                "delay_rst"    : delay_rst,
-                "delay_inc"    : delay_inc,
+                "rx_delay"  : "DYNAMIC",
+                "delay_ena" : delay_ena,
+                "delay_rst" : delay_rst,
+                "delay_inc" : delay_inc,
             })
         elif dpa:
             block.update({
-                "rx_delay"     : "DPA",
-                "delay_ena"    : delay_ena,
-                "delay_rst"    : delay_rst,
-                "dpa_dbg"      : dpa_dbg,
-                "dpa_lock"     : dpa_lock,
+                "rx_delay"  : "DPA",
+                "delay_ena" : delay_ena,
+                "delay_rst" : delay_rst,
+                "dpa_dbg"   : dpa_dbg,
+                "dpa_lock"  : dpa_lock,
             })
         else:
             block.update({
-                "rx_delay"     : "STATIC",
-                "delay"        : delay,
+                "rx_delay" : "STATIC",
+                "delay"    : delay,
             })
 
         platform.toolchain.ifacewriter.blocks.append(block)
@@ -213,15 +218,15 @@ class Decoder8b10bIdleChecker(LiteXModule):
 
         self.is_i2 = is_i2 = Signal()
 
-        self.decoder1= decoder1 = Decoder(lsb_first=True)
-        self.decoder2= decoder2 = Decoder(lsb_first=True)
+        self.decoder1 = decoder1 = Decoder(lsb_first=True)
+        self.decoder2 = decoder2 = Decoder(lsb_first=True)
 
         self.comb += [
             decoder1.input.eq(data_in[:10]),
             decoder2.input.eq(data_in[10:20]),
         ]
 
-        first_ok = decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
+        first_ok  =  decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
         second_ok = ~decoder2.k & ~decoder2.invalid & (decoder2.d == D(16, 2))
         
         self.comb += is_i2.eq(first_ok & second_ok)
@@ -249,7 +254,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         self.idle_remover = Decoder8b10bIdleChecker(data_out_aligner[10:])
         
-        cases_buffer = {}
+        cases_buffer    = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
         for i in range(1,len(data_out_buffer)):
             cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
@@ -299,30 +304,30 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
         _data = [Signal(len(data)*2) for _ in range(len(rx_p))]
 
         data_buffer_len = Signal(max=12)
-        data_buffer = Signal(11)
-        data_1 = Signal(10)
-        data_2 = Signal(10)
-        data_3 = Signal(10)
+        data_buffer     = Signal(11)
+        data_1          = Signal(10)
+        data_2          = Signal(10)
+        data_3          = Signal(10)
 
-        data_0 = Signal(10)
-        data_4 = Signal(10)
+        data_0          = Signal(10)
+        data_4          = Signal(10)
 
-        data_1_sum = Signal(max=11)
-        data_1_eq = Signal(10)
-        data_3_sum = Signal(max=11)
-        data_3_eq = Signal(10)
+        data_1_sum      = Signal(max=11)
+        data_1_eq       = Signal(10)
+        data_3_sum      = Signal(max=11)
+        data_3_eq       = Signal(10)
 
-        data_1_corr = Signal(10)
-        data_2_corr = Signal(10)
-        data_3_corr = Signal(10)
+        data_1_corr     = Signal(10)
+        data_2_corr     = Signal(10)
+        data_3_corr     = Signal(10)
 
-        up_level = 1
-        down_level = 1
+        up_level        = 1
+        down_level      = 1
 
-        up = Signal()
-        down = Signal()
+        up              = Signal()
+        down            = Signal()
 
-        static_delay = 8
+        static_delay    = 8
 
         for i in range(4):
             data_before = Signal(len(data))
@@ -438,9 +443,9 @@ class EfinixSerdesClocking(LiteXModule):
     def __init__(self, refclk, refclk_freq):
         # Parameters.
         # -----------
-        platform         = LiteXContext.platform
-        fast_clk_freq    = 625e6
-        clk_freq = fast_clk_freq / 5
+        platform      = LiteXContext.platform
+        fast_clk_freq = 625e6
+        clk_freq      = fast_clk_freq / 5
 
         assert platform.family in ["Titanium", "Topaz"]
 
@@ -449,31 +454,28 @@ class EfinixSerdesClocking(LiteXModule):
 
         # Multiply the clock provided by Master with a PLL.
 
-        self.cd_eth_tx   = ClockDomain()
-        self.cd_eth_rx   = ClockDomain()
+        self.cd_eth_tx       = ClockDomain()
+        self.cd_eth_rx       = ClockDomain()
         self.cd_eth_trx_fast = ClockDomain()
 
         # PLL.
         self.pll = pll = TITANIUMPLL(platform)
         pll.register_clkin(refclk, freq=refclk_freq)
 
-        pll.create_clkout(None,                        refclk_freq)
-        pll.create_clkout(self.cd_eth_tx,              clk_freq)
-        pll.create_clkout(self.cd_eth_rx,              clk_freq)
-        pll.create_clkout(self.cd_eth_trx_fast,        fast_clk_freq, phase=90)
+        pll.create_clkout(None,                 refclk_freq)
+        pll.create_clkout(self.cd_eth_tx,       clk_freq)
+        pll.create_clkout(self.cd_eth_rx,       clk_freq)
+        pll.create_clkout(self.cd_eth_trx_fast, fast_clk_freq, phase=90)
 
         self.comb += pll.reset.eq(ResetSignal("sys"))
 
-from liteeth.common import *
-from liteeth.phy.pcs_1000basex import *
-
-# V7_1000BASEX PHY ---------------------------------------------------------------------------------
+# EfinixTitaniumLVDS_1000BASEX PHY -----------------------------------------------------------------
 
 class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
-    dw          = 8
-    linerate    = 1.25e9
-    rx_clk_freq = 125e6
-    tx_clk_freq = 125e6
+    dw                = 8
+    linerate          = 1.25e9
+    rx_clk_freq       = 125e6
+    tx_clk_freq       = 125e6
     with_preamble_crc = True
     def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None, with_i2c=True, rx_term=True):
         self.pcs = pcs = PCS(lsb_first=True, with_csr=True)
@@ -498,15 +500,15 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         )
 
         rx = EfinixSerdesDiffRxClockRecovery(
-            pads.rx_p,
-            pads.rx_n,
-            pcs.tbi_rx,
-            pcs.tbi_rx_valid,
-            pcs.align,
-            self.crg.cd_eth_rx.clk,
-            self.crg.cd_eth_trx_fast.clk,
-            delay = rx_delay,
-            rx_term = rx_term,
+            rx_p       = pads.rx_p,
+            rx_n       = pads.rx_n,
+            data       = pcs.tbi_rx,
+            data_valid = pcs.tbi_rx_valid,
+            align      = pcs.align,
+            clk        = self.crg.cd_eth_rx.clk,
+            fast_clk   = self.crg.cd_eth_trx_fast.clk,
+            delay      = rx_delay,
+            rx_term    = rx_term,
         )
 
         self.comb += rx.reset.eq(pcs.restart)
