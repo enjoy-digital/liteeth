@@ -7,7 +7,7 @@ from litex.gen import *
 
 from litex.build.io import *
 
-from litex.soc.cores.code_8b10b import K, D, DecoderComb
+from litex.soc.cores.code_8b10b import K, D, Decoder
 
 from litex.soc.cores.clock.efinix import TITANIUMPLL
 
@@ -213,8 +213,8 @@ class Decoder8b10bIdleChecker(LiteXModule):
 
         self.is_i2 = is_i2 = Signal()
 
-        self.decoder1= decoder1 = DecoderComb(lsb_first=True)
-        self.decoder2= decoder2 = DecoderComb(lsb_first=True)
+        self.decoder1= decoder1 = Decoder(lsb_first=True)
+        self.decoder2= decoder2 = Decoder(lsb_first=True)
 
         self.comb += [
             decoder1.input.eq(data_in[:10]),
