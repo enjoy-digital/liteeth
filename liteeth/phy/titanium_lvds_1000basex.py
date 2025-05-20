@@ -175,28 +175,28 @@ class EfinixSerdesDiffRx(LiteXModule):
 
 class Decoder8b10bChecker(LiteXModule):
     def __init__(self, data_in, valid):
+        # Symbol popcounts must be 4/5/6 ones.
+        sym0_ones = Signal(4)
+        sym1_ones = Signal(4)
+        self.comb += [
+            sym0_ones.eq(Reduce("ADD", data_in[ 0:10])),
+            sym1_ones.eq(Reduce("ADD", data_in[10:20])),
+        ]
+        sym0_bad = (sym0_ones < 4) | (sym0_ones > 6)
+        sym1_bad = (sym1_ones < 4) | (sym1_ones > 6)
 
-        ones_1 = Signal(4, reset_less=True)
-        self.comb += ones_1.eq(Reduce("ADD", [data_in[i] for i in range(10)]))
-        invalid_1 = (ones_1 != 4) & (ones_1 != 5) & (ones_1 != 6)
+        # Running disparity window: total ones must be 9/10/11.
+        both_ones = Signal(5)
+        self.comb += both_ones.eq(sym0_ones + sym1_ones)
+        rd_bad = (both_ones < 9) | (both_ones > 11)
 
-        ones_2 = Signal(4, reset_less=True)
-        self.comb += ones_2.eq(Reduce("ADD", [data_in[i] for i in range(10,20)]))
-        invalid_2 = (ones_2 != 4) & (ones_2 != 5) & (ones_2 != 6)
+        # Forbid comma (K.28) in second symbol.
+        sym1_msb  = Cat(*reversed(data_in[10:20]))   # bit-reverse
+        code6b    = sym1_msb[4:]                     # bits 9..4
+        comma_bad = (code6b != 0b001111) & (code6b != 0b110000)
 
-        ones_3 = Signal(5, reset_less=True)
-        self.comb += ones_3.eq(ones_1 + ones_2)
-        invalid_3 = (ones_3 != 9) & (ones_3 != 10) & (ones_3 != 11)
-
-        input_msb_first = Signal(10)
-        for i in range(10):
-            self.comb += input_msb_first[i].eq(data_in[19-i])
-
-        code6b = input_msb_first[4:]
-
-        invalid_4 = (code6b != 0b001111) & (code6b != 0b110000)
-        
-        self.comb += valid.eq(~(invalid_1 | invalid_2 | invalid_3 | invalid_4))
+        # Output: 1 when everything looks OK
+        self.comb += valid.eq(~(sym0_bad | sym1_bad | rd_bad | comma_bad))
 
 # Efinix Aligner -----------------------------------------------------------------------------------
 
