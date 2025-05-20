@@ -171,6 +171,8 @@ class EfinixSerdesDiffRx(LiteXModule):
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_n))
 
+# Decoder 8b10b Checker ----------------------------------------------------------------------------
+
 class Decoder8b10bChecker(LiteXModule):
     def __init__(self, data_in, valid):
 
@@ -196,6 +198,8 @@ class Decoder8b10bChecker(LiteXModule):
         
         self.comb += valid.eq(~(invalid_1 | invalid_2 | invalid_3 | invalid_4))
 
+# Efinix Aligner -----------------------------------------------------------------------------------
+
 class EfinixAligner(LiteXModule):
     def __init__(self, align):
         self.data = data = Signal(30)
@@ -213,17 +217,19 @@ class EfinixAligner(LiteXModule):
                 )
             ]
 
+# Decoder 8b10b Idle Checker -----------------------------------------------------------------------
+
 class Decoder8b10bIdleChecker(LiteXModule):
     def __init__(self, data_in):
 
         self.is_i2 = is_i2 = Signal()
 
-        self.decoder1 = decoder1 = Decoder(lsb_first=True)
-        self.decoder2 = decoder2 = Decoder(lsb_first=True)
+        self.decoder1 = decoder1 = Decoder(lsb_first=True) # FIXME: Adapt logic to Decoder instead of DecoderComb.
+        self.decoder2 = decoder2 = Decoder(lsb_first=True) # FIXME: Adapt logic to Decoder instead of DecoderComb.
 
         self.comb += [
             decoder1.input.eq(data_in[:10]),
-            decoder2.input.eq(data_in[10:20]),
+            decoder2.input.eq(data_in[10:]),
         ]
 
         first_ok  =  decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
@@ -231,11 +237,15 @@ class Decoder8b10bIdleChecker(LiteXModule):
         
         self.comb += is_i2.eq(first_ok & second_ok)
 
+# Efinix Serdes Diff Rx Dummy ----------------------------------------------------------------------
+
 class EfinixSerdesDiffRxDummy(LiteXModule):
     def __init__(self, data):
         self.data = Signal(10)
 
         self.comb += data.eq(self.data)
+
+# Efinix Serdes Buffer -----------------------------------------------------------------------------
 
 class EfinixSerdesBuffer(LiteXModule):
     def __init__(self, data_in, data_in_len, data_out, data_out_valid, align):
@@ -290,6 +300,8 @@ class EfinixSerdesBuffer(LiteXModule):
                 )
             )
         ]
+
+# Efinix Serdes Diff RX Clock Recovery -------------------------------------------------------------
 
 @ResetInserter()
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
@@ -487,16 +499,19 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
 
         if crg is None:
             assert refclk is not None
-            self.crg = EfinixSerdesClocking(refclk, refclk_freq)
+            self.crg = EfinixSerdesClocking(
+                refclk      = refclk,
+                refclk_freq = refclk_freq,
+            )
         else:
             self.crg = crg
 
         self.tx = EfinixSerdesDiffTx(
-            pcs.tbi_tx,
-            pads.tx_p,
-            pads.tx_n,
-            self.crg.cd_eth_tx.clk,
-            self.crg.cd_eth_trx_fast.clk,
+            data     = pcs.tbi_tx,
+            tx_p     = pads.tx_p,
+            tx_n     = pads.tx_n,
+            clk      = self.crg.cd_eth_tx.clk,
+            fast_clk = self.crg.cd_eth_trx_fast.clk,
         )
 
         rx = EfinixSerdesDiffRxClockRecovery(
