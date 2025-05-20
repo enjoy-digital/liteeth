@@ -340,9 +340,20 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
 
         for i in range(4):
             data_before = Signal(len(data))
-                                        
-            serdesrx = EfinixSerdesDiffRx(rx_p[i], rx_n[i], _data[i][10:], (static_delay * (3-i)) + delay[i], clk, fast_clk, rx_term=rx_term) if not dummy else EfinixSerdesDiffRxDummy(_data[i][10:])
-            setattr(self, f"serdesrx{i}", serdesrx)
+
+            if dummy:
+                serdesrx = EfinixSerdesDiffRxDummy(_data[i][10:])
+            else:
+                serdesrx = EfinixSerdesDiffRx(
+                    rx_p     = rx_p[i],
+                    rx_n     = rx_n[i],
+                    data     = _data[i][10:],
+                    delay    = (static_delay * (3-i)) + delay[i],
+                    clk      = clk,
+                    fast_clk = fast_clk,
+                    rx_term  = rx_term,
+                )
+            self.add_module(name=f"serdesrx{i}", module=serdesrx)
 
             self.comb += _data[i][:10].eq(data_before)
 
