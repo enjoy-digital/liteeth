@@ -203,19 +203,16 @@ class Decoder8b10bChecker(LiteXModule):
 class EfinixAligner(LiteXModule):
     def __init__(self, align):
         self.data = data = Signal(30)
-        self.pos  = pos  = Signal(max=10)
+        self.pos  = pos  = Signal(4)
 
-        valid_8b10b = Signal(10)
+        # # #
 
-        for i in range(10):
-            checker = Decoder8b10bChecker(data[i:20+i], valid_8b10b[i])
+        # Create 10 overlapping checkers; highest valid offset wins.
+        for off in range(10):
+            valid   = Signal()
+            checker = Decoder8b10bChecker(data[off:20+off], valid)
             self.submodules += checker
-
-            self.sync += [
-                If(align & valid_8b10b[i],
-                    pos.eq(i),
-                )
-            ]
+            self.sync += If(align & valid, pos.eq(off))
 
 # Decoder 8b10b Idle Checker -----------------------------------------------------------------------
 
