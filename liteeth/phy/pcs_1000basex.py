@@ -55,7 +55,7 @@ SGMII_100MBPS_SPEED  = 0b01
 SGMII_10MBPS_SPEED   = 0b00
 
 class PCSSGMIITimer(LiteXModule):
-    def __init__(self, speed):
+    def __init__(self, speed, valid=True):
         self.enable = Signal()
         self.done   = Signal()
 
@@ -64,13 +64,16 @@ class PCSSGMIITimer(LiteXModule):
         count = Signal(max=100)
         self.comb += self.done.eq(count == 0)
         self.sync += [
-            count.eq(count - 1),
-            If(~self.enable | self.done,
-                Case(speed, {
-                    SGMII_10MBPS_SPEED   : count.eq(99),
-                    SGMII_100MBPS_SPEED  : count.eq(9),
-                    SGMII_1000MBPS_SPEED : count.eq(0),
-                })
+            If(valid,
+                If(~self.enable | self.done,
+                    Case(speed, {
+                        SGMII_10MBPS_SPEED   : count.eq(99),
+                        SGMII_100MBPS_SPEED  : count.eq(9),
+                        SGMII_1000MBPS_SPEED : count.eq(0),
+                    })
+                ).Else(
+                    count.eq(count - 1),
+                )
             )
         ]
 
@@ -181,15 +184,16 @@ class PCSRX(LiteXModule):
         # Signals.
         # --------
         count = Signal() # Byte counter for config register.
+        input_valid = self.decoder.valid
 
         # SGMII Timer.
         # ------------
-        self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed)
+        self.timer = timer = PCSSGMIITimer(speed=self.sgmii_speed, valid=input_valid)
 
         # Buffer.
         # -------
         self.buffer = buffer = stream.Buffer([("data", 8)], pipe_valid=True, pipe_ready=False)
-        self.comb += If(timer.done,
+        self.comb += If(timer.done & input_valid,
             buffer.source.connect(source, omit={"last", "error"}),
             source.last.eq(buffer.source.valid & ~buffer.sink.valid), # Last when next is not valid.
         )
@@ -199,7 +203,7 @@ class PCSRX(LiteXModule):
         self.fsm = fsm = FSM()
         fsm.act("START",
             # Wait for a K-character.
-            If(self.decoder.k,
+            If(input_valid & self.decoder.k,
                 # K-character is Config or Idle K28.5.
                 If(self.decoder.d == K(28, 5),
                     NextValue(count, 0),
@@ -215,54 +219,60 @@ class PCSRX(LiteXModule):
             )
         )
         fsm.act("CONFIG-D-OR-IDLE",
-            If(~self.decoder.k & ~self.decoder.invalid,
-                # Check for Configuration Word.
-                If((self.decoder.d == D(21, 5)) | # /C1/.
-                   (self.decoder.d == D( 2, 2)),  # /C2/.
-                    self.seen_valid_ci.eq(1),
-                    NextState("CONFIG-REG")
-                ),
-                # Check for Idle Word.
-                If((self.decoder.d == D( 5, 6)) | # /I1/.
-                   (self.decoder.d == D(16, 2)),  # /I2/.
-                    self.seen_valid_ci.eq(1),
-                    NextState("START")
+            If(input_valid,
+                If(~self.decoder.k & ~self.decoder.invalid,
+                    # Check for Configuration Word.
+                    If((self.decoder.d == D(21, 5)) | # /C1/.
+                       (self.decoder.d == D( 2, 2)),  # /C2/.
+                        self.seen_valid_ci.eq(1),
+                        NextState("CONFIG-REG")
+                    ),
+                    # Check for Idle Word.
+                    If((self.decoder.d == D( 5, 6)) | # /I1/.
+                       (self.decoder.d == D(16, 2)),  # /I2/.
+                        self.seen_valid_ci.eq(1),
+                        NextState("START")
+                    )
+                ).Else(
+                    NextState("ERROR"),
                 )
-            ).Else(
-                NextState("ERROR"),
             )
         )
         fsm.act("CONFIG-REG",
-            If(~self.decoder.k & ~self.decoder.invalid,
-                # Receive for Configuration Register.
-                NextValue(count, count + 1),
-                Case(count, {
-                    0b0 : NextValue(self.config_reg[:8], self.decoder.d), # LSB.
-                    0b1 : NextValue(self.config_reg[8:], self.decoder.d), # MSB.
-                }),
-                If(count == (2 - 1),
-                    self.seen_config_reg.eq(1),
-                    NextState("START")
+            If(input_valid,
+                If(~self.decoder.k & ~self.decoder.invalid,
+                    # Receive for Configuration Register.
+                    NextValue(count, count + 1),
+                    Case(count, {
+                        0b0 : NextValue(self.config_reg[:8], self.decoder.d), # LSB.
+                        0b1 : NextValue(self.config_reg[8:], self.decoder.d), # MSB.
+                    }),
+                    If(count == (2 - 1),
+                        self.seen_config_reg.eq(1),
+                        NextState("START")
+                    )
+                ).Else(
+                    NextState("ERROR"),
                 )
-            ).Else(
-                NextState("ERROR"),
             )
         )
         fsm.act("DATA",
-            If(~self.decoder.k & ~self.decoder.invalid,
-                # Receive Data.
-                timer.enable.eq(1),
-                buffer.sink.valid.eq(timer.done),
-                buffer.sink.data.eq(self.decoder.d),
-            ).Elif(self.decoder.k & (self.decoder.d == K(29, 7)) & ~self.decoder.invalid,
-                # K-character is End-of-packet /S/.
-                NextState("START"),
-            ).Else(
-                source.error.eq(1),
-                source.last.eq(1),
-                source.valid.eq(1),
-                If(source.ready,
-                   NextState("ERROR"),
+            If(input_valid,
+                If(~self.decoder.k & ~self.decoder.invalid,
+                    # Receive Data.
+                    timer.enable.eq(1),
+                    buffer.sink.valid.eq(timer.done),
+                    buffer.sink.data.eq(self.decoder.d),
+                ).Elif(self.decoder.k & (self.decoder.d == K(29, 7)) & ~self.decoder.invalid,
+                    # K-character is End-of-packet /S/.
+                    NextState("START"),
+                ).Else(
+                    source.error.eq(1),
+                    source.last.eq(1),
+                    source.valid.eq(1),
+                    If(source.ready,
+                       NextState("ERROR"),
+                    )
                 )
             )
         )
