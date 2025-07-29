@@ -240,14 +240,6 @@ class EfinixAligner(LiteXModule):
         for offset in range(10):
               self.sync += If(align & checkers[offset].valid, shift.eq(offset))
 
-# Efinix Serdes Diff Rx Dummy ----------------------------------------------------------------------
-
-class EfinixSerdesDiffRxDummy(LiteXModule):
-    def __init__(self, data):
-        self.data = Signal(10)
-
-        self.comb += data.eq(self.data)
-
 # Efinix Serdes Buffer -----------------------------------------------------------------------------
 
 class EfinixSerdesBuffer(LiteXModule):
@@ -348,7 +340,11 @@ class EfinixSerdesDiffRxClockRecovery(LiteXModule):
             data_before = Signal(len(data))
 
             if dummy:
-                serdesrx = EfinixSerdesDiffRxDummy(_data[i][10:])
+                class EfinixSerdesRxDummy(LiteXModule):
+                    def __init__(self, data):
+                        self.data = Signal(10)
+                        self.comb += data.eq(self.data)
+                serdesrx = EfinixSerdesRxDummy(_data[i][10:])
             else:
                 serdesrx = EfinixSerdesDiffRx(
                     rx_p     = rx_p[i],
