@@ -158,13 +158,17 @@ class Decoder8b10bChecker(LiteXModule):
     The output *valid* is asserted when **all** criteria pass, meaning the word could be a legally
     encoded 8b/10b lane byte.
     """
-    def __init__(self, data_in, valid):
+    def __init__(self, data):
+        self.valid = Signal()
+
+        # # #
+
         # Symbol popcounts must be 4/5/6 ones.
         sym0_ones = Signal(4)
         sym1_ones = Signal(4)
         self.comb += [
-            sym0_ones.eq(Reduce("ADD", data_in[ 0:10])),
-            sym1_ones.eq(Reduce("ADD", data_in[10:20])),
+            sym0_ones.eq(Reduce("ADD", data[ 0:10])),
+            sym1_ones.eq(Reduce("ADD", data[10:20])),
         ]
         sym0_bad = (sym0_ones < 4) | (sym0_ones > 6)
         sym1_bad = (sym1_ones < 4) | (sym1_ones > 6)
@@ -175,12 +179,12 @@ class Decoder8b10bChecker(LiteXModule):
         rd_bad = (both_ones < 9) | (both_ones > 11)
 
         # Forbid comma (K.28) in second symbol.
-        sym1_msb  = Cat(*reversed(data_in[10:20]))   # bit-reverse
+        sym1_msb  = Cat(*reversed(data[10:20]))   # bit-reverse
         code6b    = sym1_msb[4:]                     # bits 9..4
         comma_bad = (code6b != 0b001111) & (code6b != 0b110000)
 
-        # Output: 1 when everything looks OK
-        self.comb += valid.eq(~(sym0_bad | sym1_bad | rd_bad | comma_bad))
+        # Set valid when everything is OK.
+        self.comb += self.valid.eq(~(sym0_bad | sym1_bad | rd_bad | comma_bad))
 
 # Decoder 8b10b Idle Checker -----------------------------------------------------------------------
 
@@ -191,7 +195,7 @@ class Decoder8b10bIdleChecker(LiteXModule):
     The two embedded combinatorial decoders analyse the lower and upper 10‑bit symbols; *idle_i2* is
     asserted for one cycle when the pair is exactly “K28.5, D16.2” and both symbols are valid.
     """
-    def __init__(self, data_in):
+    def __init__(self, data):
         self.idle_i2 = Signal()
 
         # # #
@@ -199,11 +203,10 @@ class Decoder8b10bIdleChecker(LiteXModule):
         # 8b10b Decoders.
         decoders = [Decoder(lsb_first=True, sync=False) for _ in range(2)]
         self.comb += [
-            decoders[0].input.eq(data_in[:10]),
-            decoders[1].input.eq(data_in[10:]),
+            decoders[0].input.eq(data[:10]),
+            decoders[1].input.eq(data[10:]),
         ]
         self.submodules += decoders
-
 
         # Idle I2 Check.
         _decoder0_k28_5 = ~decoders[0].invalid &  decoders[0].k & (decoders[0].d == K(28, 5))
@@ -229,10 +232,9 @@ class EfinixAligner(LiteXModule):
 
         # Create 10 overlapping checkers; highest valid offset wins.
         for off in range(10):
-            valid   = Signal()
-            checker = Decoder8b10bChecker(data[off:20+off], valid)
+            checker = Decoder8b10bChecker(data[off:20+off])
             self.submodules += checker
-            self.sync += If(align & valid, pos.eq(off))
+            self.sync += If(align & checker.valid, pos.eq(off))
 
 # Efinix Serdes Diff Rx Dummy ----------------------------------------------------------------------
 
@@ -259,7 +261,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         buffer_pos = Signal(max=len(data_out_buffer))
 
-        self.idle_remover = Decoder8b10bIdleChecker(data_out_aligner[10:])
+        self.idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[10:])
         
         cases_buffer    = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
