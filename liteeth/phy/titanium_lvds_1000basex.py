@@ -148,6 +148,16 @@ class EfinixSerdesDiffRx(LiteXModule):
 # Decoder 8b10b Checker ----------------------------------------------------------------------------
 
 class Decoder8b10bChecker(LiteXModule):
+    """
+    Fast plausibility checker for a 20‑bit word (two 10‑bit symbols).
+
+    * Verifies each symbol’s pop‑count (must contain 4–6 ones).
+    * Checks combined running‑disparity window (total ones 9–11).
+    * Disallows a comma /K28/ character in the **second** symbol.
+
+    The output *valid* is asserted when **all** criteria pass, meaning the word could be a legally
+    encoded 8b/10b lane byte.
+    """
     def __init__(self, data_in, valid):
         # Symbol popcounts must be 4/5/6 ones.
         sym0_ones = Signal(4)
@@ -175,6 +185,12 @@ class Decoder8b10bChecker(LiteXModule):
 # Decoder 8b10b Idle Checker -----------------------------------------------------------------------
 
 class Decoder8b10bIdleChecker(LiteXModule):
+    """
+    Detects the /I2/ idle ordered set (K28.5 followed by D16.2).
+
+    The two embedded combinatorial decoders analyse the lower and upper 10‑bit symbols; *idle_i2* is
+    asserted for one cycle when the pair is exactly “K28.5, D16.2” and both symbols are valid.
+    """
     def __init__(self, data_in):
         self.idle_i2 = Signal()
 
