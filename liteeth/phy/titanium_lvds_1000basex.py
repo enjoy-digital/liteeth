@@ -81,11 +81,8 @@ class EfinixSerdesDiffTx(LiteXModule):
 # Efinix Serdes Diff RX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffRx(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, delay, clk, fast_clk, fifo_clk=None, rx_term=True, debug=False):
+    def __init__(self, rx_p, rx_n, data, delay, clk, fast_clk, rx_term=True):
         platform = LiteXContext.platform
-
-        dynamic_delay = bool(delay == "dynamic")
-        dpa           = bool(delay == "dpa")
 
         # # #
 
@@ -98,31 +95,6 @@ class EfinixSerdesDiffRx(LiteXModule):
         _ena  = platform.add_iface_io(io_name + "_ena")
         _rst  = platform.add_iface_io(io_name + "_rst")
 
-        if fifo_clk is not None:
-            self.rx_fifo_empty = rx_fifo_empty = platform.add_iface_io(io_name + "_rx_fifo_empty")
-            self.rx_fifo_rd = rx_fifo_rd = platform.add_iface_io(io_name + "_rx_fifo_rd")
-
-        if dynamic_delay or dpa:
-            self.delay_ena = delay_ena = platform.add_iface_io(io_name + "_delay_ena")
-            self.delay_rst = delay_rst = platform.add_iface_io(io_name + "_delay_rst")
-
-            if dynamic_delay:
-                self.delay_inc = delay_inc = platform.add_iface_io(io_name + "_delay_inc")
-            else:
-                self.dpa_dbg  = dpa_dbg = platform.add_iface_io(io_name + "_dpa_dbg", 6)
-                self.dpa_lock = dpa_lock = platform.add_iface_io(io_name + "_dpa_lock")
-
-                if debug:
-                    self.dpa_debug = dpa_debug = CSRStatus(fields=[
-                        CSRField("dpa_dbg", size=6, description="DPA Debug", offset=0),
-                        CSRField("dpa_lock", size=1, description="DPA Lock", offset=8),
-                    ])
-
-                    self.comb += [
-                        dpa_debug.fields.dpa_dbg.eq(dpa_dbg),
-                        dpa_debug.fields.dpa_lock.eq(dpa_lock),
-                    ]
-
         assert platform.family in ["Titanium", "Topaz"]
         # _p has _P_ and _n has _N_ followed by an optional function
         # lvds block needs _PN_
@@ -134,7 +106,7 @@ class EfinixSerdesDiffRx(LiteXModule):
             _rst.eq(0),
             _ena.eq(1),
             data.eq(_data),
-            ]
+        ]
         block = {
             "type"          : "LVDS",
             "mode"          : "INPUT",
@@ -145,41 +117,14 @@ class EfinixSerdesDiffRx(LiteXModule):
             "size"          : len(data),
             "slow_clk"      : clk,
             "fast_clk"      : fast_clk,
-            "half_rate"     : "1" if not dpa else "0",
+            "half_rate"     : "1",
             "ena"           : _ena,
             "rst"           : _rst,
             "rx_voc_driver" : "1",
             "rx_term"       : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
+            "rx_delay" : "STATIC",
+            "delay"    : delay,
         }
-
-        if fifo_clk is not None:
-            block.update({
-                "rx_fifo"       : True,
-                "rx_fifo_empty" : rx_fifo_empty,
-                "rx_fifo_rd"    : rx_fifo_rd,
-                "rx_fifoclk"    : fifo_clk,
-            })
-
-        if dynamic_delay:
-            block.update({
-                "rx_delay"  : "DYNAMIC",
-                "delay_ena" : delay_ena,
-                "delay_rst" : delay_rst,
-                "delay_inc" : delay_inc,
-            })
-        elif dpa:
-            block.update({
-                "rx_delay"  : "DPA",
-                "delay_ena" : delay_ena,
-                "delay_rst" : delay_rst,
-                "dpa_dbg"   : dpa_dbg,
-                "dpa_lock"  : dpa_lock,
-            })
-        else:
-            block.update({
-                "rx_delay" : "STATIC",
-                "delay"    : delay,
-            })
 
         platform.toolchain.ifacewriter.blocks.append(block)
         platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
