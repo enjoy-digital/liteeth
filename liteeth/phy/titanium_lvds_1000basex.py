@@ -179,8 +179,8 @@ class Decoder8b10bChecker(LiteXModule):
         rd_bad = (both_ones < 9) | (both_ones > 11)
 
         # Forbid comma (K.28) in second symbol.
-        sym1_msb  = Cat(*reversed(data[10:20]))   # bit-reverse
-        code6b    = sym1_msb[4:]                     # bits 9..4
+        sym1_msb  = Cat(*reversed(data[10:20])) # bit-reverse
+        code6b    = sym1_msb[4:]                # bits 9..4
         comma_bad = (code6b != 0b001111) & (code6b != 0b110000)
 
         # Set valid when everything is OK.
@@ -243,57 +243,81 @@ class EfinixAligner(LiteXModule):
 # Efinix Serdes Buffer -----------------------------------------------------------------------------
 
 class EfinixSerdesBuffer(LiteXModule):
-    def __init__(self, data_in, data_in_len, data_out, data_out_valid, align):
+    """
+    Elastic buffer that:
 
+    * Gathers variable‑length slices from the deserializer.
+    * Aligns them on a 10‑bit boundary (``EfinixAligner``).
+    * Strips `/I2/` idle ordered‑sets.
+    * Delivers one aligned symbol per cycle when data is ready.
+
+    Parameters:
+    - data_in        : Incoming 10‑bit slice from the deserializer.
+    - data_in_len    : Number of valid bits in *data_in* (1 – 10).
+    - data_out       : Aligned 10‑bit symbol delivered to the PCS.
+    - data_out_valid : Strobe signalling *data_out* is valid.
+    - align          : Pulse requesting the aligner to resynchronise.
+    """
+    def __init__(self, data_in, data_in_len, data_out, data_out_valid, align):
+        # Constants.
+        # ----------
+        word_bits            = 10    # Width of one aligned symbol.
+        align_window_bits    = 30    # 10 bits × 3 symbols.
+        buffer_bits          = 1000  # First‑stage FIFO depth.
+        idle_skip_symbols    = 3     # /I2/ = 3 × 10‑bit symbols.
+        idle_extra_bits      = 20    # Second symbol of /I2/ + one more word.
+
+        # Aligner.
+        # --------
         self.aligner = aligner = EfinixAligner(align)
 
-        data_out_aligner = Signal(30)
+        data_out_aligner = Signal(align_window_bits)
 
         # It might be possible to use a smaller buffer here.
-        # This has to be tested.        
-        data_out_buffer_1 = Signal(1000)
+        # This has to be tested.
+        data_out_buffer_1 = Signal(buffer_bits)
 
-        data_out_buffer = Signal(len(data_in)+len(data_out_buffer_1))
+        data_out_buffer = Signal(len(data_in) + len(data_out_buffer_1))
 
         buffer_pos = Signal(max=len(data_out_buffer))
 
-        self.idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[10:])
-        
-        cases_buffer    = {}
+        self.idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
+
+        cases_buffer = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
-        for i in range(1,len(data_out_buffer)):
+        for i in range(1, len(data_out_buffer)):
             cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
 
         cases_aligner = {}
-        for i in range(10):
-            cases_aligner[i] = data_out_aligner.eq(data_out_buffer[i:30+i])
+        for i in range(word_bits):
+            cases_aligner[i] = data_out_aligner.eq(data_out_buffer[i:align_window_bits + i])
 
         self.comb += [
             Case(buffer_pos, cases_buffer),
             Case(aligner.shift, cases_aligner),
-            aligner.data.eq(data_out_buffer[10:40]),
+            aligner.data.eq(data_out_buffer[word_bits:align_window_bits + word_bits]),
         ]
 
         self.sync += [
-            If(data_in_len + buffer_pos < 10+30,
+            If(data_in_len + buffer_pos < word_bits + align_window_bits,
                 data_out.eq(0),
                 data_out_valid.eq(0),
                 buffer_pos.eq(buffer_pos + data_in_len),
 
                 data_out_buffer_1.eq(data_out_buffer[:len(data_out_buffer_1)]),
             ).Else(
-                data_out.eq(data_out_aligner[:10]),
+                data_out.eq(data_out_aligner[:word_bits]),
                 data_out_valid.eq(1),
-                If(self.idle_remover.idle_i2 & (data_in_len + buffer_pos >= 10+30 +20),
-                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out)*3)),
-
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out)*3:]),
+                If(
+                    self.idle_remover.idle_i2
+                    & (data_in_len + buffer_pos >= word_bits + align_window_bits + idle_extra_bits),
+                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out) * idle_skip_symbols)),
+                    data_out_buffer_1.eq(data_out_buffer[len(data_out) * idle_skip_symbols :]),
                 ).Else(
                     buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
-
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out):]),
-                )
-            )
+                    data_out_buffer_1.eq(data_out_buffer[len(data_out) :]),
+                ),
+            ),
         ]
 
 # Efinix Serdes Diff RX Clock Recovery -------------------------------------------------------------
