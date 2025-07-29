@@ -190,10 +190,10 @@ class Decoder8b10bChecker(LiteXModule):
 
 class Decoder8b10bIdleChecker(LiteXModule):
     """
-    Detects idle ordered sets (/I1/: K28.5 D5.6 or /I2/: K28.5 D16.2).
+    Detects the /I2/ idle ordered set (K28.5 followed by D16.2).
 
     The two embedded combinatorial decoders analyse the lower and upper 10-bit symbols; *idle* is
-    asserted for one cycle when the pair is an idle set and both symbols are valid.
+    asserted for one cycle when the pair is exactly “K28.5, D16.2” and both symbols are valid.
     """
     def __init__(self, data):
         self.idle = Signal()
@@ -208,11 +208,10 @@ class Decoder8b10bIdleChecker(LiteXModule):
         ]
         self.submodules += decoders
 
-        # Idle Check (either /I1/ or /I2/).
+        # Idle I2 Check.
         _decoder0_k28_5 = ~decoders[0].invalid &  decoders[0].k & (decoders[0].d == K(28, 5))
         _decoder1_d16_2 = ~decoders[1].invalid & ~decoders[1].k & (decoders[1].d == D(16, 2))
-        _decoder1_d5_6  = ~decoders[1].invalid & ~decoders[1].k & (decoders[1].d == D(5, 6))
-        self.comb += self.idle.eq(_decoder0_k28_5 & (_decoder1_d16_2 | _decoder1_d5_6))
+        self.comb += self.idle.eq(_decoder0_k28_5 & _decoder1_d16_2)
 
 # Efinix Aligner -----------------------------------------------------------------------------------
 
@@ -249,7 +248,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
     * Gathers variable-length slices from the deserializer.
     * Aligns them on a 10-bit boundary (``EfinixAligner``).
-    * Strips /I1/ or /I2/ idle ordered-sets when buffer fill is high.
+    * Strips /I2/ idle ordered-sets when buffer fill is high.
     * Delivers one aligned symbol per cycle when data is ready.
 
     Parameters:
