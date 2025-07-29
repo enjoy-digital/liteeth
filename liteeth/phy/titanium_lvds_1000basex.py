@@ -522,17 +522,19 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
 
         # TX.
         # ---
-        self.tx = EfinixSerdesDiffTx(
+        tx = EfinixSerdesDiffTx(
             data     = pcs.tbi_tx,
             tx_p     = pads.tx_p,
             tx_n     = pads.tx_n,
             clk      = self.crg.cd_eth_tx.clk,
             fast_clk = self.crg.cd_eth_trx_fast.clk,
         )
+        self.tx = ClockDomainsRenamer("eth_tx")(tx)
+
 
         # RX.
         # ---
-        self.rx = ClockDomainsRenamer("eth_rx")(EfinixSerdesDiffRxClockRecovery(
+        rx = EfinixSerdesDiffRxClockRecovery(
             rx_p       = pads.rx_p,
             rx_n       = pads.rx_n,
             data       = pcs.tbi_rx,
@@ -542,8 +544,9 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             fast_clk   = self.crg.cd_eth_trx_fast.clk,
             delay      = rx_delay,
             rx_term    = rx_term,
-        ))
-        self.comb += self.rx.reset.eq(pcs.restart)
+        )
+        self.comb += rx.reset.eq(pcs.restart)
+        self.rx = ClockDomainsRenamer("eth_rx")(rx)
 
         # I2C.
         # ----
