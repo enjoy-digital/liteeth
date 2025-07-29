@@ -190,13 +190,13 @@ class Decoder8b10bChecker(LiteXModule):
 
 class Decoder8b10bIdleChecker(LiteXModule):
     """
-    Detects the /I2/ idle ordered set (K28.5 followed by D16.2).
+    Detects idle ordered sets (/I1/: K28.5 D5.6 or /I2/: K28.5 D16.2).
 
-    The two embedded combinatorial decoders analyse the lower and upper 10‑bit symbols; *idle_i2* is
-    asserted for one cycle when the pair is exactly “K28.5, D16.2” and both symbols are valid.
+    The two embedded combinatorial decoders analyse the lower and upper 10-bit symbols; *idle* is
+    asserted for one cycle when the pair is an idle set and both symbols are valid.
     """
     def __init__(self, data):
-        self.idle_i2 = Signal()
+        self.idle = Signal()
 
         # # #
 
@@ -208,10 +208,11 @@ class Decoder8b10bIdleChecker(LiteXModule):
         ]
         self.submodules += decoders
 
-        # Idle I2 Check.
+        # Idle Check (either /I1/ or /I2/).
         _decoder0_k28_5 = ~decoders[0].invalid &  decoders[0].k & (decoders[0].d == K(28, 5))
         _decoder1_d16_2 = ~decoders[1].invalid & ~decoders[1].k & (decoders[1].d == D(16, 2))
-        self.comb += self.idle_i2.eq(_decoder0_k28_5 & _decoder1_d16_2)
+        _decoder1_d5_6  = ~decoders[1].invalid & ~decoders[1].k & (decoders[1].d == D(5, 6))
+        self.comb += self.idle.eq(_decoder0_k28_5 & (_decoder1_d16_2 | _decoder1_d5_6))
 
 # Efinix Aligner -----------------------------------------------------------------------------------
 
@@ -248,7 +249,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
     * Gathers variable-length slices from the deserializer.
     * Aligns them on a 10-bit boundary (``EfinixAligner``).
-    * Strips /I2/ idle ordered-sets.
+    * Strips /I1/ or /I2/ idle ordered-sets when buffer fill is high.
     * Delivers one aligned symbol per cycle when data is ready.
 
     Parameters:
@@ -263,9 +264,9 @@ class EfinixSerdesBuffer(LiteXModule):
         # ----------
         word_bits          = 10                               # Width of one aligned symbol.
         align_window_bits  = 30                               # 10 bits × 3 symbols.
-        buffer_bits        = 1200                             # Buffer depth. # FIXME: Try to reduce.
+        buffer_bits        = 1200                             # Buffer depth.
         min_accum_bits     = word_bits + align_window_bits    # Minimum for output/align.
-        idle_skip_bits     = 20                               # /I2/ = 2 × 10-bit symbols.
+        idle_skip_bits     = 20                               # Idle set = 2 × 10-bit symbols.
         min_skip_bits      = min_accum_bits + idle_skip_bits  # Ensure enough after skip.
 
         # Signals.
@@ -282,19 +283,21 @@ class EfinixSerdesBuffer(LiteXModule):
         self.aligner = aligner = EfinixAligner(align)
         self.comb += aligner.data.eq(appended_buffer[word_bits:word_bits + align_window_bits])
 
-        # Idle Remover.
+        # Idle Checker.
         # -------------
-        self.idle_remover = idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
+        self.idle_checker = idle_checker = Decoder8b10bIdleChecker(data=data_out_aligner[:20])
 
         # Append Logic (comb, small case for data_in_len).
         # ------------------------------------------------
         self.comb += [
+            # Mask input to only include valid bits (9-11 expected).
             Case(data_in_len, {
                 9         : masked_data_in.eq(data_in[:9]),
                 10        : masked_data_in.eq(data_in[:10]),
                 11        : masked_data_in.eq(data_in[:11]),
                 "default" : masked_data_in.eq(0), # Fallback, though expecting 9-11.
             }),
+            # Append masked data to buffer.
             appended_buffer.eq(buffer | (masked_data_in << pos)),
         ]
 
@@ -308,17 +311,21 @@ class EfinixSerdesBuffer(LiteXModule):
         # Buffer Update Logic.
         # --------------------
         self.sync += [
+            # Not enough bits: accumulate without output.
             If(appended_pos < min_accum_bits,
                 data_out.eq(0),
                 data_out_valid.eq(0),
                 pos.eq(appended_pos),
                 buffer.eq(appended_buffer),
             ).Else(
+                # Enough bits: output one symbol, optionally skip idle.
                 data_out.eq(data_out_aligner[:word_bits]),
                 data_out_valid.eq(1),
-                If(idle_remover.idle_i2 & (appended_pos >= min_skip_bits),
+                # Skip idle if fill is high enough.
+                If(idle_checker.idle & (appended_pos >= min_skip_bits),
                     pos.eq(appended_pos - (word_bits + idle_skip_bits)),
                     buffer.eq(appended_buffer >> (word_bits + idle_skip_bits)),
+                # Normal: consume one symbol.
                 ).Else(
                     pos.eq(appended_pos - word_bits),
                     buffer.eq(appended_buffer >> word_bits),
