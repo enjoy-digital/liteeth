@@ -246,79 +246,82 @@ class EfinixSerdesBuffer(LiteXModule):
     """
     Elastic buffer that:
 
-    * Gathers variable‑length slices from the deserializer.
-    * Aligns them on a 10‑bit boundary (``EfinixAligner``).
-    * Strips `/I2/` idle ordered‑sets.
+    * Gathers variable-length slices from the deserializer.
+    * Aligns them on a 10-bit boundary (``EfinixAligner``).
+    * Strips /I2/ idle ordered-sets.
     * Delivers one aligned symbol per cycle when data is ready.
 
     Parameters:
-    - data_in        : Incoming 10‑bit slice from the deserializer.
-    - data_in_len    : Number of valid bits in *data_in* (1 – 10).
-    - data_out       : Aligned 10‑bit symbol delivered to the PCS.
+    - data_in        : Incoming 10-bit slice from the deserializer.
+    - data_in_len    : Number of valid bits in *data_in* (1–10).
+    - data_out       : Aligned 10-bit symbol delivered to the PCS.
     - data_out_valid : Strobe signalling *data_out* is valid.
     - align          : Pulse requesting the aligner to resynchronise.
     """
     def __init__(self, data_in, data_in_len, data_out, data_out_valid, align):
         # Constants.
         # ----------
-        word_bits            = 10    # Width of one aligned symbol.
-        align_window_bits    = 30    # 10 bits × 3 symbols.
-        buffer_bits          = 1000  # First‑stage FIFO depth. CHECKME: Try to reduce.
-        idle_skip_symbols    = 3     # /I2/ = 3 × 10‑bit symbols.
-        idle_extra_bits      = 20    # Second symbol of /I2/ + one more word.
+        word_bits          = 10                               # Width of one aligned symbol.
+        align_window_bits  = 30                               # 10 bits × 3 symbols.
+        buffer_bits        = 1200                             # Buffer depth. # FIXME: Try to reduce.
+        min_accum_bits     = word_bits + align_window_bits    # Minimum for output/align.
+        idle_skip_bits     = 20                               # /I2/ = 2 × 10-bit symbols.
+        min_skip_bits      = min_accum_bits + idle_skip_bits  # Ensure enough after skip.
 
         # Signals.
         # --------
-        data_out_aligner  = Signal(align_window_bits)
-        data_out_buffer_1 = Signal(buffer_bits)
-        data_out_buffer   = Signal(len(data_in) + len(data_out_buffer_1))
-        buffer_pos        = Signal(max=len(data_out_buffer))
+        buffer           = Signal(buffer_bits)
+        pos              = Signal(max=buffer_bits + 1)
+        appended_pos     = pos + data_in_len
+        masked_data_in   = Signal.like(data_in)
+        appended_buffer  = Signal.like(buffer)
+        data_out_aligner = Signal(align_window_bits)
 
         # Aligner.
         # --------
         self.aligner = aligner = EfinixAligner(align)
+        self.comb += aligner.data.eq(appended_buffer[word_bits:word_bits + align_window_bits])
 
         # Idle Remover.
         # -------------
-        self.idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
+        self.idle_remover = idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
 
-        # Buffer Cases.
-        # -------------
-        cases_buffer = {}
-        cases_buffer[0] = data_out_buffer.eq(data_in)
-        for i in range(1, len(data_out_buffer)):
-            cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
-
-        # Aligner Cases.
-        # --------------
-        cases_aligner = {}
-        for i in range(word_bits):
-            cases_aligner[i] = data_out_aligner.eq(data_out_buffer[i:align_window_bits + i])
-
+        # Append Logic (comb, small case for data_in_len).
+        # ------------------------------------------------
         self.comb += [
-            Case(buffer_pos, cases_buffer),
-            Case(aligner.shift, cases_aligner),
-            aligner.data.eq(data_out_buffer[word_bits:align_window_bits + word_bits]),
+            Case(data_in_len, {
+                9         : masked_data_in.eq(data_in[:9]),
+                10        : masked_data_in.eq(data_in[:10]),
+                11        : masked_data_in.eq(data_in[:11]),
+                "default" : masked_data_in.eq(0), # Fallback, though expecting 9-11.
+            }),
+            appended_buffer.eq(buffer | (masked_data_in << pos)),
         ]
 
+        # Aligner Cases for data_out_aligner.
+        # -----------------------------------
+        cases_aligner = {}
+        for i in range(10):
+            cases_aligner[i] = data_out_aligner.eq(appended_buffer[i:i+align_window_bits])
+        self.comb += Case(aligner.shift, cases_aligner)
+
+        # Buffer Update Logic.
+        # --------------------
         self.sync += [
-            If(data_in_len + buffer_pos < word_bits + align_window_bits,
+            If(appended_pos < min_accum_bits,
                 data_out.eq(0),
                 data_out_valid.eq(0),
-                buffer_pos.eq(buffer_pos + data_in_len),
-
-                data_out_buffer_1.eq(data_out_buffer[:len(data_out_buffer_1)]),
+                pos.eq(appended_pos),
+                buffer.eq(appended_buffer),
             ).Else(
                 data_out.eq(data_out_aligner[:word_bits]),
                 data_out_valid.eq(1),
-                If(
-                    self.idle_remover.idle_i2
-                    & (data_in_len + buffer_pos >= word_bits + align_window_bits + idle_extra_bits),
-                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out) * idle_skip_symbols)),
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out) * idle_skip_symbols :]),
+                If(idle_remover.idle_i2 & (appended_pos >= min_skip_bits),
+                    pos.eq(appended_pos - (word_bits + idle_skip_bits)),
+                    buffer.eq(appended_buffer >> (word_bits + idle_skip_bits)),
                 ).Else(
-                    buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out) :]),
+                    pos.eq(appended_pos - word_bits),
+                    buffer.eq(appended_buffer >> word_bits),
                 ),
             ),
         ]
