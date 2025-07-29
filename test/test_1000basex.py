@@ -36,14 +36,14 @@ class SimQuadDeser(LiteXModule):
         self.end = Signal()
 
         self.rx = rx = EfinixSerdesDiffRxClockRecovery(
-            Signal(4),
-            Signal(4),
-            self.data_out,
-            self.data_out_valid,
-            False,
-            None,
-            None,
-            dummy=True,
+            rx_p       = Signal(4),
+            rx_n       = Signal(4),
+            data       = self.data_out,
+            data_valid = self.data_out_valid,
+            align      = False,
+            clk        = None,
+            fast_clk   = None,
+            dummy      = True,
         )
 
         self.comb += [
