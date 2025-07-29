@@ -225,16 +225,20 @@ class EfinixAligner(LiteXModule):
     boundary alignment.
     """
     def __init__(self, align):
-        self.data = data = Signal(30)
-        self.pos  = pos  = Signal(4)
+        self.data  = data  = Signal(30)
+        self.shift = shift = Signal(4)
 
         # # #
 
-        # Create 10 overlapping checkers; highest valid offset wins.
-        for off in range(10):
-            checker = Decoder8b10bChecker(data[off:20+off])
-            self.submodules += checker
-            self.sync += If(align & checker.valid, pos.eq(off))
+        # Create 10 overlapping checkers.
+        checkers = []
+        for offset in range(10):
+            checkers.append(Decoder8b10bChecker(data[offset:offset + 20]))
+        self.submodules += checkers
+
+        # Determine shift from highest valid offset.
+        for offset in range(10):
+              self.sync += If(align & checkers[offset].valid, shift.eq(offset))
 
 # Efinix Serdes Diff Rx Dummy ----------------------------------------------------------------------
 
@@ -274,7 +278,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         self.comb += [
             Case(buffer_pos, cases_buffer),
-            Case(aligner.pos, cases_aligner),
+            Case(aligner.shift, cases_aligner),
             aligner.data.eq(data_out_buffer[10:40]),
         ]
 
