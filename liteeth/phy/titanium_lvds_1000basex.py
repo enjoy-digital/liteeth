@@ -337,87 +337,129 @@ class EfinixSerdesBuffer(LiteXModule):
 
 @ResetInserter()
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
+    """
+    Clock recovery using multiple phased LVDS receivers for Efinix Titanium / Topaz.
+
+    Parameters:
+    - rx_p     : List of 4 positive legs of the LVDS pairs (platform pins/records).
+    - rx_n     : List of 4 negative legs of the LVDS pairs (platform pins/records).
+    - data     : Output 10-bit deserialized symbol.
+    - data_valid : Strobe indicating *data* is valid.
+    - align    : Pulse to trigger alignment in the reducer.
+    - clk      : Slow/parallel clock domain.
+    - fast_clk : Fast/serial clock domain.
+    - delay    : List of 4 static delay taps for each receiver.
+    - rx_term  : On-die termination (``True`` / ``False`` or "ON"/"OFF").
+    - dummy    : Use dummy receivers for simulation/testing.
+    """
     def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None, rx_term=True, dummy=False):
-        
-        assert len(rx_p) == len(rx_n)
-        assert len(rx_p) == 4
+        # Assertions.
+        # -----------
+        assert len(rx_p) == len(rx_n) == 4
 
-        if delay is None:
-            delay = [0, 0, 0, 0]
+        # Constants.
+        # ----------
+        static_delay = 8  # Base delay per phase offset.
+        up_level     = 1  # Threshold for phase up adjustment.
+        down_level   = 1  # Threshold for phase down adjustment.
 
-        _data = [Signal(len(data)*2) for _ in range(len(rx_p))]
+        # Signals.
+        # --------
+        # Deserializer outputs (20 bits: previous + current 10 bits).
+        _data = [Signal(20) for _ in range(4)]
 
-        data_buffer_len = Signal(max=12)
+        # Variable-length input to reducer.
         data_buffer     = Signal(11)
-        data_1          = Signal(10)
-        data_2          = Signal(10)
-        data_3          = Signal(10)
+        data_buffer_len = Signal(max=12)
 
-        data_0          = Signal(10)
-        data_4          = Signal(10)
+        # Sampled data for correlation.
+        data_0 = Signal(10)
+        data_1 = Signal(10)
+        data_2 = Signal(10)
+        data_3 = Signal(10)
+        data_4 = Signal(10)
 
-        data_1_sum      = Signal(max=11)
-        data_1_eq       = Signal(10)
-        data_3_sum      = Signal(max=11)
-        data_3_eq       = Signal(10)
+        # Corrected data (majority vote).
+        data_1_corr = Signal(10)
+        data_2_corr = Signal(10)
+        data_3_corr = Signal(10)
 
-        data_1_corr     = Signal(10)
-        data_2_corr     = Signal(10)
-        data_3_corr     = Signal(10)
+        # Error signals.
+        data_1_eq  = Signal(10)
+        data_3_eq  = Signal(10)
+        data_1_sum = Signal(max=11)
+        data_3_sum = Signal(max=11)
 
-        up_level        = 1
-        down_level      = 1
+        # Phase decisions.
+        up   = Signal()
+        down = Signal()
 
-        up              = Signal()
-        down            = Signal()
+        # Delay adjustments.
+        # ------------------
+        if delay is None:
+            delay = [0] * 4
 
-        static_delay    = 8
-
+        # Deserializers.
+        # --------------
         for i in range(4):
-            data_before = Signal(len(data))
-
+            data_before = Signal(10)
             if dummy:
+                # Dummy receiver for simulation.
                 class EfinixSerdesRxDummy(LiteXModule):
                     def __init__(self, data):
                         self.data = Signal(10)
                         self.comb += data.eq(self.data)
                 serdesrx = EfinixSerdesRxDummy(_data[i][10:])
             else:
+                # Actual LVDS receiver.
                 serdesrx = EfinixSerdesDiffRx(
                     rx_p     = rx_p[i],
                     rx_n     = rx_n[i],
                     data     = _data[i][10:],
-                    delay    = (static_delay * (3-i)) + delay[i],
+                    delay    = (static_delay * (3 - i)) + delay[i],
                     clk      = clk,
                     fast_clk = fast_clk,
                     rx_term  = rx_term,
                 )
             self.add_module(name=f"serdesrx{i}", module=serdesrx)
 
+            # Latch previous data.
             self.comb += _data[i][:10].eq(data_before)
-
             self.sync += data_before.eq(_data[i][10:])
 
-
+        # Reducer (elastic buffer with aligner and idle checker).
+        # --------------------------------------------------------
         self.reducer = EfinixSerdesBuffer(data_buffer, data_buffer_len, data, data_valid, align)
 
+        # Majority Vote Corrections.
+        # --------------------------
+        self.comb += [
+            data_1_corr.eq((data_0 & data_1) | (data_2 & data_1) | (data_0 & data_2)),
+            data_2_corr.eq((data_1 & data_2) | (data_3 & data_2) | (data_1 & data_3)),
+            data_3_corr.eq((data_2 & data_3) | (data_4 & data_3) | (data_2 & data_4)),
+        ]
+
+        # Error Detection.
+        # ----------------
         self.comb += [
             data_1_eq.eq(data_1_corr ^ data_2_corr),
             data_3_eq.eq(data_3_corr ^ data_2_corr),
             data_1_sum.eq(Reduce("ADD", [data_1_eq[i] for i in range(10)])),
             data_3_sum.eq(Reduce("ADD", [data_3_eq[i] for i in range(10)])),
+        ]
+
+        # Phase Decision.
+        # ---------------
+        self.comb += [
             If((data_1_sum > data_3_sum) & (data_1_sum >= down_level),
                 up.eq(1),
             ).Elif((data_1_sum < data_3_sum) & (data_3_sum >= up_level),
                 down.eq(1),
             ),
-
-            data_1_corr.eq((data_0 & data_1) | (data_2 & data_1) | (data_0 & data_2)),
-            data_2_corr.eq((data_1 & data_2) | (data_3 & data_2) | (data_1 & data_3)),
-            data_3_corr.eq((data_2 & data_3) | (data_4 & data_3) | (data_2 & data_4)),
         ]
-        
 
+        # FSM for Phase Selection.
+        # ------------------------
         self.fsm = fsm = FSM(reset_state="USE_2")
 
         fsm.act("USE_0",
