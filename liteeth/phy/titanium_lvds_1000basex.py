@@ -176,22 +176,23 @@ class Decoder8b10bChecker(LiteXModule):
 
 class Decoder8b10bIdleChecker(LiteXModule):
     def __init__(self, data_in):
-        self.is_i2 = is_i2 = Signal()
+        self.idle_i2 = Signal()
 
         # # #
 
-        self.decoder1 = decoder1 = Decoder(lsb_first=True, sync=False)
-        self.decoder2 = decoder2 = Decoder(lsb_first=True, sync=False)
-
+        # 8b10b Decoders.
+        decoders = [Decoder(lsb_first=True, sync=False) for _ in range(2)]
         self.comb += [
-            decoder1.input.eq(data_in[:10]),
-            decoder2.input.eq(data_in[10:]),
+            decoders[0].input.eq(data_in[:10]),
+            decoders[1].input.eq(data_in[10:]),
         ]
+        self.submodules += decoders
 
-        first_ok  =  decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
-        second_ok = ~decoder2.k & ~decoder2.invalid & (decoder2.d == D(16, 2))
 
-        self.comb += is_i2.eq(first_ok & second_ok)
+        # Idle I2 Check.
+        _decoder0_k28_5 = ~decoders[0].invalid &  decoders[0].k & (decoders[0].d == K(28, 5))
+        _decoder1_d16_2 = ~decoders[1].invalid & ~decoders[1].k & (decoders[1].d == D(16, 2))
+        self.comb += self.idle_i2.eq(_decoder0_k28_5 & _decoder1_d16_2)
 
 # Efinix Aligner -----------------------------------------------------------------------------------
 
@@ -261,7 +262,7 @@ class EfinixSerdesBuffer(LiteXModule):
             ).Else(
                 data_out.eq(data_out_aligner[:10]),
                 data_out_valid.eq(1),
-                If(self.idle_remover.is_i2 & (data_in_len + buffer_pos >= 10+30 +20),
+                If(self.idle_remover.idle_i2 & (data_in_len + buffer_pos >= 10+30 +20),
                     buffer_pos.eq(buffer_pos + data_in_len - (len(data_out)*3)),
 
                     data_out_buffer_1.eq(data_out_buffer[len(data_out)*3:]),
