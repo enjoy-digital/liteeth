@@ -213,6 +213,14 @@ class Decoder8b10bIdleChecker(LiteXModule):
 # Efinix Aligner -----------------------------------------------------------------------------------
 
 class EfinixAligner(LiteXModule):
+    """
+    Sliding‑window byte aligner.
+
+    A 30‑bit window (`data`) is scanned by ten overlapping ``Decoder8b10bChecker`` instances
+    (bit offsets 0‑9).  When *align* is asserted, the highest offset that passes the checker is
+    loaded into *pos*, telling downstream logic how many bits to shift to achieve proper 10‑bit
+    boundary alignment.
+    """
     def __init__(self, align):
         self.data = data = Signal(30)
         self.pos  = pos  = Signal(4)
