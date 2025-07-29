@@ -54,9 +54,9 @@ class EfinixSerdesDiffTx(LiteXModule):
         _oe   = platform.add_iface_io(f"{io_name}_oe")
         _rst  = platform.add_iface_io(f"{io_name}_rst")
         self.comb += [
-            _data.eq(data),
             _oe  .eq(1),
             _rst .eq(0),
+            _data.eq(data),
         ]
 
         # LVDS block for Efinity.
@@ -81,33 +81,51 @@ class EfinixSerdesDiffTx(LiteXModule):
 # Efinix Serdes Diff RX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffRx(LiteXModule):
+    """
+    Differential LVDS receiver for Efinix Titanium / Topaz.
+
+    Parameters:
+    - rx_p     : Positive leg of the LVDS pair (platform pin/record).
+    - rx_n     : Negative leg of the LVDS pair (platform pin/record).
+    - data     : Parallel data `Signal` where deserialized bits are presented.
+    - delay    : Static input delay value (integer, *tap* count expected by Efinity).
+    - clk      : “Slow”/parallel clock that captures *data*.
+    - fast_clk : “Fast”/serial clock fed to the LVDS deserializer.
+    - rx_term  : On‑die termination (``True`` / ``False`` or explicit string `"ON"`, `"OFF"`).
+    """
     def __init__(self, rx_p, rx_n, data, delay, clk, fast_clk, rx_term=True):
         platform = LiteXContext.platform
+        assert platform.family in ("Titanium", "Topaz")
 
-        # # #
-
-        # Only keep _p.
+        # Names / Locations.
+        # ------------------
         io_name = platform.get_pin_name(rx_p)
-        io_pad  = platform.get_pad_name(rx_p) # need real pad name
-        io_prop = platform.get_pin_properties(rx_p)
+        io_pad  = platform.get_pad_name(rx_p)
 
-        _data = platform.add_iface_io(io_name + "_gen", len(data))
-        _ena  = platform.add_iface_io(io_name + "_ena")
-        _rst  = platform.add_iface_io(io_name + "_rst")
+        # Replace P with PN in io_pad.
+        # ----------------------------
+        # Split on '_' :  [bank, "P", number, ...]
+        io_pad_split = io_pad.split('_')
+        if len(io_pad_split) < 3 or io_pad_split[1] != "P":
+            raise ValueError(f"Unexpected differential pad name '{io_pad}'")
+        # Replace P by PN.
+        io_pad = f"{io_pad_split[0]}_PN_{io_pad_split[2]}"
 
-        assert platform.family in ["Titanium", "Topaz"]
-        # _p has _P_ and _n has _N_ followed by an optional function
-        # lvds block needs _PN_
-        pad_split = io_pad.split('_')
-        assert pad_split[1] == 'P'
-        io_pad = f"{pad_split[0]}_PN_{pad_split[2]}"
+        # Internal signals.
+        # -----------------
+        _data = platform.add_iface_io(f"{io_name}_gen", len(data))
+        _ena  = platform.add_iface_io(f"{io_name}_ena")
+        _rst  = platform.add_iface_io(f"{io_name}_rst")
 
         self.comb += [
-            _rst.eq(0),
             _ena.eq(1),
+            _rst.eq(0),
             data.eq(_data),
         ]
-        block = {
+
+        # LVDS block for Efinity.
+        # -----------------------
+        platform.toolchain.ifacewriter.blocks.append({
             "type"          : "LVDS",
             "mode"          : "INPUT",
             "rx_mode"       : "NORMAL",
@@ -122,13 +140,10 @@ class EfinixSerdesDiffRx(LiteXModule):
             "rst"           : _rst,
             "rx_voc_driver" : "1",
             "rx_term"       : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
-            "rx_delay" : "STATIC",
-            "delay"    : delay,
-        }
-
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
-        platform.toolchain.excluded_ios.append(platform.get_pin(rx_n))
+            "rx_delay"      : "STATIC",
+            "delay"         : delay,
+        })
+        platform.toolchain.excluded_ios += [platform.get_pin(rx_p), platform.get_pin(rx_n)]  # Mark pads as consumed.
 
 # Decoder 8b10b Checker ----------------------------------------------------------------------------
 
