@@ -263,31 +263,34 @@ class EfinixSerdesBuffer(LiteXModule):
         # ----------
         word_bits            = 10    # Width of one aligned symbol.
         align_window_bits    = 30    # 10 bits × 3 symbols.
-        buffer_bits          = 1000  # First‑stage FIFO depth.
+        buffer_bits          = 1000  # First‑stage FIFO depth. CHECKME: Try to reduce.
         idle_skip_symbols    = 3     # /I2/ = 3 × 10‑bit symbols.
         idle_extra_bits      = 20    # Second symbol of /I2/ + one more word.
+
+        # Signals.
+        # --------
+        data_out_aligner  = Signal(align_window_bits)
+        data_out_buffer_1 = Signal(buffer_bits)
+        data_out_buffer   = Signal(len(data_in) + len(data_out_buffer_1))
+        buffer_pos        = Signal(max=len(data_out_buffer))
 
         # Aligner.
         # --------
         self.aligner = aligner = EfinixAligner(align)
 
-        data_out_aligner = Signal(align_window_bits)
-
-        # It might be possible to use a smaller buffer here.
-        # This has to be tested.
-        data_out_buffer_1 = Signal(buffer_bits)
-
-        data_out_buffer = Signal(len(data_in) + len(data_out_buffer_1))
-
-        buffer_pos = Signal(max=len(data_out_buffer))
-
+        # Idle Remover.
+        # -------------
         self.idle_remover = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
 
+        # Buffer Cases.
+        # -------------
         cases_buffer = {}
         cases_buffer[0] = data_out_buffer.eq(data_in)
         for i in range(1, len(data_out_buffer)):
             cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
 
+        # Aligner Cases.
+        # --------------
         cases_aligner = {}
         for i in range(word_bits):
             cases_aligner[i] = data_out_aligner.eq(data_out_buffer[i:align_window_bits + i])
