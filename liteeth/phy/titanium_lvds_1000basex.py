@@ -20,31 +20,48 @@ from liteeth.phy.pcs_1000basex import *
 # Efinix Serdes Diff TX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffTx(LiteXModule):
+    """
+    Differential LVDS transmitter for Efinix Titanium / Topaz.
+
+    Parameters:
+    - data     : Parallel data `Signal` to be serialized (LSB first).
+    - tx_p     : Positive leg of the LVDS pair (platform pin/record).
+    - tx_n     : Negative leg of the LVDS pair (platform pin/record).
+    - clk      : “Slow”/parallel clock that presents *data*.
+    - fast_clk : “Fast”/serial clock that shifts bits to the pad.
+    """
     def __init__(self, data, tx_p, tx_n, clk, fast_clk):
         platform = LiteXContext.platform
-        # only keep _p
+        assert platform.family in ("Titanium", "Topaz")
+
+        # Names / Locations.
+        # ------------------
         io_name = platform.get_pin_name(tx_p)
-        io_pad  = platform.get_pad_name(tx_p) # need real pad name
-        io_prop = platform.get_pin_properties(tx_p)
+        io_pad  = platform.get_pad_name(tx_p)
 
-        _data = platform.add_iface_io(io_name + "_gen", len(data))
-        _oe   = platform.add_iface_io(io_name + "_oe")
-        _rst  = platform.add_iface_io(io_name + "_rst")
+        # Replace P with PN in io_pad.
+        # ----------------------------
+        # Split on '_' :  [bank, "P", number, ...]
+        io_pad_split = io_pad.split('_')
+        if len(io_pad_split) < 3 or io_pad_split[1] != "P":
+            raise ValueError(f"Unexpected differential pad name '{io_pad}'")
+        # Replace P by PN.
+        io_pad = f"{io_pad_split[0]}_PN_{io_pad_split[2]}"
 
-        assert platform.family in ["Titanium", "Topaz"]
-        # _p has _P_ and _n has _N_ followed by an optional function
-        # lvds block needs _PN_
-        pad_split = io_pad.split('_')
-        assert pad_split[1] == 'P'
-        io_pad = f"{pad_split[0]}_PN_{pad_split[2]}"
-
+        # Internal signals.
+        # -----------------
+        _data = platform.add_iface_io(f"{io_name}_gen", len(data))
+        _oe   = platform.add_iface_io(f"{io_name}_oe")
+        _rst  = platform.add_iface_io(f"{io_name}_rst")
         self.comb += [
             _data.eq(data),
-            _rst.eq(0),
-            _oe.eq(1),
+            _oe  .eq(1),
+            _rst .eq(0),
         ]
 
-        block = {
+        # LVDS block for Efinity.
+        # -----------------------
+        platform.toolchain.ifacewriter.blocks.append({
             "type"      : "LVDS",
             "mode"      : "OUTPUT",
             "tx_mode"   : "DATA",
@@ -58,11 +75,8 @@ class EfinixSerdesDiffTx(LiteXModule):
             "oe"        : _oe,
             "rst"       : _rst,
             "tx_vod"    : "LARGE",
-        }
-
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(tx_p)
-        platform.toolchain.excluded_ios.append(tx_n)
+        })
+        platform.toolchain.excluded_ios += [tx_p, tx_n] # Mark pads as consumed.
 
 # Efinix Serdes Diff RX ----------------------------------------------------------------------------
 
