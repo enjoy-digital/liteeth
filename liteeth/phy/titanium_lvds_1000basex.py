@@ -172,6 +172,27 @@ class Decoder8b10bChecker(LiteXModule):
         # Output: 1 when everything looks OK
         self.comb += valid.eq(~(sym0_bad | sym1_bad | rd_bad | comma_bad))
 
+# Decoder 8b10b Idle Checker -----------------------------------------------------------------------
+
+class Decoder8b10bIdleChecker(LiteXModule):
+    def __init__(self, data_in):
+        self.is_i2 = is_i2 = Signal()
+
+        # # #
+
+        self.decoder1 = decoder1 = Decoder(lsb_first=True, sync=False)
+        self.decoder2 = decoder2 = Decoder(lsb_first=True, sync=False)
+
+        self.comb += [
+            decoder1.input.eq(data_in[:10]),
+            decoder2.input.eq(data_in[10:]),
+        ]
+
+        first_ok  =  decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
+        second_ok = ~decoder2.k & ~decoder2.invalid & (decoder2.d == D(16, 2))
+
+        self.comb += is_i2.eq(first_ok & second_ok)
+
 # Efinix Aligner -----------------------------------------------------------------------------------
 
 class EfinixAligner(LiteXModule):
@@ -187,24 +208,6 @@ class EfinixAligner(LiteXModule):
             checker = Decoder8b10bChecker(data[off:20+off], valid)
             self.submodules += checker
             self.sync += If(align & valid, pos.eq(off))
-
-class Decoder8b10bIdleChecker(LiteXModule):
-    def __init__(self, data_in):
-
-        self.is_i2 = is_i2 = Signal()
-
-        self.decoder1 = decoder1 = Decoder(lsb_first=True, sync=False)
-        self.decoder2 = decoder2 = Decoder(lsb_first=True, sync=False)
-
-        self.comb += [
-            decoder1.input.eq(data_in[:10]),
-            decoder2.input.eq(data_in[10:]),
-        ]
-
-        first_ok  =  decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
-        second_ok = ~decoder2.k & ~decoder2.invalid & (decoder2.d == D(16, 2))
-        
-        self.comb += is_i2.eq(first_ok & second_ok)
 
 # Efinix Serdes Diff Rx Dummy ----------------------------------------------------------------------
 
@@ -499,7 +502,6 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             clk      = self.crg.cd_eth_tx.clk,
             fast_clk = self.crg.cd_eth_trx_fast.clk,
         )
-
 
         # RX.
         # ---
