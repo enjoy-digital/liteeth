@@ -284,7 +284,7 @@ class EfinixSerdesBuffer(LiteXModule):
 
         # Idle Checker.
         # -------------
-        self.idle_checker = idle_checker = Decoder8b10bIdleChecker(data=data_out_aligner[:20])
+        self.idle_checker = idle_checker = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
 
         # Append Logic (comb, small case for data_in_len).
         # ------------------------------------------------
