@@ -602,7 +602,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         # ---------
         if crg is None:
             assert refclk is not None
-            self.crg = EfinixSerdesClocking(
+            self.crg = crg = EfinixSerdesClocking(
                 refclk      = refclk,
                 refclk_freq = refclk_freq,
             )
@@ -615,8 +615,8 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             data     = pcs.tbi_tx,
             tx_p     = pads.tx_p,
             tx_n     = pads.tx_n,
-            clk      = self.crg.cd_eth_tx.clk,
-            fast_clk = self.crg.cd_eth_trx_fast.clk,
+            clk      = crg.cd_eth_tx.clk,
+            fast_clk = crg.cd_eth_trx_fast.clk,
         )
         self.tx = ClockDomainsRenamer("eth_tx")(tx)
 
@@ -629,8 +629,8 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
             data       = pcs.tbi_rx,
             data_valid = pcs.tbi_rx_ce,
             align      = pcs.align,
-            clk        = self.crg.cd_eth_rx.clk,
-            fast_clk   = self.crg.cd_eth_trx_fast.clk,
+            clk        = crg.cd_eth_rx.clk,
+            fast_clk   = crg.cd_eth_trx_fast.clk,
             delay      = rx_delay,
             rx_term    = rx_term,
         )
