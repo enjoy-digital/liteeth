@@ -158,8 +158,9 @@ class Decoder8b10bChecker(LiteXModule):
     The output *valid* is asserted when **all** criteria pass, meaning the word could be a legally
     encoded 8b/10b lane byte.
     """
-    def __init__(self, data):
-        self.valid = Signal()
+    def __init__(self):
+        self.data = Signal(20) # i
+        self.valid = Signal()  # o
 
         # # #
 
@@ -167,8 +168,8 @@ class Decoder8b10bChecker(LiteXModule):
         sym0_ones = Signal(4)
         sym1_ones = Signal(4)
         self.comb += [
-            sym0_ones.eq(Reduce("ADD", data[ 0:10])),
-            sym1_ones.eq(Reduce("ADD", data[10:20])),
+            sym0_ones.eq(Reduce("ADD", self.data[ 0:10])),
+            sym1_ones.eq(Reduce("ADD", self.data[10:20])),
         ]
         sym0_bad = (sym0_ones < 4) | (sym0_ones > 6)
         sym1_bad = (sym1_ones < 4) | (sym1_ones > 6)
@@ -179,7 +180,7 @@ class Decoder8b10bChecker(LiteXModule):
         rd_bad = (both_ones < 9) | (both_ones > 11)
 
         # Forbid comma (K.28) in second symbol.
-        sym1_msb  = Cat(*reversed(data[10:20])) # bit-reverse
+        sym1_msb  = Cat(*reversed(self.data[10:20])) # bit-reverse
         code6b    = sym1_msb[4:]                # bits 9..4
         comma_bad = (code6b != 0b001111) & (code6b != 0b110000)
 
@@ -195,16 +196,17 @@ class Decoder8b10bIdleChecker(LiteXModule):
     The two embedded combinatorial decoders analyse the lower and upper 10-bit symbols; *idle* is
     asserted for one cycle when the pair is exactly “K28.5, D16.2” and both symbols are valid.
     """
-    def __init__(self, data):
-        self.idle = Signal()
+    def __init__(self):
+        self.data = Signal(20) # i
+        self.idle = Signal()   # o
 
         # # #
 
         # 8b10b Decoders.
         decoders = [Decoder(lsb_first=True, sync=False) for _ in range(2)]
         self.comb += [
-            decoders[0].input.eq(data[:10]),
-            decoders[1].input.eq(data[10:]),
+            decoders[0].input.eq(self.data[:10]),
+            decoders[1].input.eq(self.data[10:]),
         ]
         self.submodules += decoders
 
@@ -224,21 +226,24 @@ class EfinixAligner(LiteXModule):
     loaded into *pos*, telling downstream logic how many bits to shift to achieve proper 10‑bit
     boundary alignment.
     """
-    def __init__(self, align):
-        self.data  = data  = Signal(30)
-        self.shift = shift = Signal(4)
+    def __init__(self):
+        self.align = Signal()   # i
+        self.data  = Signal(30) # i
+        self.shift = Signal(4)  # o
 
         # # #
 
         # Create 10 overlapping checkers.
         checkers = []
         for offset in range(10):
-            checkers.append(Decoder8b10bChecker(data[offset:offset + 20]))
+            checker = Decoder8b10bChecker()
+            checkers.append(checker)
+            self.comb += checker.data.eq(self.data[offset:offset + 20])
         self.submodules += checkers
 
         # Determine shift from highest valid offset.
         for offset in range(10):
-              self.sync += If(align & checkers[offset].valid, shift.eq(offset))
+              self.sync += If(self.align & checkers[offset].valid, self.shift.eq(offset))
 
 # Efinix Serdes Buffer -----------------------------------------------------------------------------
 
@@ -279,12 +284,15 @@ class EfinixSerdesBuffer(LiteXModule):
 
         # Aligner.
         # --------
-        self.aligner = aligner = EfinixAligner(align)
-        self.comb += aligner.data.eq(appended_buffer[word_bits:word_bits + align_window_bits])
+        self.aligner = aligner = EfinixAligner()
+        self.comb += [
+            aligner.align.eq(align),
+            aligner.data.eq(appended_buffer[word_bits:word_bits + align_window_bits])
+        ]
 
         # Idle Checker.
         # -------------
-        self.idle_checker = idle_checker = Decoder8b10bIdleChecker(data=data_out_aligner[word_bits:])
+        self.idle_checker = idle_checker = Decoder8b10bIdleChecker()
 
         # Append Logic (comb, small case for data_in_len).
         # ------------------------------------------------
@@ -305,7 +313,10 @@ class EfinixSerdesBuffer(LiteXModule):
         cases_aligner = {}
         for i in range(10):
             cases_aligner[i] = data_out_aligner.eq(appended_buffer[i:i+align_window_bits])
-        self.comb += Case(aligner.shift, cases_aligner)
+        self.comb += [
+            idle_checker.data.eq(data_out_aligner[word_bits:]),
+            Case(aligner.shift, cases_aligner),
+        ]
 
         # Buffer Update Logic.
         # --------------------
