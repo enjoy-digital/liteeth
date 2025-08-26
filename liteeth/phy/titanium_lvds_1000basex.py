@@ -20,31 +20,48 @@ from liteeth.phy.pcs_1000basex import *
 # Efinix Serdes Diff TX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffTx(LiteXModule):
+    """
+    Differential LVDS transmitter for Efinix Titanium / Topaz.
+
+    Parameters:
+    - data     : Parallel data `Signal` to be serialized (LSB first).
+    - tx_p     : Positive leg of the LVDS pair (platform pin/record).
+    - tx_n     : Negative leg of the LVDS pair (platform pin/record).
+    - clk      : “Slow”/parallel clock that presents *data*.
+    - fast_clk : “Fast”/serial clock that shifts bits to the pad.
+    """
     def __init__(self, data, tx_p, tx_n, clk, fast_clk):
         platform = LiteXContext.platform
-        # only keep _p
+        assert platform.family in ("Titanium", "Topaz")
+
+        # Names / Locations.
+        # ------------------
         io_name = platform.get_pin_name(tx_p)
-        io_pad  = platform.get_pad_name(tx_p) # need real pad name
-        io_prop = platform.get_pin_properties(tx_p)
+        io_pad  = platform.get_pad_name(tx_p)
 
-        _data = platform.add_iface_io(io_name + "_gen", len(data))
-        _oe   = platform.add_iface_io(io_name + "_oe")
-        _rst  = platform.add_iface_io(io_name + "_rst")
+        # Replace P with PN in io_pad.
+        # ----------------------------
+        # Split on '_' :  [bank, "P", number, ...]
+        io_pad_split = io_pad.split('_')
+        if len(io_pad_split) < 3 or io_pad_split[1] != "P":
+            raise ValueError(f"Unexpected differential pad name '{io_pad}'")
+        # Replace P by PN.
+        io_pad = f"{io_pad_split[0]}_PN_{io_pad_split[2]}"
 
-        assert platform.family in ["Titanium", "Topaz"]
-        # _p has _P_ and _n has _N_ followed by an optional function
-        # lvds block needs _PN_
-        pad_split = io_pad.split('_')
-        assert pad_split[1] == 'P'
-        io_pad = f"{pad_split[0]}_PN_{pad_split[2]}"
-
+        # Internal signals.
+        # -----------------
+        _data = platform.add_iface_io(f"{io_name}_gen", len(data))
+        _oe   = platform.add_iface_io(f"{io_name}_oe")
+        _rst  = platform.add_iface_io(f"{io_name}_rst")
         self.comb += [
+            _oe  .eq(1),
+            _rst .eq(0),
             _data.eq(data),
-            _rst.eq(0),
-            _oe.eq(1),
         ]
 
-        block = {
+        # LVDS block for Efinity.
+        # -----------------------
+        platform.toolchain.ifacewriter.blocks.append({
             "type"      : "LVDS",
             "mode"      : "OUTPUT",
             "tx_mode"   : "DATA",
@@ -58,70 +75,57 @@ class EfinixSerdesDiffTx(LiteXModule):
             "oe"        : _oe,
             "rst"       : _rst,
             "tx_vod"    : "LARGE",
-        }
-
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(tx_p)
-        platform.toolchain.excluded_ios.append(tx_n)
+        })
+        platform.toolchain.excluded_ios += [tx_p, tx_n] # Mark pads as consumed.
 
 # Efinix Serdes Diff RX ----------------------------------------------------------------------------
 
 class EfinixSerdesDiffRx(LiteXModule):
-    def __init__(self, rx_p, rx_n, data, delay, clk, fast_clk, fifo_clk=None, rx_term=True, debug=False):
+    """
+    Differential LVDS receiver for Efinix Titanium / Topaz.
+
+    Parameters:
+    - rx_p     : Positive leg of the LVDS pair (platform pin/record).
+    - rx_n     : Negative leg of the LVDS pair (platform pin/record).
+    - data     : Parallel data `Signal` where deserialized bits are presented.
+    - delay    : Static input delay value (integer, *tap* count expected by Efinity).
+    - clk      : “Slow”/parallel clock that captures *data*.
+    - fast_clk : “Fast”/serial clock fed to the LVDS deserializer.
+    - rx_term  : On‑die termination (``True`` / ``False`` or explicit string `"ON"`, `"OFF"`).
+    """
+    def __init__(self, rx_p, rx_n, data, delay, clk, fast_clk, rx_term=True):
         platform = LiteXContext.platform
+        assert platform.family in ("Titanium", "Topaz")
 
-        dynamic_delay = bool(delay == "dynamic")
-        dpa           = bool(delay == "dpa")
-
-        # # #
-
-        # Only keep _p.
+        # Names / Locations.
+        # ------------------
         io_name = platform.get_pin_name(rx_p)
-        io_pad  = platform.get_pad_name(rx_p) # need real pad name
-        io_prop = platform.get_pin_properties(rx_p)
+        io_pad  = platform.get_pad_name(rx_p)
 
-        _data = platform.add_iface_io(io_name + "_gen", len(data))
-        _ena  = platform.add_iface_io(io_name + "_ena")
-        _rst  = platform.add_iface_io(io_name + "_rst")
+        # Replace P with PN in io_pad.
+        # ----------------------------
+        # Split on '_' :  [bank, "P", number, ...]
+        io_pad_split = io_pad.split('_')
+        if len(io_pad_split) < 3 or io_pad_split[1] != "P":
+            raise ValueError(f"Unexpected differential pad name '{io_pad}'")
+        # Replace P by PN.
+        io_pad = f"{io_pad_split[0]}_PN_{io_pad_split[2]}"
 
-        if fifo_clk is not None:
-            self.rx_fifo_empty = rx_fifo_empty = platform.add_iface_io(io_name + "_rx_fifo_empty")
-            self.rx_fifo_rd = rx_fifo_rd = platform.add_iface_io(io_name + "_rx_fifo_rd")
-
-        if dynamic_delay or dpa:
-            self.delay_ena = delay_ena = platform.add_iface_io(io_name + "_delay_ena")
-            self.delay_rst = delay_rst = platform.add_iface_io(io_name + "_delay_rst")
-
-            if dynamic_delay:
-                self.delay_inc = delay_inc = platform.add_iface_io(io_name + "_delay_inc")
-            else:
-                self.dpa_dbg  = dpa_dbg = platform.add_iface_io(io_name + "_dpa_dbg", 6)
-                self.dpa_lock = dpa_lock = platform.add_iface_io(io_name + "_dpa_lock")
-
-                if debug:
-                    self.dpa_debug = dpa_debug = CSRStatus(fields=[
-                        CSRField("dpa_dbg", size=6, description="DPA Debug", offset=0),
-                        CSRField("dpa_lock", size=1, description="DPA Lock", offset=8),
-                    ])
-
-                    self.comb += [
-                        dpa_debug.fields.dpa_dbg.eq(dpa_dbg),
-                        dpa_debug.fields.dpa_lock.eq(dpa_lock),
-                    ]
-
-        assert platform.family in ["Titanium", "Topaz"]
-        # _p has _P_ and _n has _N_ followed by an optional function
-        # lvds block needs _PN_
-        pad_split = io_pad.split('_')
-        assert pad_split[1] == 'P'
-        io_pad = f"{pad_split[0]}_PN_{pad_split[2]}"
+        # Internal signals.
+        # -----------------
+        _data = platform.add_iface_io(f"{io_name}_gen", len(data))
+        _ena  = platform.add_iface_io(f"{io_name}_ena")
+        _rst  = platform.add_iface_io(f"{io_name}_rst")
 
         self.comb += [
-            _rst.eq(0),
             _ena.eq(1),
+            _rst.eq(0),
             data.eq(_data),
-            ]
-        block = {
+        ]
+
+        # LVDS block for Efinity.
+        # -----------------------
+        platform.toolchain.ifacewriter.blocks.append({
             "type"          : "LVDS",
             "mode"          : "INPUT",
             "rx_mode"       : "NORMAL",
@@ -131,56 +135,41 @@ class EfinixSerdesDiffRx(LiteXModule):
             "size"          : len(data),
             "slow_clk"      : clk,
             "fast_clk"      : fast_clk,
-            "half_rate"     : "1" if not dpa else "0",
+            "half_rate"     : "1",
             "ena"           : _ena,
             "rst"           : _rst,
             "rx_voc_driver" : "1",
             "rx_term"       : rx_term if isinstance(rx_term, str) else ("ON" if rx_term else "OFF"),
-        }
-
-        if fifo_clk is not None:
-            block.update({
-                "rx_fifo"       : True,
-                "rx_fifo_empty" : rx_fifo_empty,
-                "rx_fifo_rd"    : rx_fifo_rd,
-                "rx_fifoclk"    : fifo_clk,
-            })
-
-        if dynamic_delay:
-            block.update({
-                "rx_delay"  : "DYNAMIC",
-                "delay_ena" : delay_ena,
-                "delay_rst" : delay_rst,
-                "delay_inc" : delay_inc,
-            })
-        elif dpa:
-            block.update({
-                "rx_delay"  : "DPA",
-                "delay_ena" : delay_ena,
-                "delay_rst" : delay_rst,
-                "dpa_dbg"   : dpa_dbg,
-                "dpa_lock"  : dpa_lock,
-            })
-        else:
-            block.update({
-                "rx_delay" : "STATIC",
-                "delay"    : delay,
-            })
-
-        platform.toolchain.ifacewriter.blocks.append(block)
-        platform.toolchain.excluded_ios.append(platform.get_pin(rx_p))
-        platform.toolchain.excluded_ios.append(platform.get_pin(rx_n))
+            "rx_delay"      : "STATIC",
+            "delay"         : delay,
+        })
+        platform.toolchain.excluded_ios += [platform.get_pin(rx_p), platform.get_pin(rx_n)]  # Mark pads as consumed.
 
 # Decoder 8b10b Checker ----------------------------------------------------------------------------
 
 class Decoder8b10bChecker(LiteXModule):
-    def __init__(self, data_in, valid):
+    """
+    Fast plausibility checker for a 20‑bit word (two 10‑bit symbols).
+
+    * Verifies each symbol’s pop‑count (must contain 4–6 ones).
+    * Checks combined running‑disparity window (total ones 9–11).
+    * Disallows a comma /K28/ character in the **second** symbol.
+
+    The output *valid* is asserted when **all** criteria pass, meaning the word could be a legally
+    encoded 8b/10b lane byte.
+    """
+    def __init__(self):
+        self.data = Signal(20) # i
+        self.valid = Signal()  # o
+
+        # # #
+
         # Symbol popcounts must be 4/5/6 ones.
         sym0_ones = Signal(4)
         sym1_ones = Signal(4)
         self.comb += [
-            sym0_ones.eq(Reduce("ADD", data_in[ 0:10])),
-            sym1_ones.eq(Reduce("ADD", data_in[10:20])),
+            sym0_ones.eq(Reduce("ADD", self.data[ 0:10])),
+            sym1_ones.eq(Reduce("ADD", self.data[10:20])),
         ]
         sym0_bad = (sym0_ones < 4) | (sym0_ones > 6)
         sym1_bad = (sym1_ones < 4) | (sym1_ones > 6)
@@ -191,245 +180,296 @@ class Decoder8b10bChecker(LiteXModule):
         rd_bad = (both_ones < 9) | (both_ones > 11)
 
         # Forbid comma (K.28) in second symbol.
-        sym1_msb  = Cat(*reversed(data_in[10:20]))   # bit-reverse
-        code6b    = sym1_msb[4:]                     # bits 9..4
+        sym1_msb  = Cat(*reversed(self.data[10:20])) # bit-reverse
+        code6b    = sym1_msb[4:]                # bits 9..4
         comma_bad = (code6b != 0b001111) & (code6b != 0b110000)
 
-        # Output: 1 when everything looks OK
-        self.comb += valid.eq(~(sym0_bad | sym1_bad | rd_bad | comma_bad))
+        # Set valid when everything is OK.
+        self.comb += self.valid.eq(~(sym0_bad | sym1_bad | rd_bad | comma_bad))
+
+# Decoder 8b10b Idle Checker -----------------------------------------------------------------------
+
+class Decoder8b10bIdleChecker(LiteXModule):
+    """
+    Detects the /I2/ idle ordered set (K28.5 followed by D16.2).
+
+    The two embedded combinatorial decoders analyse the lower and upper 10-bit symbols; *idle* is
+    asserted for one cycle when the pair is exactly “K28.5, D16.2” and both symbols are valid.
+    """
+    def __init__(self):
+        self.data = Signal(20) # i
+        self.idle = Signal()   # o
+
+        # # #
+
+        # 8b10b Decoders.
+        decoders = [Decoder(lsb_first=True, sync=False) for _ in range(2)]
+        self.comb += [
+            decoders[0].input.eq(self.data[:10]),
+            decoders[1].input.eq(self.data[10:]),
+        ]
+        self.submodules += decoders
+
+        # Idle I2 Check.
+        _decoder0_k28_5 = ~decoders[0].invalid &  decoders[0].k & (decoders[0].d == K(28, 5))
+        _decoder1_d16_2 = ~decoders[1].invalid & ~decoders[1].k & (decoders[1].d == D(16, 2))
+        self.comb += self.idle.eq(_decoder0_k28_5 & _decoder1_d16_2)
 
 # Efinix Aligner -----------------------------------------------------------------------------------
 
 class EfinixAligner(LiteXModule):
-    def __init__(self, align):
-        self.data = data = Signal(30)
-        self.pos  = pos  = Signal(4)
+    """
+    Sliding‑window byte aligner.
+
+    A 30‑bit window (`data`) is scanned by ten overlapping ``Decoder8b10bChecker`` instances
+    (bit offsets 0‑9).  When *align* is asserted, the highest offset that passes the checker is
+    loaded into *pos*, telling downstream logic how many bits to shift to achieve proper 10‑bit
+    boundary alignment.
+    """
+    def __init__(self):
+        self.align = Signal()   # i
+        self.data  = Signal(30) # i
+        self.shift = Signal(4)  # o
 
         # # #
 
-        # Create 10 overlapping checkers; highest valid offset wins.
-        for off in range(10):
-            valid   = Signal()
-            checker = Decoder8b10bChecker(data[off:20+off], valid)
-            self.submodules += checker
-            self.sync += If(align & valid, pos.eq(off))
+        # Create 10 overlapping checkers.
+        checkers = []
+        for offset in range(10):
+            checker = Decoder8b10bChecker()
+            checkers.append(checker)
+            self.comb += checker.data.eq(self.data[offset:offset + 20])
+        self.submodules += checkers
 
-# Decoder 8b10b Idle Checker -----------------------------------------------------------------------
-
-from litex.soc.cores.code_8b10b import table_4b3b, table_4b3b_kn, table_4b3b_kp, table_6b5b
-
-class DecoderComb(LiteXModule):
-    def __init__(self, lsb_first=False):
-        self.input   = Signal(10)
-        self.d       = Signal(8)
-        self.k       = Signal()
-        self.invalid = Signal()
-
-        # # #
-
-        input_msb_first = Signal(10)
-        if lsb_first:
-            for i in range(10):
-                self.comb += input_msb_first[i].eq(self.input[9-i])
-        else:
-            self.comb += input_msb_first.eq(self.input)
-
-        code6b = input_msb_first[4:]
-        code5b = Signal(5)
-        code4b = input_msb_first[:4]
-        code3b = Signal(3, reset_less=True)
-
-        self.comb += [
-            If(code6b == 0b001111,
-                self.k.eq(1),
-                code3b.eq(Array(table_4b3b_kn)[code4b])
-            ).Elif(code6b == 0b110000,
-                self.k.eq(1),
-                code3b.eq(Array(table_4b3b_kp)[code4b])
-            ).Else(
-                If((code4b == 0b0111) | (code4b == 0b1000),  # D.x.A7/K.x.7
-                    If((code6b != 0b100011) &
-                       (code6b != 0b010011) &
-                       (code6b != 0b001011) &
-                       (code6b != 0b110100) &
-                       (code6b != 0b101100) &
-                       (code6b != 0b011100), self.k.eq(1))
-                ),
-                code3b.eq(Array(table_4b3b)[code4b])
-            ),
-            code5b.eq(Array(table_6b5b)[code6b]),
-            self.d.eq(Cat(code5b, code3b)),
-        ]
-
-        # Basic invalid symbols detection: check that we have 4,5 or 6 ones in the symbol. This does
-        # not report all invalid symbols but still allow detecting issues with the link.
-        ones = Signal(4, reset_less=True)
-        self.comb += ones.eq(Reduce("ADD", [self.input[i] for i in range(10)]))
-        self.comb += self.invalid.eq((ones != 4) & (ones != 5) & (ones != 6))
-
-class Decoder8b10bIdleChecker(LiteXModule):
-    def __init__(self, data_in):
-
-        self.is_i2 = is_i2 = Signal()
-
-        self.decoder1 = decoder1 = DecoderComb(lsb_first=True) # CHECKME: Avoid DecoderComb and switch to synchronous Decoder?
-        self.decoder2 = decoder2 = DecoderComb(lsb_first=True) # CHECKME: Avoid DecoderComb and switch to synchronous Decoder?
-
-        self.comb += [
-            decoder1.input.eq(data_in[:10]),
-            decoder2.input.eq(data_in[10:]),
-        ]
-
-        first_ok  =  decoder1.k & ~decoder1.invalid & (decoder1.d == K(28, 5))
-        second_ok = ~decoder2.k & ~decoder2.invalid & (decoder2.d == D(16, 2))
-        
-        self.comb += is_i2.eq(first_ok & second_ok)
-
-# Efinix Serdes Diff Rx Dummy ----------------------------------------------------------------------
-
-class EfinixSerdesDiffRxDummy(LiteXModule):
-    def __init__(self, data):
-        self.data = Signal(10)
-
-        self.comb += data.eq(self.data)
+        # Determine shift from highest valid offset.
+        for offset in range(10):
+              self.sync += If(self.align & checkers[offset].valid, self.shift.eq(offset))
 
 # Efinix Serdes Buffer -----------------------------------------------------------------------------
 
 class EfinixSerdesBuffer(LiteXModule):
+    """
+    Elastic buffer that:
+
+    * Gathers variable-length slices from the deserializer.
+    * Aligns them on a 10-bit boundary (``EfinixAligner``).
+    * Strips /I2/ idle ordered-sets when buffer fill is high.
+    * Delivers one aligned symbol per cycle when data is ready.
+
+    Parameters:
+    - data_in        : Incoming 10-bit slice from the deserializer.
+    - data_in_len    : Number of valid bits in *data_in* (1–10).
+    - data_out       : Aligned 10-bit symbol delivered to the PCS.
+    - data_out_valid : Strobe signalling *data_out* is valid.
+    - align          : Pulse requesting the aligner to resynchronise.
+    """
     def __init__(self, data_in, data_in_len, data_out, data_out_valid, align):
+        # Constants.
+        # ----------
+        word_bits          = 10                               # Width of one aligned symbol.
+        align_window_bits  = 30                               # 10 bits × 3 symbols.
+        buffer_bits        = 1200                             # Buffer depth.
+        min_accum_bits     = word_bits + align_window_bits    # Minimum for output/align.
+        idle_skip_bits     = 20                               # Idle set = 2 × 10-bit symbols.
+        min_skip_bits      = min_accum_bits + idle_skip_bits  # Ensure enough after skip.
 
-        self.aligner = aligner = EfinixAligner(align)
+        # Signals.
+        # --------
+        buffer           = Signal(buffer_bits)
+        pos              = Signal(max=buffer_bits + 1)
+        appended_pos     = pos + data_in_len
+        masked_data_in   = Signal.like(data_in)
+        appended_buffer  = Signal.like(buffer)
+        data_out_aligner = Signal(align_window_bits)
 
-        data_out_aligner = Signal(30)
-
-        # It might be possible to use a smaller buffer here.
-        # This has to be tested.        
-        data_out_buffer_1 = Signal(1000)
-
-        data_out_buffer = Signal(len(data_in)+len(data_out_buffer_1))
-
-        buffer_pos = Signal(max=len(data_out_buffer))
-
-        self.idle_remover = Decoder8b10bIdleChecker(data_out_aligner[10:])
-        
-        cases_buffer    = {}
-        cases_buffer[0] = data_out_buffer.eq(data_in)
-        for i in range(1,len(data_out_buffer)):
-            cases_buffer[i] = data_out_buffer.eq(Cat(data_out_buffer_1[:i], data_in))
-
-        cases_aligner = {}
-        for i in range(10):
-            cases_aligner[i] = data_out_aligner.eq(data_out_buffer[i:30+i])
-
+        # Aligner.
+        # --------
+        self.aligner = aligner = EfinixAligner()
         self.comb += [
-            Case(buffer_pos, cases_buffer),
-            Case(aligner.pos, cases_aligner),
-            aligner.data.eq(data_out_buffer[10:40]),
+            aligner.align.eq(align),
+            aligner.data.eq(appended_buffer[word_bits:word_bits + align_window_bits])
         ]
 
+        # Idle Checker.
+        # -------------
+        self.idle_checker = idle_checker = Decoder8b10bIdleChecker()
+
+        # Append Logic (comb, small case for data_in_len).
+        # ------------------------------------------------
+        self.comb += [
+            # Mask input to only include valid bits (9-11 expected).
+            Case(data_in_len, {
+                9         : masked_data_in.eq(data_in[:9]),
+                10        : masked_data_in.eq(data_in[:10]),
+                11        : masked_data_in.eq(data_in[:11]),
+                "default" : masked_data_in.eq(0), # Fallback, though expecting 9-11.
+            }),
+            # Append masked data to buffer.
+            appended_buffer.eq(buffer | (masked_data_in << pos)),
+        ]
+
+        # Aligner Cases for data_out_aligner.
+        # -----------------------------------
+        cases_aligner = {}
+        for i in range(10):
+            cases_aligner[i] = data_out_aligner.eq(appended_buffer[i:i+align_window_bits])
+        self.comb += [
+            idle_checker.data.eq(data_out_aligner[word_bits:]),
+            Case(aligner.shift, cases_aligner),
+        ]
+
+        # Buffer Update Logic.
+        # --------------------
         self.sync += [
-            If(data_in_len + buffer_pos < 10+30,
+            # Not enough bits: accumulate without output.
+            If(appended_pos < min_accum_bits,
                 data_out.eq(0),
                 data_out_valid.eq(0),
-                buffer_pos.eq(buffer_pos + data_in_len),
-
-                data_out_buffer_1.eq(data_out_buffer[:len(data_out_buffer_1)]),
+                pos.eq(appended_pos),
+                buffer.eq(appended_buffer),
             ).Else(
-                data_out.eq(data_out_aligner[:10]),
+                # Enough bits: output one symbol, optionally skip idle.
+                data_out.eq(data_out_aligner[:word_bits]),
                 data_out_valid.eq(1),
-                If(self.idle_remover.is_i2 & (data_in_len + buffer_pos >= 10+30 +20),
-                    buffer_pos.eq(buffer_pos + data_in_len - (len(data_out)*3)),
-
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out)*3:]),
+                # Skip idle if fill is high enough.
+                If(idle_checker.idle & (appended_pos >= min_skip_bits),
+                    pos.eq(appended_pos - (word_bits + idle_skip_bits)),
+                    buffer.eq(appended_buffer >> (word_bits + idle_skip_bits)),
+                # Normal: consume one symbol.
                 ).Else(
-                    buffer_pos.eq(buffer_pos + data_in_len - len(data_out)),
-
-                    data_out_buffer_1.eq(data_out_buffer[len(data_out):]),
-                )
-            )
+                    pos.eq(appended_pos - word_bits),
+                    buffer.eq(appended_buffer >> word_bits),
+                ),
+            ),
         ]
 
 # Efinix Serdes Diff RX Clock Recovery -------------------------------------------------------------
 
 @ResetInserter()
 class EfinixSerdesDiffRxClockRecovery(LiteXModule):
+    """
+    Clock recovery using multiple phased LVDS receivers for Efinix Titanium / Topaz.
+
+    Parameters:
+    - rx_p     : List of 4 positive legs of the LVDS pairs (platform pins/records).
+    - rx_n     : List of 4 negative legs of the LVDS pairs (platform pins/records).
+    - data     : Output 10-bit deserialized symbol.
+    - data_valid : Strobe indicating *data* is valid.
+    - align    : Pulse to trigger alignment in the reducer.
+    - clk      : Slow/parallel clock domain.
+    - fast_clk : Fast/serial clock domain.
+    - delay    : List of 4 static delay taps for each receiver.
+    - rx_term  : On-die termination (``True`` / ``False`` or "ON"/"OFF").
+    - dummy    : Use dummy receivers for simulation/testing.
+    """
     def __init__(self, rx_p, rx_n, data, data_valid, align, clk, fast_clk, delay=None, rx_term=True, dummy=False):
-        
-        assert len(rx_p) == len(rx_n)
-        assert len(rx_p) == 4
+        # Assertions.
+        # -----------
+        assert len(rx_p) == len(rx_n) == 4
 
-        if delay is None:
-            delay = [0, 0, 0, 0]
+        # Constants.
+        # ----------
+        static_delay = 8  # Base delay per phase offset.
+        up_level     = 1  # Threshold for phase up adjustment.
+        down_level   = 1  # Threshold for phase down adjustment.
 
-        _data = [Signal(len(data)*2) for _ in range(len(rx_p))]
+        # Signals.
+        # --------
+        # Deserializer outputs (20 bits: previous + current 10 bits).
+        _data = [Signal(20) for _ in range(4)]
 
-        data_buffer_len = Signal(max=12)
+        # Variable-length input to reducer.
         data_buffer     = Signal(11)
-        data_1          = Signal(10)
-        data_2          = Signal(10)
-        data_3          = Signal(10)
+        data_buffer_len = Signal(max=12)
 
-        data_0          = Signal(10)
-        data_4          = Signal(10)
+        # Sampled data for correlation.
+        data_0 = Signal(10)
+        data_1 = Signal(10)
+        data_2 = Signal(10)
+        data_3 = Signal(10)
+        data_4 = Signal(10)
 
-        data_1_sum      = Signal(max=11)
-        data_1_eq       = Signal(10)
-        data_3_sum      = Signal(max=11)
-        data_3_eq       = Signal(10)
+        # Corrected data (majority vote).
+        data_1_corr = Signal(10)
+        data_2_corr = Signal(10)
+        data_3_corr = Signal(10)
 
-        data_1_corr     = Signal(10)
-        data_2_corr     = Signal(10)
-        data_3_corr     = Signal(10)
+        # Error signals.
+        data_1_eq  = Signal(10)
+        data_3_eq  = Signal(10)
+        data_1_sum = Signal(max=11)
+        data_3_sum = Signal(max=11)
 
-        up_level        = 1
-        down_level      = 1
+        # Phase decisions.
+        up   = Signal()
+        down = Signal()
 
-        up              = Signal()
-        down            = Signal()
+        # Delay adjustments.
+        # ------------------
+        if delay is None:
+            delay = [0] * 4
 
-        static_delay    = 8
-
+        # Deserializers.
+        # --------------
         for i in range(4):
-            data_before = Signal(len(data))
-
+            data_before = Signal(10)
             if dummy:
-                serdesrx = EfinixSerdesDiffRxDummy(_data[i][10:])
+                # Dummy receiver for simulation.
+                class EfinixSerdesRxDummy(LiteXModule):
+                    def __init__(self, data):
+                        self.data = Signal(10)
+                        self.comb += data.eq(self.data)
+                serdesrx = EfinixSerdesRxDummy(_data[i][10:])
             else:
+                # Actual LVDS receiver.
                 serdesrx = EfinixSerdesDiffRx(
                     rx_p     = rx_p[i],
                     rx_n     = rx_n[i],
                     data     = _data[i][10:],
-                    delay    = (static_delay * (3-i)) + delay[i],
+                    delay    = (static_delay * (3 - i)) + delay[i],
                     clk      = clk,
                     fast_clk = fast_clk,
                     rx_term  = rx_term,
                 )
             self.add_module(name=f"serdesrx{i}", module=serdesrx)
 
+            # Latch previous data.
             self.comb += _data[i][:10].eq(data_before)
-
             self.sync += data_before.eq(_data[i][10:])
 
-
+        # Reducer (elastic buffer with aligner and idle checker).
+        # --------------------------------------------------------
         self.reducer = EfinixSerdesBuffer(data_buffer, data_buffer_len, data, data_valid, align)
 
+        # Majority Vote Corrections.
+        # --------------------------
+        self.comb += [
+            data_1_corr.eq((data_0 & data_1) | (data_2 & data_1) | (data_0 & data_2)),
+            data_2_corr.eq((data_1 & data_2) | (data_3 & data_2) | (data_1 & data_3)),
+            data_3_corr.eq((data_2 & data_3) | (data_4 & data_3) | (data_2 & data_4)),
+        ]
+
+        # Error Detection.
+        # ----------------
         self.comb += [
             data_1_eq.eq(data_1_corr ^ data_2_corr),
             data_3_eq.eq(data_3_corr ^ data_2_corr),
             data_1_sum.eq(Reduce("ADD", [data_1_eq[i] for i in range(10)])),
             data_3_sum.eq(Reduce("ADD", [data_3_eq[i] for i in range(10)])),
+        ]
+
+        # Phase Decision.
+        # ---------------
+        self.comb += [
             If((data_1_sum > data_3_sum) & (data_1_sum >= down_level),
                 up.eq(1),
             ).Elif((data_1_sum < data_3_sum) & (data_3_sum >= up_level),
                 down.eq(1),
             ),
-
-            data_1_corr.eq((data_0 & data_1) | (data_2 & data_1) | (data_0 & data_2)),
-            data_2_corr.eq((data_1 & data_2) | (data_3 & data_2) | (data_1 & data_3)),
-            data_3_corr.eq((data_2 & data_3) | (data_4 & data_3) | (data_2 & data_4)),
         ]
-        
 
+        # FSM for Phase Selection.
+        # ------------------------
         self.fsm = fsm = FSM(reset_state="USE_2")
 
         fsm.act("USE_0",
@@ -556,39 +596,49 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
         self.link_up = pcs.link_up
         self.ev      = pcs.ev
 
+        # # #
+
+        # Clocking.
+        # ---------
         if crg is None:
             assert refclk is not None
-            self.crg = EfinixSerdesClocking(
+            self.crg = crg = EfinixSerdesClocking(
                 refclk      = refclk,
                 refclk_freq = refclk_freq,
             )
         else:
             self.crg = crg
 
-        self.tx = EfinixSerdesDiffTx(
+        # TX.
+        # ---
+        tx = EfinixSerdesDiffTx(
             data     = pcs.tbi_tx,
             tx_p     = pads.tx_p,
             tx_n     = pads.tx_n,
-            clk      = self.crg.cd_eth_tx.clk,
-            fast_clk = self.crg.cd_eth_trx_fast.clk,
+            clk      = crg.cd_eth_tx.clk,
+            fast_clk = crg.cd_eth_trx_fast.clk,
         )
+        self.tx = ClockDomainsRenamer("eth_tx")(tx)
 
+
+        # RX.
+        # ---
         rx = EfinixSerdesDiffRxClockRecovery(
             rx_p       = pads.rx_p,
             rx_n       = pads.rx_n,
             data       = pcs.tbi_rx,
             data_valid = pcs.tbi_rx_ce,
             align      = pcs.align,
-            clk        = self.crg.cd_eth_rx.clk,
-            fast_clk   = self.crg.cd_eth_trx_fast.clk,
+            clk        = crg.cd_eth_rx.clk,
+            fast_clk   = crg.cd_eth_trx_fast.clk,
             delay      = rx_delay,
             rx_term    = rx_term,
         )
-
         self.comb += rx.reset.eq(pcs.restart)
-
         self.rx = ClockDomainsRenamer("eth_rx")(rx)
 
+        # I2C.
+        # ----
         if with_i2c and hasattr(pads, "scl") and hasattr(pads, "sda"):
             from litei2c import LiteI2C
 
