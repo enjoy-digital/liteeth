@@ -150,10 +150,8 @@ class LiteEthMACSRAMWriter(LiteXModule):
         ports = [None] * nslots
         for n in range(nslots):
             mems[n]  = Memory(dw, depth, name=f"mac_sram_writer_slot{n}")
-            ports[n] = port = mems[n].get_port(write_capable=True)
-            self.comb += port.adr.eq(wr_addr),
-            self.comb += port.dat_w.eq(wr_data),
-            self.specials += port
+            ports[n] = mems[n].get_port(write_capable=True)
+            self.specials += ports[n]
         self.mems = mems
 
         # Endianness Handling.
@@ -162,6 +160,10 @@ class LiteEthMACSRAMWriter(LiteXModule):
         # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
+            self.comb += [
+                port.adr.eq(wr_addr),
+                port.dat_w.eq(wr_data),
+            ]
             cases[n] = [port.we.eq(1)]
 
         self.comb += If(sink.valid & write, Case(wr_slot, cases))
@@ -288,8 +290,10 @@ class LiteEthMACSRAMReader(LiteXModule):
         # Connect Memory ports.
         cases = {}
         for n, port in enumerate(ports):
-            self.comb += port.re.eq(read)
-            self.comb += port.adr.eq(length[int(math.log2(dw//8)):])
+            self.comb += [
+                port.re.eq(read),
+                port.adr.eq(length[int(math.log2(dw//8)):]),
+            ]
             cases[n] = [rd_data.eq(port.dat_r)]
 
         self.comb += Case(rd_slot, cases)
