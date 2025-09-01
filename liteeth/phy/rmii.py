@@ -180,6 +180,19 @@ class LiteEthPHYRMIIRX(LiteXModule):
             converter.source.connect(source),
         ]
 
+        if hasattr(pads, "rx_er"):
+            rx_er_i= Signal()
+
+            self.specials += SDRInput(i=pads.rx_er, o=rx_er_i, clk=clk_signal)
+
+            self.sync += [
+                If(source.last & source.valid,
+                    source.error.eq(0),
+                ).Elif(rx_er_i & crs_dv_i,
+                    source.error.eq(1),
+                )
+            ]
+
         # Speed Detection.
         # ----------------
         self.speed_detect = LiteEthPHYRMIISpeedDetect(
