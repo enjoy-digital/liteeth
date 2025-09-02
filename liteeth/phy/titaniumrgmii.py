@@ -137,8 +137,8 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         # -------
         self.pll = pll = TITANIUMPLL(platform)
         pll.register_clkin(clkin,                 freq=125e6)
-        pll.create_clkout(self.cd_eth_rx,         freq=125e6, phase=0,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx,         freq=125e6, phase=0,  with_reset=False)
+        pll.create_clkout(self.cd_eth_rx,         freq=125e6, phase=270,  with_reset=False)
         pll.create_clkout(self.cd_eth_tx_delayed, freq=125e6, phase=90)
 
         # TX Clk.
