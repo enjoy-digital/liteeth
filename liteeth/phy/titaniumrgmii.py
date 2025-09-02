@@ -52,7 +52,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
         # Logic.
         # ------
         self.comb += sink.ready.eq(1)
-        self.sync += [
+        self.comb += [
             tx_ctl_h.eq(sink.valid),
             tx_ctl_l.eq(sink.valid),
             tx_data_h.eq(sink.data[:4]),
@@ -95,17 +95,16 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 
         # Logic.
         # ------
-        last    = Signal()
-        rx_data_lsb = Signal(4)
-        rx_data_msb = Signal(4)
-        self.comb += rx_data_msb.eq(rx_data_l)
-        self.sync += rx_data_lsb.eq(rx_data_h)
         self.sync += [
-            last.eq(~rx_ctl & rx_ctl_d),
-            source.valid.eq(rx_ctl_d),
-            source.data.eq(Cat(rx_data_lsb, rx_data_msb)),
+            source.valid.eq(rx_ctl),
+            source.data.eq(Cat(rx_data_h, rx_data_l)),
+            If(~rx_ctl, # Idle
+               source.error.eq(0),
+            ).Elif(rx_ctl & ~rx_ctl_l,
+               source.error.eq(1),
+            )
         ]
-        self.comb += source.last.eq(last)
+        self.comb += source.last.eq(~rx_ctl & rx_ctl_d)
 
 # LiteEth PHY RGMII CRG ----------------------------------------------------------------------------
 
