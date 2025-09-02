@@ -80,8 +80,8 @@ class LiteEthPHYRGMII(LiteXModule):
     rx_clk_freq = 125e6
     def __init__(self, platform, clock_pads, pads, with_hw_init_reset=True, hw_reset_cycles=256):
         self.crg = LiteEthPHYRGMIICRG(platform, clock_pads, with_hw_init_reset, hw_reset_cycles, n=self.n)
-        self.tx  = ClockDomainsRenamer(f"eth{self.n}_tx")(LiteEthPHYRGMIITX(pads, self.crg.cd_eth_tx.clk))
-        self.rx  = ClockDomainsRenamer(f"eth{self.n}_rx")(LiteEthPHYRGMIIRX(pads, self.crg.cd_eth_rx.clk))
+        self.tx  = ClockDomainsRenamer(f"eth{self.n}_tx")(LiteEthPHYRGMIITX(pads, ClockSignal(f"eth{self.n}_tx")))
+        self.rx  = ClockDomainsRenamer(f"eth{self.n}_rx")(LiteEthPHYRGMIIRX(pads, ClockSignal(f"eth{self.n}_rx")))
         self.sink, self.source = self.tx.sink, self.rx.source
         LiteEthPHYRGMII.n += 1 # FIXME: Improve.
 
