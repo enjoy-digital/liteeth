@@ -24,8 +24,8 @@ class LiteEthMACWishboneInterface(LiteXModule):
     ):
         self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
-        self.bus_rx = wishbone.Interface(data_width=dw)
-        self.bus_tx = wishbone.Interface(data_width=dw)
+        self.bus_rx = wishbone.Interface(data_width=dw, mode="r" if rxslots_read_only else "rw")
+        self.bus_tx = wishbone.Interface(data_width=dw, mode="w" if txslots_write_only else "rw")
 
         # # #
 
