@@ -10,6 +10,7 @@ from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 from liteeth.packet import Depacketizer, Packetizer
+from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SOURCE, DIR_SINK
 
 # ICMP TX ------------------------------------------------------------------------------------------
 
@@ -160,6 +161,9 @@ class LiteEthICMP(LiteXModule):
     def __init__(self, ip, ip_address, dw=8, fifo_depth=128):
         self.tx   = tx   = LiteEthICMPTX(ip_address, dw)
         self.rx   = rx   = LiteEthICMPRX(ip_address, dw)
+
+        rx = BufferizeEndpoints({"source": DIR_SOURCE}, pipe_valid=True, pipe_ready=False)(rx)
+
         self.echo = echo = LiteEthICMPEcho(dw, fifo_depth=fifo_depth)
         self.comb += [
             rx.source.connect(echo.sink),
