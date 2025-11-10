@@ -18,18 +18,19 @@ from test.model import phy, mac
 
 from litex.gen.sim import *
 
+# DUT ----------------------------------------------------------------------------------------------
 
-class DUT(Module):
+class DUT(LiteXModule):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=False)
-        self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
-        self.submodules.core = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True)
+        self.phy_model = phy.PHY(8, debug=False)
+        self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
+        self.core      = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True)
 
-        self.submodules.streamer = PacketStreamer(eth_phy_description(8), last_be=1)
-        self.submodules.streamer_randomizer = Randomizer(eth_phy_description(8), level=50)
+        self.streamer = PacketStreamer(eth_phy_description(8), last_be=1)
+        self.streamer_randomizer = Randomizer(eth_phy_description(8), level=50)
 
-        self.submodules.logger_randomizer = Randomizer(eth_phy_description(8), level=50)
-        self.submodules.logger = PacketLogger(eth_phy_description(8))
+        self.logger_randomizer = Randomizer(eth_phy_description(8), level=50)
+        self.logger = PacketLogger(eth_phy_description(8))
 
         self.comb += [
             Record.connect(self.streamer.source, self.streamer_randomizer.sink),
@@ -38,12 +39,21 @@ class DUT(Module):
             Record.connect(self.logger_randomizer.source, self.logger.sink)
         ]
 
+        self.pipeline = stream.Pipeline(
+            self.streamer,
+            self.streamer_randomizer,
+            self.core,
+            self.logger_randomizer,
+            self.logger,
+        )
+
+# Generator ----------------------------------------------------------------------------------------
 
 def main_generator(dut):
     for i in range(2):
         packet = mac.MACPacket([i for i in range(64)])
-        packet.target_mac = 0x010203040506
-        packet.sender_mac = 0x090A0B0C0C0D
+        packet.target_mac    = 0x010203040506
+        packet.sender_mac    = 0x090A0B0C0C0D
         packet.ethernet_type = 0x0800
         packet.encode_header()
         dut.streamer.send(packet)
@@ -53,20 +63,30 @@ def main_generator(dut):
         s, l, e = check(packet, dut.logger.packet)
         print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
+# Test MAC Core ------------------------------------------------------------------------------------
+
 class TestMACCore(unittest.TestCase):
     def test(self):
         dut = DUT()
         generators = {
-            "sys" :   [main_generator(dut),
-                       dut.streamer.generator(),
-                       dut.streamer_randomizer.generator(),
-                       dut.logger_randomizer.generator(),
-                       dut.logger.generator()],
-            "eth_tx": [dut.phy_model.phy_sink.generator(),
-                       dut.phy_model.generator()],
-            "eth_rx":  dut.phy_model.phy_source.generator()
+            "sys" :   [
+                main_generator(dut),
+                dut.streamer.generator(),
+                dut.streamer_randomizer.generator(),
+                dut.logger_randomizer.generator(),
+                dut.logger.generator()
+            ],
+            "eth_tx": [
+                dut.phy_model.phy_sink.generator(),
+                dut.phy_model.generator()
+            ],
+            "eth_rx":  [
+                dut.phy_model.phy_source.generator()
+            ]
         }
-        clocks = {"sys":    10,
-                  "eth_rx": 10,
-                  "eth_tx": 10}
+        clocks = {
+            "sys"    : 10,
+            "eth_rx" : 10,
+            "eth_tx" : 10,
+        }
         run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
