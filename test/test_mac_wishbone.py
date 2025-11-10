@@ -18,6 +18,7 @@ from test.model import phy, mac
 
 from litex.gen.sim import *
 
+# Wishbone Master ----------------------------------------------------------------------------------
 
 class WishboneMaster:
     def __init__(self, obj):
@@ -51,6 +52,7 @@ class WishboneMaster:
         yield self.obj.stb.eq(0)
         yield
 
+# SRAM Reader Driver -------------------------------------------------------------------------------
 
 class SRAMReaderDriver:
     def __init__(self, obj):
@@ -76,6 +78,7 @@ class SRAMReaderDriver:
         yield self.obj.ev.pending.r.eq(0)
         yield
 
+# SRAM Writer Driver -------------------------------------------------------------------------------
 
 class SRAMWriterDriver:
     def __init__(self, obj):
@@ -93,13 +96,15 @@ class SRAMWriterDriver:
         yield self.obj.ev.pending.r.eq(0)
         yield
 
+# DUT ----------------------------------------------------------------------------------------------
 
-class DUT(Module):
+class DUT(LiteXModule):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=False)
-        self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
-        self.submodules.ethmac = LiteEthMAC(phy=self.phy_model, dw=32, interface="wishbone", with_preamble_crc=True)
+        self.phy_model = phy.PHY(8, debug=False)
+        self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
+        self.ethmac    = LiteEthMAC(phy=self.phy_model, dw=32, interface="wishbone", with_preamble_crc=True)
 
+# Generator ----------------------------------------------------------------------------------------
 
 def main_generator(dut):
     wishbone_tx_master = WishboneMaster(dut.ethmac.bus_tx)
@@ -144,17 +149,19 @@ def main_generator(dut):
             s, l, e = check(tx_payload[:length], rx_payload[:min(length, len(rx_payload))])
             print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
+# Test MAC Wishbone --------------------------------------------------------------------------------
 
 class TestMACWishbone(unittest.TestCase):
     def test(self):
         dut = DUT()
         generators = {
-            "sys" :    main_generator(dut),
-            "eth_tx": [dut.phy_model.phy_sink.generator(),
-                       dut.phy_model.generator()],
-            "eth_rx":  dut.phy_model.phy_source.generator()
+            "sys"    : [main_generator(dut)],
+            "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
+            "eth_rx" : [dut.phy_model.phy_source.generator()],
         }
-        clocks = {"sys":    20,
-                  "eth_rx": 8,
-                  "eth_tx": 8}
+        clocks = {
+            "sys"    : 20,
+            "eth_rx" : 8,
+            "eth_tx" : 8,
+        }
         run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
