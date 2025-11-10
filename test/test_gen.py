@@ -7,6 +7,8 @@
 import unittest
 import os
 
+# Helper -------------------------------------------------------------------------------------------
+
 def build_config(name):
     errors = 0
     os.system("rm -rf examples/build")
@@ -14,6 +16,8 @@ def build_config(name):
     errors += not os.path.isfile("examples/build/gateware/liteeth_core.v")
     os.system("rm -rf examples/build")
     return errors
+
+# Test Examples ------------------------------------------------------------------------------------
 
 class TestExamples(unittest.TestCase):
     def test_udp_s7phyrgmii(self):
