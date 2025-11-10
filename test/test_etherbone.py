@@ -19,25 +19,29 @@ from test.model import phy, mac, arp, ip, udp, etherbone
 
 from litex.gen.sim import *
 
-ip_address = 0x12345678
+# Constants ----------------------------------------------------------------------------------------
+
+ip_address  = 0x12345678
 mac_address = 0x12345678abcd
 
+# DUT ----------------------------------------------------------------------------------------------
 
-class DUT(Module):
+class DUT(LiteXModule):
     def __init__(self):
-        self.submodules.phy_model = phy.PHY(8, debug=False)
-        self.submodules.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
-        self.submodules.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
-        self.submodules.ip_model = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
-        self.submodules.udp_model = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
-        self.submodules.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
+        self.phy_model       = phy.PHY(8, debug=False)
+        self.mac_model       = mac.MAC(self.phy_model, debug=False, loopback=False)
+        self.arp_model       = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
+        self.ip_model        = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
+        self.udp_model       = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
+        self.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
 
-        self.submodules.core = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000)
-        self.submodules.etherbone = LiteEthEtherbone(self.core.udp, 0x1234)
+        self.core      = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000)
+        self.etherbone = LiteEthEtherbone(self.core.udp, 0x1234)
 
-        self.submodules.sram = wishbone.SRAM(1024)
-        self.submodules.interconnect = wishbone.InterconnectPointToPoint(self.etherbone.wishbone.bus, self.sram.bus)
+        self.sram         = wishbone.SRAM(1024)
+        self.interconnect = wishbone.InterconnectPointToPoint(self.etherbone.wishbone.bus, self.sram.bus)
 
+# Genrator -----------------------------------------------------------------------------------------
 
 def main_generator(dut):
     test_probe  = True
@@ -104,17 +108,19 @@ def main_generator(dut):
             s, l, e = check(writes_datas, loopback_writes_datas)
             print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
 
+# Test Etherbone -----------------------------------------------------------------------------------
 
 class TestEtherbone(unittest.TestCase):
     def test_etherbone(self):
         dut = DUT()
         generators = {
-            "sys" :   [main_generator(dut)],
-            "eth_tx": [dut.phy_model.phy_sink.generator(),
-                       dut.phy_model.generator()],
-            "eth_rx":  dut.phy_model.phy_source.generator()
+            "sys"    : [main_generator(dut)],
+            "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
+            "eth_rx" : [dut.phy_model.phy_source.generator()]
         }
-        clocks = {"sys":    10,
-                  "eth_rx": 10,
-                  "eth_tx": 10}
+        clocks = {
+            "sys":    10,
+            "eth_rx": 10,
+            "eth_tx": 10,
+        }
         #run_simulation(dut, generators, clocks, vcd_name="sim.vcd") # FIXME: hanging
