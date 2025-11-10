@@ -14,8 +14,9 @@ from migen import *
 from litex.soc.interconnect.stream import *
 from liteeth.phy.xgmii import LiteEthPHYXGMII, LiteEthPHYXGMIIRX
 
-from .test_stream import StreamPacket, stream_inserter, stream_collector, \
-    compare_packets
+from .test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets
+
+# Helper -------------------------------------------------------------------------------------------
 
 def mask_last_be(dw, data, last_be):
     """Mark some data by a last_be data qualifier. The rest of the data
@@ -30,9 +31,10 @@ def mask_last_be(dw, data, last_be):
 
     return masked_data
 
+# XGMII Collector ----------------------------------------------------------------------------------
+
 class XGMIICollector:
-    def __init__(self, min_interframegap=12, tolerate_dic=True,
-                 debug_print=False):
+    def __init__(self, min_interframegap=12, tolerate_dic=True, debug_print=False):
         # Minimum IFG legal to be accepted on the XGMII interface (excluding
         # DIC, if tolerated). On the receiving send, when accounting for
         # potential IFG shrinkage and allowing the minimum receive IFG as
@@ -230,6 +232,8 @@ class XGMIICollector:
 
         self.collecting = False
 
+# XGMII 64b CSV Reader -----------------------------------------------------------------------------
+
 class XGMII64bCSVReader:
     def __init__(self, filename, extract_signals_pattern="rx",
                  complete_trailing_transaction=True):
@@ -380,10 +384,11 @@ class XGMII64bCSVReader:
             yield xgmii_interface.rx_data.eq(0x0707070707070707)
             yield
 
+# Test XGMII PHY -----------------------------------------------------------------------------------
 
 class TestXGMIIPHY(unittest.TestCase):
     def test_xgmii_rx(self):
-        # Read XGMII data from the CSV file
+        # Read XGMII data from the CSV file.
         csv_file = Path(__file__).parent / "assets" / "xgmii_bus_capture.csv"
         xgmii_injector = XGMII64bCSVReader(
             csv_file.resolve(),
@@ -393,16 +398,16 @@ class TestXGMIIPHY(unittest.TestCase):
         # Collect the XGMII transactions from the reader with a minimum
         # inter-frame gap of 5 (accounted for potential IFG shrinkage).
         xgmii_collector = XGMIICollector(
-            min_interframegap=5,
-            tolerate_dic=False,
-            debug_print=True,
+            min_interframegap = 5,
+            tolerate_dic      = False,
+            debug_print       = True,
         )
 
-        # XGMII interface
+        # XGMII interface.
         xgmii_interface = Record([
-            ("rx_ctl", 8),
+            ("rx_ctl",   8),
             ("rx_data", 64),
-            ("tx_ctl", 8),
+            ("tx_ctl",   8),
             ("tx_data", 64),
         ])
 
@@ -414,27 +419,26 @@ class TestXGMIIPHY(unittest.TestCase):
 
         recvd_packets = []
         run_simulation(
-            dut,
-            [
+            dut, [
                 xgmii_injector.inject(
                     xgmii_interface,
                 ),
                 xgmii_collector.collect(
                     xgmii_interface,
-                    tap_signals="rx",
-                    stop_cond=lambda: xgmii_injector.done() \
+                    tap_signals = "rx",
+                    stop_cond   = lambda: xgmii_injector.done() \
                         and xgmii_collector.current_packet is None,
                 ),
                 stream_collector(
                     dut.source,
-                    dest=recvd_packets,
-                    stop_cond=xgmii_injector.done,
-                    seed=42,
-                    debug_print=True,
+                    dest        = recvd_packets,
+                    stop_cond   = xgmii_injector.done,
+                    seed        = 42,
+                    debug_print = True,
                     # The XGMII PHY RX part deliberately does not support a
                     # deasserted ready signal. The sink is assumed to be always
                     # ready.
-                    ready_rand=0,
+                    ready_rand  = 0,
                 ),
             ],
         )
@@ -471,10 +475,9 @@ class TestXGMIIPHY(unittest.TestCase):
         # Collect the XGMII transactions from the CSV reader with a minimum
         # inter-frame gap of 5 (accounted for potential IFG shrinkage).
         xgmii_rx_collector = XGMIICollector(
-            min_interframegap=5,
-            tolerate_dic=False,
-
-            debug_print=True
+            min_interframegap = 5,
+            tolerate_dic      = False,
+            debug_print       = True
         )
 
         # Collect the XGMII transactions from the TX PHY with a minimum
@@ -482,25 +485,25 @@ class TestXGMIIPHY(unittest.TestCase):
         # repeater) this is the smallest IPG value which may be put on the wire
         # again.
         xgmii_tx_collector = XGMIICollector(
-            min_interframegap=12,
-            tolerate_dic=True,
-            debug_print=True
+            min_interframegap = 12,
+            tolerate_dic      = True,
+            debug_print       = True
         )
 
         class DUT(Module):
             def __init__(self):
                 # XGMII signals
                 self.xgmii_interface = Record([
-                    ("rx_ctl", 8),
+                    ("rx_ctl",   8),
                     ("rx_data", 64),
-                    ("tx_ctl", 8),
+                    ("tx_ctl",   8),
                     ("tx_data", 64),
                 ])
 
                 # PHY with TX and RX side
                 self.submodules.ethphy = ClockDomainsRenamer({
-                    "eth_tx": "sys",
-                    "eth_rx": "sys",
+                    "eth_tx" : "sys",
+                    "eth_rx" : "sys",
                 })(LiteEthPHYXGMII(
                     Record([("rx", 1), ("tx", 1)]),
                     self.xgmii_interface,
@@ -524,25 +527,24 @@ class TestXGMIIPHY(unittest.TestCase):
 
         dut = DUT()
         run_simulation(
-            dut,
-            [
+            dut, [
                 xgmii_rx_collector.collect(
                     dut.xgmii_interface,
-                    tap_signals="rx",
-                    stop_cond=lambda: xgmii_injector.done() \
+                    tap_signals = "rx",
+                    stop_cond   = lambda: xgmii_injector.done() \
                         and xgmii_rx_collector.current_packet is None,
                 ),
                 xgmii_tx_collector.collect(
                     dut.xgmii_interface,
-                    tap_signals="tx",
-                    stop_cond=lambda: xgmii_injector.done() \
+                    tap_signals = "tx",
+                    stop_cond   = lambda: xgmii_injector.done() \
                         and xgmii_tx_collector.current_packet is None \
                         and len(xgmii_tx_collector.packets) \
                             >= len(xgmii_rx_collector.packets),
                 ),
                 xgmii_injector.inject(
                     dut.xgmii_interface,
-                    stop_cond=lambda: not xgmii_rx_collector.collecting \
+                    stop_cond = lambda: not xgmii_rx_collector.collecting \
                         and not xgmii_tx_collector.collecting,
                 ),
             ],

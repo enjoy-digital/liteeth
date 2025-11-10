@@ -14,7 +14,7 @@ from liteeth.mac.crc import *
 
 from litex.gen.sim import *
 
-from .test_stream import *
+from .test_stream import mask_last_be, StreamPacket, stream_inserter, stream_collector, compare_packets
 
 # Layout -------------------------------------------------------------------------------------------
 
