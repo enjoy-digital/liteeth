@@ -14,6 +14,8 @@ from liteeth.packet import *
 
 from .test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets, mask_last_be
 
+# Test Packet --------------------------------------------------------------------------------------
+
 class TestPacket(unittest.TestCase):
     def loopback_test(self, dw, seed=42, with_last_be=False, debug_print=False):
         # Independent random number generator to ensure we're the
@@ -84,22 +86,21 @@ class TestPacket(unittest.TestCase):
         dut = DUT()
         recvd_packets = []
         run_simulation(
-            dut,
-            [
+            dut, [
                 stream_inserter(
                     dut.sink,
-                    src=packets,
-                    seed=seed,
-                    debug_print=debug_print,
-                    valid_rand=50,
+                    src         = packets,
+                    seed        = seed,
+                    debug_print = debug_print,
+                    valid_rand  = 50,
                 ),
                 stream_collector(
                     dut.source,
-                    dest=recvd_packets,
-                    expect_npackets=npackets,
-                    seed=seed,
-                    debug_print=debug_print,
-                    ready_rand=50,
+                    dest            = recvd_packets,
+                    expect_npackets = npackets,
+                    seed            = seed,
+                    debug_print     = debug_print,
+                    ready_rand      = 50,
                 ),
             ],
         )
