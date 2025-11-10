@@ -19,146 +19,169 @@ from test.model.etherbone import Etherbone
 
 from litex.gen.sim import *
 
+# Test Model ---------------------------------------------------------------------------------------
+
 class TestModel(unittest.TestCase):
-    def test_mac(self):
+    def test_mac(self, debug=False):
         errors = 0
         packet = MACPacket(arp_request)
         packet.decode_remove_header()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_request_infos)
         packet.encode_header()
         packet.decode_remove_header()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_request_infos)
 
-        # print(packet)
+        if debug:
+            print(packet)
         packet = MACPacket(arp_reply)
         packet.decode_remove_header()
         errors += verify_packet(packet, arp_reply_infos)
         packet.encode_header()
         packet.decode_remove_header()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_reply_infos)
 
         self.assertEqual(errors, 0)
 
-    def test_arp(self):
+    def test_arp(self, debug=False):
         errors = 0
-        # ARP request
+        # ARP Request.
         packet = MACPacket(arp_request)
         packet.decode_remove_header()
         packet = ARPPacket(packet)
-        # check decoding
+        # Check Decoding.
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_request_infos)
-        # check encoding
+        # Check Encoding.
         packet.encode()
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_request_infos)
 
-        # ARP Reply
+        # ARP Reply.
         packet = MACPacket(arp_reply)
         packet.decode_remove_header()
         packet = ARPPacket(packet)
-        # check decoding
+        # Check Decoding.
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_reply_infos)
-        # check encoding
+        # Check Encoding.
         packet.encode()
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, arp_reply_infos)
 
         self.assertEqual(errors, 0)
 
-    def test_ip(self):
+    def test_ip(self, debug=False):
         errors = 0
-        # UDP packet
+        # UDP Packet.
         packet = MACPacket(udp)
         packet.decode_remove_header()
-        # print(packet)
+        if debug:
+            print(packet)
         packet = IPPacket(packet)
-        # check decoding
+        # Check Decoding.
         errors += not packet.check_checksum()
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, {})
-        # check encoding
+        # Check Encoding.
         packet.encode()
         packet.insert_checksum()
         errors += not packet.check_checksum()
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, {})
 
         self.assertEqual(errors, 0)
 
-    def test_icmp(self):
+    def test_icmp(self, debug=False):
         errors = 0
-        # ICMP packet
+        # ICMP Packet.
         packet = MACPacket(ping_request)
         packet.decode_remove_header()
-        # print(packet)
+        if debug:
+            print(packet)
         packet = IPPacket(packet)
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         packet = ICMPPacket(packet)
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, ping_request_infos)
         packet.encode()
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         errors += verify_packet(packet, ping_request_infos)
 
         self.assertEqual(errors, 0)
 
-    def test_udp(self):
+    def test_udp(self, debug=False):
         errors = 0
-        # UDP packet
+        # UDP Packet.
         packet = MACPacket(udp)
         packet.decode_remove_header()
-        # print(packet)
+        if debug:
+            print(packet)
         packet = IPPacket(packet)
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         packet = UDPPacket(packet)
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         if packet.length != (len(packet)+udp_header.length):
             errors += 1
         errors += verify_packet(packet, udp_infos)
         packet.encode()
         packet.decode()
-        # print(packet)
+        if debug:
+            print(packet)
         if packet.length != (len(packet)+udp_header.length):
             errors += 1
         errors += verify_packet(packet, udp_infos)
 
         self.assertEqual(errors, 0)
 
-    def test_etherbone(self):
-        # Writes/Reads
-        writes = EtherboneWrites(base_addr=0x1000, datas=[i for i in range(16)])
-        reads = EtherboneReads(base_ret_addr=0x2000, addrs=[i for i in range(16)])
+    def test_etherbone(self, debug=False):
+        # Writes/Reads.
+        writes = EtherboneWrites(base_addr    =0x1000, datas=[i for i in range(16)])
+        reads  = EtherboneReads( base_ret_addr=0x2000, addrs=[i for i in range(16)])
 
-        # Record
+        # Record.
         record = EtherboneRecord()
         record.writes = writes
-        record.reads = reads
+        record.reads  = reads
         record.wcount = len(writes.get_datas())
         record.rcount = len(reads.get_addrs())
 
-        # Packet
+        # Packet.
         packet = EtherbonePacket()
         from copy import deepcopy
         packet.records = [deepcopy(record) for i in range(8)]
-        # print(packet)
+        if debug:
+            print(packet)
         packet.encode()
-        # print(packet)
+        if debug:
+            print(packet)
 
         # Send packet over UDP to check against Wireshark dissector
         #import socket
@@ -168,6 +191,7 @@ class TestModel(unittest.TestCase):
         packet = EtherbonePacket(init=packet)
         packet.encoded = True
         packet.decode()
-        print(packet)
+        if debug:
+            print(packet)
 
         self.assertEqual(0, 0) # FIXME
