@@ -34,42 +34,44 @@ class LiteEthStream2UDPTX(LiteXModule):
                 source.length.eq(data_width // 8)
             ]
         else:
-            level   = Signal(max=fifo_depth+1)
-            counter = Signal(max=fifo_depth+1)
+            self.packet_len = packet_len = Signal(max=fifo_depth+1)
+            self.counter = counter = Signal(max=fifo_depth+1)
 
             _ip_address = Signal(32)
             _udp_port   = Signal(16)
 
             self.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
-            self.comb += sink.connect(fifo.sink)
 
-            self.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
+            self.fsm = fsm = ResetInserter()(FSM(reset_state="STORE"))
             self.comb += fsm.reset.eq(~self.enable)
 
-            fsm.act("IDLE",
+            fsm.act("STORE",
+                sink.connect(fifo.sink),
                 NextValue(counter, 0),
                 NextValue(_ip_address, self.ip_address),
                 NextValue(_udp_port, self.udp_port),
+
                 # Send FIFO contents when:
-                # - We have a full packet:
-                If(fifo.sink.valid & fifo.sink.ready & fifo.sink.last,
-                    NextValue(level, fifo.level + 1), # +1 for level latency.
-                    NextState("SEND")
+                If(fifo.sink.valid & fifo.sink.ready,
+                    NextValue(packet_len, packet_len + 1),
+                    # - We have a full packet:
+                    If(fifo.sink.last,
+                        NextState("SEND"),
+                    ),
                 ),
                 # - Or when FIFO is full.
                 If(~fifo.sink.ready,
-                    NextValue(level, fifo_depth),
+                    NextValue(packet_len, fifo_depth),
                     NextState("SEND")
                 ),
             )
             fsm.act("SEND",
-                source.valid.eq(1),
-                source.last.eq(counter == (level - 1)),
+                fifo.source.connect(source, keep=["data", "valid", "ready"]),
+                source.last.eq(fifo.source.last),
                 source.src_port.eq(_udp_port),
                 source.dst_port.eq(_udp_port),
                 source.ip_address.eq(_ip_address),
-                source.length.eq(level * (data_width//8)),
-                source.data.eq(fifo.source.data),
+                source.length[{8: 0, 16: 1, 32: 2, 64: 3}[data_width]:].eq(packet_len),
                 If(source.last,
                     source.last_be.eq({
                         64 : 0b10000000,
@@ -77,12 +79,12 @@ class LiteEthStream2UDPTX(LiteXModule):
                         16 : 0b10,
                         8  : 0b1
                     }[data_width])),
-                If(source.ready,
-                    fifo.source.ready.eq(1),
+                If(source.ready & source.valid,
                     NextValue(counter, counter + 1),
-                    If(source.last,
-                        NextState("IDLE")
-                    )
+                    If(fifo.source.last,
+                        NextValue(packet_len, 0),
+                        NextState("STORE"),
+                    ),
                 )
             )
 

@@ -5,6 +5,8 @@
 #
 # Copyright (c) 2020-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
+#
+# Once built, this example can be interacted with using the `bench/test_udp_streamer.py` script
 
 import os
 import argparse
@@ -52,11 +54,18 @@ class BenchSoC(SoCCore):
         self.add_ram("sram", 0x20000000, 0x1000)
 
         # UDP Streamer -----------------------------------------------------------------------------
+
+        # NOTE: if you want the streamer to be clocked from `sys`, you need to create a
+        # `ClockDomain` with a different name. This is because `sys` gets renamed inside
+        # `LiteEthUDPCrossbar` into `eth_*`
+        # Here we use `etherbone` which is created by `SoCCore.add_etherbone()`.
         from liteeth.frontend.stream import LiteEthUDPStreamer
         self.udp_streamer = udp_streamer = LiteEthUDPStreamer(
             udp        = self.ethcore_etherbone.udp,
             ip_address = "192.168.1.100",
             udp_port   = 6000,
+            data_width = 8,
+            cd         = "etherbone",
         )
 
         # Leds -------------------------------------------------------------------------------------
@@ -88,28 +97,28 @@ class BenchSoC(SoCCore):
 
         # Switches ---------------------------------------------------------------------------------
 
-        if False:
-            # Resynchronize Swiches inputs.
-            switches_pads = platform.request_all("user_sw")
-            switches      = Signal(len(switches_pads))
-            self.specials += MultiReg(switches_pads, switches)
+        # Resynchronize Swiches inputs.
+        switches_pads = platform.request_all("user_sw")
+        switches      = Signal(len(switches_pads))
+        self.specials += MultiReg(switches_pads, switches)
 
-            # Send Switches value on UDP Streamer TX every 500ms.
-            switches_timer = WaitTimer(500e-3*sys_clk_freq)
-            switches_fsm   = FSM(reset_state="IDLE")
-            self.submodules += switches_timer, switches_fsm
-            switches_fsm.act("IDLE",
-                switches_timer.wait.eq(1),
-                If(switches_timer.done,
-                    NextState("SEND")
-                )
-            )
-            switches_fsm.act("SEND",
-                udp_streamer.sink.valid.eq(1),
-                udp_streamer.sink.data.eq(switches),
-                If(udp_streamer.sink.ready,
-                    NextState("IDLE")
-                )
+        # Send Switches value on UDP Streamer TX every 100ms.
+        switches_timer = WaitTimer(100e-3*sys_clk_freq)
+        switches_fsm   = FSM(reset_state="IDLE")
+        self.submodules += switches_timer, switches_fsm
+        switches_fsm.act("IDLE",
+            switches_timer.wait.eq(1),
+            If(switches_timer.done,
+                NextState("SEND-SWITCHES")
+            ),
+        )
+        switches_fsm.act("SEND-SWITCHES",
+            udp_streamer.sink.valid.eq(1),
+            udp_streamer.sink.data.eq(switches),
+            udp_streamer.sink.last.eq(1),
+            If(udp_streamer.sink.ready,
+                NextState("IDLE")
+            ),
         )
 
 # Main ---------------------------------------------------------------------------------------------
