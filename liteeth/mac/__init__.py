@@ -11,6 +11,7 @@ from liteeth.common import *
 from liteeth.mac.common import *
 from liteeth.mac.core import LiteEthMACCore
 from liteeth.mac.wishbone import LiteEthMACWishboneInterface
+from liteeth.mac.dma import LiteEthMACDMAInterface
 
 # MAC ----------------------------------------------------------------------------------------------
 
@@ -103,6 +104,56 @@ class LiteEthMAC(LiteXModule):
 
     def get_csrs(self):
         return self.csrs
+
+
+# MAC with DMA -------------------------------------------------------------------------------------
+
+class LiteEthMACDMA(Module, AutoCSR):
+    def __init__(self, phy,
+        dma_write_port,
+        dma_read_port,
+        dma_offset,
+        with_preamble_crc = True,
+        nrxslots          = 2,
+        ntxslots          = 2,
+        with_sys_datapath = False):
+
+        dw = phy.dw
+
+        self.with_dma   = CSRConstant(True)
+        self.rx_slots   = CSRConstant(nrxslots)
+        self.tx_slots   = CSRConstant(ntxslots)
+        self.slot_size  = CSRConstant(2**bits_for(eth_mtu))
+        self.dma_offset = CSRConstant(dma_offset)
+
+        self.csrs = []
+
+        self.submodules.core = LiteEthMACCore(
+            phy               = phy,
+            dw                = dw,
+            with_sys_datapath = with_sys_datapath,
+            with_preamble_crc = with_preamble_crc
+        )
+
+        self.submodules.dma = LiteEthMACDMAInterface(
+            dw         = dw,
+            write_port = dma_write_port,
+            read_port  = dma_read_port,
+            offset     = dma_offset,
+            nrxslots   = nrxslots,
+            ntxslots   = ntxslots,
+            slot_size  = self.slot_size.constant
+        )
+
+        self.ev = self.dma.ev
+        self.csrs = self.core.get_csrs() + self.dma.get_csrs()
+
+        self.comb += self.core.source.connect(self.dma.sink)
+        self.comb += self.dma.source.connect(self.core.sink)
+
+    def get_csrs(self):
+        return self.csrs
+
 
 # MAC Core Crossbar --------------------------------------------------------------------------------
 
