@@ -27,6 +27,7 @@ from liteeth.phy.rmii     import LiteEthPHYRMII
 from liteeth.phy.gmii     import LiteEthPHYGMII
 from liteeth.phy.gmii_mii import LiteEthPHYGMIIMII
 from liteeth.phy.xgmii    import LiteEthPHYXGMII
+from liteeth.phy.ethernet import LiteEthPHYETHERNET
 
 from liteeth.phy.s6rgmii   import LiteEthPHYRGMII as LiteEthS6PHYRGMII
 from liteeth.phy.s7rgmii   import LiteEthPHYRGMII as LiteEthS7PHYRGMII
