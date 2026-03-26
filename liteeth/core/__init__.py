@@ -27,6 +27,7 @@ class LiteEthIPCore(LiteXModule):
         rx_cdc_buffered   = True,
         interface         = "crossbar",
         endianness        = "big",
+        eth_mtu           = eth_mtu_default,
     ):
         # Parameters.
         # -----------
@@ -45,7 +46,8 @@ class LiteEthIPCore(LiteXModule):
             tx_cdc_depth      = tx_cdc_depth,
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
-            rx_cdc_buffered   = rx_cdc_buffered
+            rx_cdc_buffered   = rx_cdc_buffered,
+            eth_mtu           = eth_mtu,
         )
 
         # ARP.
@@ -92,6 +94,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         rx_cdc_buffered   = True,
         interface         = "crossbar",
         endianness        = "big",
+        eth_mtu           = eth_mtu_default,
     ):
         # Parameters.
         # -----------
@@ -116,6 +119,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
+            eth_mtu           = eth_mtu,
         )
         # UDP.
         # ----

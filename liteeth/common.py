@@ -18,12 +18,12 @@ from litex.soc.interconnect.packet import Header, HeaderField
 
 # Ethernet Constants -------------------------------------------------------------------------------
 
-eth_mtu              = 1530
+eth_mtu_default      = 1530
+eth_mtu_jumboframe   = 9022
 eth_min_frame_length = 64
 eth_fcs_length       = 4
 eth_interpacket_gap  = 12
 eth_preamble         = 0xd555555555555555
-buffer_depth         = 2**log2_int(eth_mtu, need_pow2=False)
 
 ethernet_type_ip     = 0x800
 ethernet_type_arp    = 0x806

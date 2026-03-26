@@ -31,6 +31,7 @@ class LiteEthMAC(LiteXModule):
         tx_cdc_buffered    = False,
         rx_cdc_depth       = 32,
         rx_cdc_buffered    = False,
+        eth_mtu            = eth_mtu_default,
     ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -47,6 +48,7 @@ class LiteEthMAC(LiteXModule):
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
+            eth_mtu           = eth_mtu,
         )
         self.csrs = []
 
@@ -76,6 +78,7 @@ class LiteEthMAC(LiteXModule):
                 ntxslots   = ntxslots, txslots_write_only = txslots_write_only,
                 endianness = endianness,
                 timestamp  = timestamp,
+                eth_mtu    = eth_mtu,
             )
             if full_memory_we:
                 wishbone_interface = self.apply_full_memory_we(wishbone_interface)

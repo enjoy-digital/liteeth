@@ -27,7 +27,7 @@ mac_address = 0x12345678abcd
 # DUT ----------------------------------------------------------------------------------------------
 
 class DUT(LiteXModule):
-    def __init__(self):
+    def __init__(self, eth_mtu=eth_mtu_default):
         self.phy_model       = phy.PHY(8, debug=False)
         self.mac_model       = mac.MAC(self.phy_model, debug=False, loopback=False)
         self.arp_model       = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
@@ -35,7 +35,7 @@ class DUT(LiteXModule):
         self.udp_model       = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
         self.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
 
-        self.core      = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000)
+        self.core      = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000, eth_mtu=eth_mtu)
         self.etherbone = LiteEthEtherbone(self.core.udp, 0x1234)
 
         self.sram         = wishbone.SRAM(1024)
