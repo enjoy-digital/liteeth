@@ -94,7 +94,7 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 
 class LiteEthIPTX(LiteXModule):
-    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=True):
+    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=True, dont_fragment=False):
         self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_mac_description(dw))
         self.target_unreachable = Signal()
@@ -127,6 +127,7 @@ class LiteEthIPTX(LiteXModule):
             packetizer.sink.total_length.eq(ipv4_header.length + sink.length),
             packetizer.sink.version.eq(0x4),     # ipv4
             packetizer.sink.ihl.eq(ipv4_header.length//4),
+            packetizer.sink.dont_fragment.eq(dont_fragment),
             packetizer.sink.identification.eq(0),
             packetizer.sink.ttl.eq(0x80),
             packetizer.sink.sender_ip.eq(ip_address),
@@ -264,8 +265,8 @@ class LiteEthIPRX(LiteXModule):
 # IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(LiteXModule):
-    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8):
-        self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
+    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dont_fragment=False, dw=8):
+        self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw, dont_fragment=dont_fragment)
         self.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [
