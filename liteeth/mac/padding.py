@@ -69,7 +69,7 @@ class LiteEthMACPaddingInserter(Module):
 # MAC Padding Checker ------------------------------------------------------------------------------
 
 class LiteEthMACPaddingChecker(Module):
-    def __init__(self, dw, packet_min_length):
+    def __init__(self, dw, packet_min_length, eth_mtu=eth_mtu_default):
         self.sink   = sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 

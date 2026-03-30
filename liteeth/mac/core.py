@@ -46,6 +46,7 @@ class LiteEthMACCore(LiteXModule):
         tx_cdc_buffered   = False,
         rx_cdc_depth      = 32,
         rx_cdc_buffered   = False,
+        eth_mtu           = eth_mtu_default,
         ):
 
         # Endpoints.
@@ -247,7 +248,7 @@ class LiteEthMACCore(LiteXModule):
 
             def add_padding(self):
                 """Add padding checker for minimum frame length."""
-                rx_padding = padding.LiteEthMACPaddingChecker(datapath_dw, (eth_min_frame_length - eth_fcs_length))
+                rx_padding = padding.LiteEthMACPaddingChecker(datapath_dw, (eth_min_frame_length - eth_fcs_length), eth_mtu=eth_mtu)
                 rx_padding = ClockDomainsRenamer(cd_rx)(rx_padding)
                 self.submodules += rx_padding
                 self.pipeline.append(rx_padding)

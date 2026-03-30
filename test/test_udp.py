@@ -26,7 +26,7 @@ mac_address = 0x12345678abcd
 # DUT ----------------------------------------------------------------------------------------------
 
 class DUT(LiteXModule):
-    def __init__(self, dw=8):
+    def __init__(self, dw=8, eth_mtu=eth_mtu_default):
         self.dw        = dw
         self.phy_model = phy.PHY(8, debug=False)
         self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
@@ -34,7 +34,7 @@ class DUT(LiteXModule):
         self.ip_model  = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
         self.udp_model = udp.UDP(self.ip_model, ip_address, debug=False, loopback=True)
 
-        self.core     = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000)
+        self.core     = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000, eth_mtu=eth_mtu)
         udp_port      = self.core.udp.crossbar.get_port(0x5678, dw)
         self.streamer = PacketStreamer(eth_udp_user_description(dw))
         self.logger   = PacketLogger(eth_udp_user_description(dw))
@@ -62,24 +62,26 @@ def main_generator(dut):
 
 class TestUDP(unittest.TestCase):
     def test(self):
-        dut = DUT(8)
-        generators = {
-            "sys"    : [
-                main_generator(dut),
-                dut.streamer.generator(),
-                dut.logger.generator(),
-            ],
-            "eth_tx" : [
-                dut.phy_model.phy_sink.generator(),
-                dut.phy_model.generator(),
-            ],
-            "eth_rx" : [
-                dut.phy_model.phy_source.generator()
-            ]
-        }
-        clocks = {
-            "sys"    : 10,
-            "eth_rx" : 10,
-            "eth_tx" : 10,
-        }
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        for mtu in [eth_mtu_default, eth_mtu_jumboframe]:
+            with self.subTest(eth_mtu=mtu):
+                dut = DUT(8, eth_mtu=mtu)
+                generators = {
+                    "sys"    : [
+                        main_generator(dut),
+                        dut.streamer.generator(),
+                        dut.logger.generator(),
+                    ],
+                    "eth_tx" : [
+                        dut.phy_model.phy_sink.generator(),
+                        dut.phy_model.generator(),
+                    ],
+                    "eth_rx" : [
+                        dut.phy_model.phy_source.generator()
+                    ]
+                }
+                clocks = {
+                    "sys"    : 10,
+                    "eth_rx" : 10,
+                    "eth_tx" : 10,
+                }
+                run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
