@@ -14,6 +14,8 @@ from migen import *
 
 from litex.soc.interconnect.stream import *
 
+from liteeth.frontend.stream import LiteEthStream2UDPTX
+
 # Helpers ------------------------------------------------------------------------------------------
 
 # Function to iterate over chunks of data, from
@@ -372,3 +374,123 @@ class TestStream(unittest.TestCase):
         # to be respected in the future.
         dut = PipeReady([("data", 64), ("last_be", 8)])
         self.pipe_test(dut)
+
+
+class TestStream2UDPTX(unittest.TestCase):
+    """Tests for LiteEthStream2UDPTX with FIFO (disable-mid-packet safety)."""
+
+    def _run_disable_mid_packet(self, disable_at_word):
+        """Disable the TX module mid-packet and verify the packet completes
+        with a proper ``last`` beat before the FSM stops.
+
+        After the first packet drains, re-enable and send a second packet
+        to prove the module recovers.
+        """
+        data_width = 32
+        pkt_words  = 16
+        dut = LiteEthStream2UDPTX(
+            ip_address = 0xC0A80132,
+            udp_port   = 2342,
+            data_width = data_width,
+            fifo_depth = pkt_words,
+        )
+
+        results = dict(
+            pkt1_words   = [],
+            pkt1_saw_last = False,
+            valid_after_last = False,
+            pkt2_words   = [],
+            pkt2_saw_last = False,
+        )
+
+        def testbench():
+            # -- Feed packet 1 into the FIFO --
+            for i in range(pkt_words):
+                yield dut.sink.data.eq(0xA000 + i)
+                yield dut.sink.valid.eq(1)
+                yield dut.sink.last.eq(1 if i == pkt_words - 1 else 0)
+                yield
+                while not (yield dut.sink.ready):
+                    yield
+
+            yield dut.sink.valid.eq(0)
+            yield dut.sink.last.eq(0)
+
+            # -- Drain packet 1 from source, disable at word N --
+            for _ in range(200):
+                yield dut.source.ready.eq(1)
+                yield
+
+                if (yield dut.source.valid):
+                    word = (yield dut.source.data)
+                    last = (yield dut.source.last)
+                    results["pkt1_words"].append(word)
+
+                    if len(results["pkt1_words"]) == disable_at_word:
+                        yield dut.enable.eq(0)
+
+                    if last:
+                        results["pkt1_saw_last"] = True
+                        # Check valid is deasserted after last.
+                        yield
+                        yield
+                        results["valid_after_last"] = bool((yield dut.source.valid))
+                        break
+
+            # -- Re-enable and send packet 2 --
+            yield dut.enable.eq(1)
+            yield dut.source.ready.eq(0)
+            # Wait for FSM to leave reset.
+            for _ in range(4):
+                yield
+
+            for i in range(pkt_words):
+                yield dut.sink.data.eq(0xB000 + i)
+                yield dut.sink.valid.eq(1)
+                yield dut.sink.last.eq(1 if i == pkt_words - 1 else 0)
+                yield
+                while not (yield dut.sink.ready):
+                    yield
+
+            yield dut.sink.valid.eq(0)
+            yield dut.sink.last.eq(0)
+
+            for _ in range(200):
+                yield dut.source.ready.eq(1)
+                yield
+
+                if (yield dut.source.valid):
+                    word = (yield dut.source.data)
+                    last = (yield dut.source.last)
+                    results["pkt2_words"].append(word)
+                    if last:
+                        results["pkt2_saw_last"] = True
+                        break
+
+        run_simulation(dut, testbench())
+
+        # Packet 1 must have completed with last.
+        self.assertTrue(results["pkt1_saw_last"],
+            f"Packet 1 did not complete (disable_at_word={disable_at_word})")
+        self.assertEqual(len(results["pkt1_words"]), pkt_words,
+            f"Packet 1 truncated (got {len(results['pkt1_words'])} words)")
+        self.assertFalse(results["valid_after_last"],
+            "source.valid still high after last — FSM did not stop")
+
+        # Packet 2 must succeed (module recovered).
+        self.assertTrue(results["pkt2_saw_last"],
+            "Packet 2 did not complete — module did not recover after re-enable")
+        self.assertEqual(len(results["pkt2_words"]), pkt_words,
+            "Packet 2 truncated")
+
+    def test_disable_at_first_word(self):
+        """Disable on the very first word of a packet."""
+        self._run_disable_mid_packet(disable_at_word=1)
+
+    def test_disable_at_midpoint(self):
+        """Disable halfway through a packet."""
+        self._run_disable_mid_packet(disable_at_word=8)
+
+    def test_disable_at_last_word(self):
+        """Disable on the final word of a packet (should be harmless)."""
+        self._run_disable_mid_packet(disable_at_word=16)

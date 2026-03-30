@@ -21,6 +21,7 @@ class LiteEthMACWishboneInterface(LiteXModule):
     def __init__(self, dw, nrxslots=2, ntxslots=2, endianness="big", timestamp=None,
         rxslots_read_only  = True,
         txslots_write_only = False,
+        eth_mtu            = eth_mtu_default,
     ):
         self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
@@ -31,8 +32,9 @@ class LiteEthMACWishboneInterface(LiteXModule):
 
         # Storage in SRAM.
         # ----------------
+        self.eth_mtu = eth_mtu
         sram_depth = math.ceil(eth_mtu/(dw//8))
-        self.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness, timestamp)
+        self.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness, timestamp, eth_mtu=eth_mtu)
         self.comb += [
             self.sink.connect(self.sram.sink),
             self.sram.source.connect(self.source),
@@ -70,7 +72,7 @@ class LiteEthMACWishboneInterface(LiteXModule):
 
         # Expose SRAMs on Bus.
         wb_slaves      = []
-        sram_depth     = math.ceil(eth_mtu/(dw//8))
+        sram_depth     = math.ceil(self.eth_mtu/(dw//8))
         decoderoffset  = log2_int(sram_depth, need_pow2=False)
         decoderbits    = max(log2_int(len(wb_sram_ifs)), 1)
         for n, wb_sram_if in enumerate(wb_sram_ifs):

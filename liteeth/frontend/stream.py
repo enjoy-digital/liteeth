@@ -44,7 +44,7 @@ class LiteEthStream2UDPTX(LiteXModule):
             self.comb += sink.connect(fifo.sink)
 
             self.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
-            self.comb += fsm.reset.eq(~self.enable)
+            self.comb += fsm.reset.eq(~self.enable & ~source.valid)
 
             fsm.act("IDLE",
                 NextValue(counter, 0),

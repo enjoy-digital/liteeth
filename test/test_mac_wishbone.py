@@ -4,12 +4,15 @@
 # Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import math
 import unittest
 
 from migen import *
 
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.stream_sim import *
+
+from litex.gen.common import log2_int
 
 from liteeth.common import *
 from liteeth.mac import LiteEthMAC
@@ -99,10 +102,12 @@ class SRAMWriterDriver:
 # DUT ----------------------------------------------------------------------------------------------
 
 class DUT(LiteXModule):
-    def __init__(self):
+    def __init__(self, dw=32, eth_mtu=eth_mtu_default):
+        self.dw        = dw
+        self.eth_mtu   = eth_mtu
         self.phy_model = phy.PHY(8, debug=False)
         self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
-        self.ethmac    = LiteEthMAC(phy=self.phy_model, dw=32, interface="wishbone", with_preamble_crc=True)
+        self.ethmac    = LiteEthMAC(phy=self.phy_model, dw=dw, interface="wishbone", with_preamble_crc=True, eth_mtu=eth_mtu)
 
 # Generator ----------------------------------------------------------------------------------------
 
@@ -112,8 +117,10 @@ def main_generator(dut):
     sram_reader_driver = SRAMReaderDriver(dut.ethmac.interface.sram.reader)
     sram_writer_driver = SRAMWriterDriver(dut.ethmac.interface.sram.writer)
 
-    sram_writer_slots_offset = [0x000, 0x200]
-    sram_reader_slots_offset = [0x000, 0x200]
+    sram_depth     = math.ceil(dut.eth_mtu / (dut.dw//8))
+    slot_offset    = 2**log2_int(sram_depth, need_pow2=False)
+    sram_writer_slots_offset = [0x000, slot_offset]
+    sram_reader_slots_offset = [0x000, slot_offset]
 
     length = 150+2
 
@@ -153,15 +160,17 @@ def main_generator(dut):
 
 class TestMACWishbone(unittest.TestCase):
     def test(self):
-        dut = DUT()
-        generators = {
-            "sys"    : [main_generator(dut)],
-            "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
-            "eth_rx" : [dut.phy_model.phy_source.generator()],
-        }
-        clocks = {
-            "sys"    : 20,
-            "eth_rx" : 8,
-            "eth_tx" : 8,
-        }
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        for mtu in [eth_mtu_default, eth_mtu_jumboframe]:
+            with self.subTest(eth_mtu=mtu):
+                dut = DUT(eth_mtu=mtu)
+                generators = {
+                    "sys"    : [main_generator(dut)],
+                    "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
+                    "eth_rx" : [dut.phy_model.phy_source.generator()],
+                }
+                clocks = {
+                    "sys"    : 20,
+                    "eth_rx" : 8,
+                    "eth_tx" : 8,
+                }
+                run_simulation(dut, generators, clocks, vcd_name="sim.vcd")

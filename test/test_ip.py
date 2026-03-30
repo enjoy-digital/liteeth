@@ -26,13 +26,13 @@ mac_address = 0x12345678abcd
 # DUT ----------------------------------------------------------------------------------------------
 
 class DUT(LiteXModule):
-    def __init__(self):
+    def __init__(self, eth_mtu=eth_mtu_default):
         self.phy_model = phy.PHY(8, debug=False)
         self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
         self.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
         self.ip_model  = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=True)
 
-        self.ip = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000)
+        self.ip = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000, eth_mtu=eth_mtu)
         self.ip_port = self.ip.ip.crossbar.get_port(udp_protocol)
 
 # Generator ----------------------------------------------------------------------------------------
@@ -53,15 +53,17 @@ def main_generator(dut):
 
 class TestIP(unittest.TestCase):
     def test(self):
-        dut = DUT()
-        generators = {
-            "sys"    : [main_generator(dut)],
-            "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
-            "eth_rx" : [dut.phy_model.phy_source.generator()],
-        }
-        clocks = {
-            "sys"    : 10,
-            "eth_rx" : 10,
-            "eth_tx" : 10,
-        }
-        run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+        for mtu in [eth_mtu_default, eth_mtu_jumboframe]:
+            with self.subTest(eth_mtu=mtu):
+                dut = DUT(eth_mtu=mtu)
+                generators = {
+                    "sys"    : [main_generator(dut)],
+                    "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
+                    "eth_rx" : [dut.phy_model.phy_source.generator()],
+                }
+                clocks = {
+                    "sys"    : 10,
+                    "eth_rx" : 10,
+                    "eth_tx" : 10,
+                }
+                run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
