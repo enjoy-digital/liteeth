@@ -265,8 +265,8 @@ class LiteEthIPRX(LiteXModule):
 # IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(LiteXModule):
-    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dont_fragment=False, dw=8):
-        self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw, dont_fragment=dont_fragment)
+    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, buffer_tx=True, dont_fragment=False, dw=8):
+        self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw, with_buffer=buffer_tx, dont_fragment=dont_fragment)
         self.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [

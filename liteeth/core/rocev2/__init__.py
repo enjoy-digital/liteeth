@@ -64,6 +64,7 @@ class LiteEthRoCEv2Core(LiteXModule):
             with_broadcast = with_ip_broadcast,
             dw             = dw,
             dont_fragment  = True,
+            buffer_tx      = False,
         )
         # ICMP (Optional).
         # ----------------
