@@ -6,6 +6,38 @@
 # Copyright (c) 2020-2026 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+# Build/Use:
+# ----------
+# Build and load the PTP bench design:
+#   ./bench/arty_ptp.py --build --load
+#
+# Configure ptp4l as a Master on the host (E2E, UDP/IPv4, software timestamping):
+#
+#   Create a config file (e.g. ptp-master.cfg):
+#     [global]
+#     twoStepFlag            1
+#     time_stamping          software
+#     delay_mechanism        E2E
+#     network_transport      UDPv4
+#     domainNumber           0
+#     logAnnounceInterval    1
+#     logSyncInterval        0
+#     logMinDelayReqInterval 0
+#     udp_ttl                1
+#
+#     [eth0]
+#     masterOnly             1
+#
+#   Replace "eth0" with your network interface name (e.g. enp6s0, tap0).
+#
+#   Run ptp4l:
+#     sudo ptp4l -f ptp-master.cfg
+#
+# Monitor PTP state over Etherbone:
+#   ./bench/test_ptp.py --count 100
+#   ./bench/test_ptp.py --count 100 --debug
+#   ./bench/test_ptp.py --count 100 --plot
+
 import os
 import argparse
 
