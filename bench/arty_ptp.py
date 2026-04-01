@@ -111,8 +111,9 @@ class PTPBenchSoC(SoCCore):
         if p2p:
             ptp_igmp_groups.append(0xE000006B)       # 224.0.0.107.
         self.add_etherbone(phy=self.ethphy, buffer_depth=255,
-            with_igmp   = True,
-            igmp_groups = ptp_igmp_groups,
+            with_igmp     = True,
+            igmp_groups   = ptp_igmp_groups,
+            igmp_interval = 2,
         )
 
         # PTP --------------------------------------------------------------------------------------
