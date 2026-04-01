@@ -13,12 +13,14 @@ from liteeth.core.arp  import LiteEthARP
 from liteeth.core.ip   import LiteEthIP
 from liteeth.core.udp  import LiteEthUDP
 from liteeth.core.icmp import LiteEthICMP
+from liteeth.core.igmp import LiteEthIGMPJoiner
 
 # IP Core ------------------------------------------------------------------------------------------
 
 class LiteEthIPCore(LiteXModule):
     def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True, icmp_fifo_depth=128,
+        with_igmp         = False, igmp_groups=None, igmp_interval=10,
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
@@ -79,11 +81,23 @@ class LiteEthIPCore(LiteXModule):
                 fifo_depth = icmp_fifo_depth,
             )
 
+        # IGMP (Optional).
+        # ----------------
+        if with_igmp:
+            assert igmp_groups is not None and len(igmp_groups) > 0
+            self.igmp = LiteEthIGMPJoiner(
+                ip           = self.ip,
+                groups       = igmp_groups,
+                interval     = igmp_interval,
+                sys_clk_freq = clk_freq,
+            )
+
 # UDP IP Core --------------------------------------------------------------------------------------
 
 class LiteEthUDPIPCore(LiteEthIPCore):
     def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True, icmp_fifo_depth=128,
+        with_igmp         = False, igmp_groups=None, igmp_interval=10,
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
@@ -97,8 +111,8 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         # -----------
         ip_address = convert_ip(ip_address)
 
-        # Core: MAC + ARP + IP + (ICMP).
-        # ------------------------------
+        # Core: MAC + ARP + IP + (ICMP) + (IGMP).
+        # ----------------------------------------
         LiteEthIPCore.__init__(self,
             phy               = phy,
             mac_address       = mac_address,
@@ -107,6 +121,9 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             arp_entries       = arp_entries,
             with_icmp         = with_icmp,
             icmp_fifo_depth   = icmp_fifo_depth,
+            with_igmp         = with_igmp,
+            igmp_groups       = igmp_groups,
+            igmp_interval     = igmp_interval,
             dw                = dw,
             interface         = interface,
             endianness        = endianness,
