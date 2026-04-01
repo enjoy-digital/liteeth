@@ -46,7 +46,6 @@ from migen import *
 from litex.gen import *
 
 from litex_boards.platforms import digilent_arty
-from litex_boards.targets.digilent_arty import _CRG
 
 from litex.soc.cores.clock import *
 from litex.soc.integration.soc_core import *
@@ -55,6 +54,31 @@ from litex.soc.cores.led import LedChaser
 
 from liteeth.phy.mii import LiteEthPHYMII
 from liteeth.core.ptp import LiteEthPTP
+
+# CRG ----------------------------------------------------------------------------------------------
+
+class _CRG(LiteXModule):
+    def __init__(self, platform, sys_clk_freq):
+        self.rst        = Signal()
+        self.cd_sys     = ClockDomain()
+        self.cd_sys_eth = ClockDomain()
+        self.cd_eth     = ClockDomain()
+
+        # # #
+
+        # Clk/Rst.
+        clk100 = platform.request("clk100")
+        rst_n  = platform.request("cpu_reset_n")
+
+        # PLL.
+        self.pll = pll = S7PLL(speedgrade=-1)
+        self.comb += pll.reset.eq(~rst_n | self.rst)
+        pll.register_clkin(clk100, 100e6)
+        pll.create_clkout(self.cd_sys,     sys_clk_freq)
+        pll.create_clkout(self.cd_sys_eth, sys_clk_freq)
+        pll.create_clkout(self.cd_eth,     25e6)
+        self.comb += platform.request("eth_ref_clk").eq(self.cd_eth.clk)
+        platform.add_false_path_constraints(self.cd_sys.clk, pll.clkin)
 
 # PTP Bench SoC ------------------------------------------------------------------------------------
 
@@ -77,6 +101,12 @@ class PTPBenchSoC(SoCCore):
             pads               = self.platform.request("eth"),
             with_hw_init_reset = False,
         )
+        # CDC between sys_eth and Ethernet PHY clocks.
+        self.platform.add_false_path_constraints(
+            self.crg.cd_sys_eth.clk,
+            self.ethphy.crg.cd_eth_rx.clk,
+            self.ethphy.crg.cd_eth_tx.clk,
+        )
         ptp_igmp_groups = [0xE0000181, 0xE0000182]  # 224.0.1.129, 224.0.1.130.
         if p2p:
             ptp_igmp_groups.append(0xE000006B)       # 224.0.0.107.
@@ -88,17 +118,17 @@ class PTPBenchSoC(SoCCore):
         # PTP --------------------------------------------------------------------------------------
         udp = self.ethcore_etherbone.udp
 
-        # PTP event / general ports.
-        self.ptp_event_port   = udp.crossbar.get_port(319, dw=8, cd="sys")
-        self.ptp_general_port = udp.crossbar.get_port(320, dw=8, cd="sys")
+        # PTP event / general ports (CDC from sys_eth to ethcore clock domain).
+        self.ptp_event_port   = udp.crossbar.get_port(319, dw=8, cd="sys_eth")
+        self.ptp_general_port = udp.crossbar.get_port(320, dw=8, cd="sys_eth")
 
-        # PTP core.
-        self.ptp = LiteEthPTP(
+        # PTP core (runs in sys_eth domain).
+        self.ptp = ClockDomainsRenamer("sys_eth")(LiteEthPTP(
             self.ptp_event_port,
             self.ptp_general_port,
             sys_clk_freq,
             monitor_debug = ptp_debug,
-        )
+        ))
 
         # PTP configuration.
         self.comb += [
