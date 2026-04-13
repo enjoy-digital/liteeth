@@ -1,0 +1,23 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2026 OpenAI
+# SPDX-License-Identifier: BSD-2-Clause
+
+# PHY --------------------------------------------------------------------------
+phy       : LiteEthPHYMII
+vendor    : xilinx
+toolchain : vivado
+
+# Core -------------------------------------------------------------------------
+clk_freq               : 100e6
+core                   : wishbone
+endianness             : big
+with_tx_rate_limiter   : true
+tx_rate_limiter_rate   : 65536
+tx_rate_limiter_burst  : 2048
+
+# SoC --------------------------------------------------------------------------
+soc:
+    mem_map:
+        ethmac: 0x50000000

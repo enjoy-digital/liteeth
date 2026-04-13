@@ -11,7 +11,7 @@
 from litex.gen import *
 
 from liteeth.common import *
-from liteeth.mac    import gap, preamble, crc, padding, last_be
+from liteeth.mac    import gap, preamble, crc, padding, last_be, rate_limiter
 from liteeth.mac.common import *
 
 from migen.genlib.cdc import PulseSynchronizer
@@ -37,6 +37,10 @@ class LiteEthMACCore(LiteXModule):
     - tx_cdc_buffered  : Use buffered TX CDC (default: False).
     - rx_cdc_depth     : Depth of RX CDC FIFO (default: 32).
     - rx_cdc_buffered  : Use buffered RX CDC (default: False).
+    - with_tx_rate_limiter: Enable MAC TX token-bucket rate limiter (default: False).
+    - tx_rate_limiter_enable: Boot-time default state of limiter enable CSR (default: False).
+    - tx_rate_limiter_rate: Refill rate in Q16.16 bytes per eth_tx cycle (default: 0).
+    - tx_rate_limiter_burst: Burst budget in bytes (default: full-frame reservation).
     """
     def __init__(self, phy, dw,
         with_sys_datapath = False,
@@ -46,6 +50,10 @@ class LiteEthMACCore(LiteXModule):
         tx_cdc_buffered   = False,
         rx_cdc_depth      = 32,
         rx_cdc_buffered   = False,
+        with_tx_rate_limiter = False,
+        tx_rate_limiter_enable = False,
+        tx_rate_limiter_rate = 0,
+        tx_rate_limiter_burst = None,
         ):
 
         # Endpoints.
@@ -75,12 +83,15 @@ class LiteEthMACCore(LiteXModule):
             with_preamble_crc = phy.with_preamble_crc
         if hasattr(phy, "with_padding"):
             with_padding = phy.with_padding
+        tx_includes_preamble_crc = with_preamble_crc
 
         # CSRs.
         # -----
         # Control/Status Registers for optional features.
         if with_preamble_crc:
             self.preamble_crc = CSRStatus(reset=1)
+
+        core = self
 
         # TX Data-Path (Core --> PHY).
         # ------------------------------------------------------------------------------------------
@@ -160,6 +171,17 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
 
+            def add_rate_limiter(self):
+                """Add MAC TX token-bucket rate limiter."""
+                core.tx_rate_limiter = tx_rate_limiter = rate_limiter.LiteEthMACTokenBucket(
+                    dw     = phy_dw,
+                    enable = tx_rate_limiter_enable,
+                    rate   = tx_rate_limiter_rate,
+                    burst  = tx_rate_limiter_burst,
+                )
+                self.submodules += tx_rate_limiter
+                self.pipeline.append(tx_rate_limiter)
+
             def add_domain_switch(self):
                 """
                 Add stages for clock domain switch and width handling.
@@ -195,6 +217,9 @@ class LiteEthMACCore(LiteXModule):
         # Add domain switch if using system datapath.
         if with_sys_datapath:
             tx_datapath.add_domain_switch()
+        # Add TX rate limiter in eth_tx domain at PHY width.
+        if with_tx_rate_limiter:
+            tx_datapath.add_rate_limiter()
         # Add gap unless PHY has integrated inserter.
         # Gap insertion has to occurr in phy tx domain to ensure gap is correctly maintained.
         if not getattr(phy, "integrated_ifg_inserter", False):

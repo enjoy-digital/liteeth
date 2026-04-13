@@ -31,6 +31,10 @@ class LiteEthMAC(LiteXModule):
         tx_cdc_buffered    = False,
         rx_cdc_depth       = 32,
         rx_cdc_buffered    = False,
+        with_tx_rate_limiter = False,
+        tx_rate_limiter_enable = False,
+        tx_rate_limiter_rate = 0,
+        tx_rate_limiter_burst = None,
     ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -47,8 +51,12 @@ class LiteEthMAC(LiteXModule):
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
+            with_tx_rate_limiter  = with_tx_rate_limiter,
+            tx_rate_limiter_enable = tx_rate_limiter_enable,
+            tx_rate_limiter_rate   = tx_rate_limiter_rate,
+            tx_rate_limiter_burst  = tx_rate_limiter_burst,
         )
-        self.csrs = []
+        self.csrs = self.core.get_csrs()
 
         # Crossbar Mode.
         # --------------
