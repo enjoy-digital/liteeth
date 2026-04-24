@@ -57,7 +57,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
 # LiteEth PHY RGMII RX -----------------------------------------------------------------------------
 
 class LiteEthPHYRGMIIRX(LiteXModule):
-    def __init__(self, pads, rx_delay=2e-9, usp=False):
+    def __init__(self, pads, rx_delay=2e-9, iodelay_clk_freq=300e6, usp=False):
         self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
@@ -79,7 +79,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 p_CASCADE          = "NONE",
                 p_DELAY_TYPE       = "FIXED",
                 p_DELAY_VALUE      = int(rx_delay*1e12),
-                p_REFCLK_FREQUENCY = 300.0,
+                p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                 p_DELAY_FORMAT     = "TIME",
                 p_UPDATE_MODE      = "ASYNC",
                 p_SIM_DEVICE       = "ULTRASCALE_PLUS" if usp else "ULTRASCALE",
@@ -118,7 +118,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                     p_CASCADE          = "NONE",
                     p_DELAY_TYPE       = "FIXED",
                     p_DELAY_VALUE      = int(rx_delay*1e12),
-                    p_REFCLK_FREQUENCY = 300.0,
+                    p_REFCLK_FREQUENCY = iodelay_clk_freq/1e6,
                     p_UPDATE_MODE      = "ASYNC",
                     p_DELAY_FORMAT     = "TIME",
                     p_SIM_DEVICE       = "ULTRASCALE_PLUS" if usp else "ULTRASCALE",
@@ -226,10 +226,10 @@ class LiteEthPHYRGMII(LiteXModule):
     dw          = 8
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
-    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9, usp=False):
+    def __init__(self, clock_pads, pads, with_hw_init_reset=True, tx_delay=2e-9, rx_delay=2e-9, iodelay_clk_freq = 300e6, usp=False):
         self.crg = LiteEthPHYRGMIICRG(clock_pads, pads, with_hw_init_reset, tx_delay)
         self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYRGMIITX(pads))
-        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, usp))
+        self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYRGMIIRX(pads, rx_delay, iodelay_clk_freq, usp))
         self.sink, self.source = self.tx.sink, self.rx.source
 
         if hasattr(pads, "mdc"):
