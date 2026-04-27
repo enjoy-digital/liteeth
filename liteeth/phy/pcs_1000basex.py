@@ -375,7 +375,7 @@ class PCS(LiteXModule):
 
         # FSM.
         # ----
-        self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
+        self.an_fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
         # AN_ENABLE.
         fsm.act("AUTONEG-BREAKLINK",
             self.tx.config_valid.eq(1),
@@ -466,12 +466,29 @@ class PCS(LiteXModule):
             self.add_csr()
 
     def add_csr(self):
+        # Status.
+        # -------
         self.status = CSRStatus(fields=[
             CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
             CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
-            CSRField("config_reg", size=16, offset=16, description="config_reg"),
+            CSRField("config_reg", size=16, offset=16, description="Last raw partner config_reg."),
         ])
-        
+
+        # Debug observability for AN diagnostics.
+        # ---------------------------------------
+        # an_state encoding leaves 4 reserved for a future IDLE-DETECT state.
+        self.debug = CSRStatus(fields=[
+            CSRField("an_state", size=4, offset=0, description=
+                "Auto-negotiation FSM state "
+                "(0=BREAKLINK, 1=WAIT-ABI, 2=WAIT-ACK, 3=SEND-MORE-ACK, 5=RUNNING)."),
+            CSRField("seen_valid_ci",   size=1, offset=4, description="Sticky: /C/ or /I/ ordered-set decoded."),
+            CSRField("seen_config_abi", size=1, offset=5, description="Sticky: consistent partner ability config seen."),
+            CSRField("seen_config_ack", size=1, offset=6, description="Sticky: consistent partner config with ACK bit seen."),
+            CSRField("rx_invalid",      size=1, offset=7, description="Sticky: 8b/10b decode error observed."),
+        ])
+        self.restart_count = CSRStatus(16, description="Auto-negotiation restart count (saturating).")
+        self.debug_clear   = CSR()  # Write to clear sticky observability fields and restart counter.
+
         self.lp_abi_csr = BusSynchronizer(16, "eth_rx", "sys")
 
         self.ev      = EventManager()
@@ -488,9 +505,88 @@ class PCS(LiteXModule):
             self.status.fields.is_sgmii.eq(self.is_sgmii),
         ]
 
+        # Sticky bits / restart counter (eth_tx domain).
+        # ----------------------------------------------
+        an_state               = Signal(4)
+        sticky_seen_valid_ci   = Signal()
+        sticky_seen_config_abi = Signal()
+        sticky_seen_config_ack = Signal()
+        restart_count_tx       = Signal(16)
+
+        self.comb += [
+            If(self.an_fsm.ongoing("AUTONEG-BREAKLINK"),     an_state.eq(0)),
+            If(self.an_fsm.ongoing("AUTONEG-WAIT-ABI"),      an_state.eq(1)),
+            If(self.an_fsm.ongoing("AUTONEG-WAIT-ACK"),      an_state.eq(2)),
+            If(self.an_fsm.ongoing("AUTONEG-SEND-MORE-ACK"), an_state.eq(3)),
+            If(self.an_fsm.ongoing("RUNNING"),               an_state.eq(5)),
+        ]
+
+        self.clear_tx_ps = clear_tx_ps = PulseSynchronizer("sys", "eth_tx")
+        self.clear_rx_ps = clear_rx_ps = PulseSynchronizer("sys", "eth_rx")
+        self.comb += [
+            clear_tx_ps.i.eq(self.debug_clear.re),
+            clear_rx_ps.i.eq(self.debug_clear.re),
+        ]
+
+        self.sync.eth_tx += [
+            If(self.seen_valid_ci.o,     sticky_seen_valid_ci.eq(1)),
+            If(self.rx_config_reg_abi.o, sticky_seen_config_abi.eq(1)),
+            If(self.rx_config_reg_ack.o, sticky_seen_config_ack.eq(1)),
+            If(self.restart & (restart_count_tx != (2**16 - 1)),
+                restart_count_tx.eq(restart_count_tx + 1),
+            ),
+            If(clear_tx_ps.o,
+                sticky_seen_valid_ci.eq(0),
+                sticky_seen_config_abi.eq(0),
+                sticky_seen_config_ack.eq(0),
+                restart_count_tx.eq(0),
+            ),
+        ]
+
+        # Sticky decode-error (eth_rx domain).
+        # ------------------------------------
+        sticky_rx_invalid = Signal()
+        self.sync.eth_rx += [
+            If(self.rx.decoder.ce & self.rx.decoder.invalid,
+                sticky_rx_invalid.eq(1),
+            ),
+            If(clear_rx_ps.o,
+                sticky_rx_invalid.eq(0),
+            ),
+        ]
+
+        # CDC to sys for CSR readback.
+        # ----------------------------
+        # Pack TX-domain debug into a single bus so the synchronizer captures
+        # a consistent snapshot.
+        debug_tx_packed = Cat(
+            an_state,                # [0:4]
+            sticky_seen_valid_ci,    # [4]
+            sticky_seen_config_abi,  # [5]
+            sticky_seen_config_ack,  # [6]
+            restart_count_tx,        # [7:23]
+        )
+        self.debug_sync = debug_sync = BusSynchronizer(len(debug_tx_packed), "eth_tx", "sys")
+        self.comb += [
+            debug_sync.i.eq(debug_tx_packed),
+            self.debug.fields.an_state.eq(       debug_sync.o[0:4]),
+            self.debug.fields.seen_valid_ci.eq(  debug_sync.o[4]),
+            self.debug.fields.seen_config_abi.eq(debug_sync.o[5]),
+            self.debug.fields.seen_config_ack.eq(debug_sync.o[6]),
+            self.restart_count.status.eq(        debug_sync.o[7:23]),
+        ]
+
+        self.rx_invalid_sync = rx_invalid_sync = BusSynchronizer(1, "eth_rx", "sys")
+        self.comb += [
+            rx_invalid_sync.i.eq(sticky_rx_invalid),
+            self.debug.fields.rx_invalid.eq(rx_invalid_sync.o),
+        ]
+
+        # Link-up event.
+        # --------------
         self.link_up_timer = link_up_timer = WaitTimer(int(LiteXContext.top.sys_clk_freq))
 
-        self.fsm = fsm = FSM()
+        self.link_fsm = fsm = FSM()
         fsm.act("DOWN",
             If(self.link_up,
                 NextState("UP")
