@@ -283,7 +283,7 @@ class PCSRX(LiteXModule):
 
 class PCS(LiteXModule):
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, with_csr=False, tx_ability=0x01a0):
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, idle_detect_time=10e-3, with_csr=False, tx_ability=0x01a0):
         # tx_ability: 1000BASE-X advertised abilities (Clause 37 base page).
         # Bit 0 (SGMII id) and bit 14 (ACK) are always overridden by the
         # state machine and ignored here. Default 0x01A0 = FD + symmetric +
@@ -333,9 +333,10 @@ class PCS(LiteXModule):
 
         # Timers.
         # -------
-        self.breaklink_timer = breaklink_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(breaklink_time * 125e6))
-        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * 125e6))
-        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * 125e6))
+        self.breaklink_timer    = breaklink_timer    = ClockDomainsRenamer("eth_tx")(WaitTimer(breaklink_time    * 125e6))
+        self.more_ack_timer     = more_ack_timer     = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time     * 125e6))
+        self.sgmii_ack_timer    = sgmii_ack_timer    = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time    * 125e6))
+        self.idle_detect_timer  = idle_detect_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(idle_detect_time  * 125e6))
 
         # Checker.
         # --------
@@ -426,14 +427,43 @@ class PCS(LiteXModule):
             )
         )
         # COMPLETE_ACKNOWLEDGE.
+        # SGMII transitions directly to RUNNING (its peer typically stops
+        # sending /C/ as soon as the ACK is received). 1000BASE-X must go
+        # through IDLE_DETECT first per IEEE 802.3 Clause 37 Figure 37-6:
+        # some switches stay in COMPLETE_ACKNOWLEDGE until the local end
+        # has visibly transitioned to /I/, and otherwise will not bring
+        # the link up.
         fsm.act("AUTONEG-SEND-MORE-ACK",
             self.tx.config_valid.eq(1),
             autoneg_ack.eq(1),
             more_ack_timer.wait.eq(~is_sgmii),
             sgmii_ack_timer.wait.eq(is_sgmii),
-            If((is_sgmii & sgmii_ack_timer.done) |
-                (~is_sgmii & more_ack_timer.done),
+            If(is_sgmii & sgmii_ack_timer.done,
                 NextState("RUNNING")
+            ),
+            If(~is_sgmii & more_ack_timer.done,
+                NextState("AUTONEG-IDLE-DETECT")
+            ),
+            If(checker_tick & checker_error,
+                self.restart.eq(1),
+                NextState("AUTONEG-BREAKLINK")
+            )
+        )
+        # IDLE_DETECT (1000BASE-X only).
+        # Stop transmitting /C/ (config_valid low → TX FSM emits /I/) and
+        # wait idle_detect_time. A partner config (/C/) means the partner
+        # restarted AN, so we restart too. The existing checker (whose
+        # error is cleared by any /C/-or-/I/ pulse via seen_valid_ci)
+        # already restarts the FSM on loss of sync, so reaching the timer
+        # implies we have been observing /I/ continuously.
+        fsm.act("AUTONEG-IDLE-DETECT",
+            idle_detect_timer.wait.eq(1),
+            If(idle_detect_timer.done,
+                NextState("RUNNING")
+            ),
+            If(rx_config_reg_abi.o | rx_config_reg_ack.o,
+                self.restart.eq(1),
+                NextState("AUTONEG-BREAKLINK")
             ),
             If(checker_tick & checker_error,
                 self.restart.eq(1),
@@ -501,7 +531,7 @@ class PCS(LiteXModule):
         self.debug = CSRStatus(fields=[
             CSRField("an_state", size=4, offset=0, description=
                 "Auto-negotiation FSM state "
-                "(0=BREAKLINK, 1=WAIT-ABI, 2=WAIT-ACK, 3=SEND-MORE-ACK, 5=RUNNING)."),
+                "(0=BREAKLINK, 1=WAIT-ABI, 2=WAIT-ACK, 3=SEND-MORE-ACK, 4=IDLE-DETECT, 5=RUNNING)."),
             CSRField("seen_valid_ci",   size=1, offset=4, description="Sticky: /C/ or /I/ ordered-set decoded."),
             CSRField("seen_config_abi", size=1, offset=5, description="Sticky: consistent partner ability config seen."),
             CSRField("seen_config_ack", size=1, offset=6, description="Sticky: consistent partner config with ACK bit seen."),
@@ -539,6 +569,7 @@ class PCS(LiteXModule):
             If(self.an_fsm.ongoing("AUTONEG-WAIT-ABI"),      an_state.eq(1)),
             If(self.an_fsm.ongoing("AUTONEG-WAIT-ACK"),      an_state.eq(2)),
             If(self.an_fsm.ongoing("AUTONEG-SEND-MORE-ACK"), an_state.eq(3)),
+            If(self.an_fsm.ongoing("AUTONEG-IDLE-DETECT"),   an_state.eq(4)),
             If(self.an_fsm.ongoing("RUNNING"),               an_state.eq(5)),
         ]
 
