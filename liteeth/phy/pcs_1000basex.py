@@ -435,8 +435,9 @@ class PCS(LiteXModule):
 
         # RX Config (and consistency check).
         # ----------------------------------
-        rx_config_reg_count  = Signal(4)
-        rx_config_reg_last   = Signal(16)
+        rx_config_reg_count      = Signal(4)
+        rx_config_reg_last       = Signal(16)
+        rx_config_reg_consistent = Signal(16)
         self.sync.eth_rx += [
             If(self.rx.seen_config_reg,
                 # Consistency Count/Check.
@@ -450,6 +451,10 @@ class PCS(LiteXModule):
                 ),
                 # When RX Config is consistent.
                 If(rx_config_reg_count == 0,
+                    # Latch the consistent partner config so AN logic
+                    # (is_sgmii / linkdown / sgmii_speed) does not glitch
+                    # on transient or malformed partner configs.
+                    rx_config_reg_consistent.eq(self.rx.config_reg),
                     # Acknowledgement.
                     If(self.rx.config_reg[14],
                         rx_config_reg_ack.i.eq(1),
@@ -458,9 +463,9 @@ class PCS(LiteXModule):
                         rx_config_reg_abi.i.eq(1),
                     )
                 ),
-                self.lp_abi.i.eq(self.rx.config_reg)
             )
         ]
+        self.comb += self.lp_abi.i.eq(rx_config_reg_consistent)
 
         if with_csr:
             self.add_csr()
@@ -471,7 +476,7 @@ class PCS(LiteXModule):
         self.status = CSRStatus(fields=[
             CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
             CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
-            CSRField("config_reg", size=16, offset=16, description="Last raw partner config_reg."),
+            CSRField("config_reg", size=16, offset=16, description="Last consistent partner config_reg (post-consistency check)."),
         ])
 
         # Debug observability for AN diagnostics.
