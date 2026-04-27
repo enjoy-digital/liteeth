@@ -70,11 +70,20 @@ expected steady state is `an_state=5`, all four sticky bits set to 1,
      `breaklink_time` (default 10 ms). Suspect a stuck reset on the AN
      FSM clock domain (`eth_tx`), or a constant restart from elsewhere.
 
-2. `an_state == 1` (WAIT-ABI), `seen_valid_ci == 0`:
-   - The PCS is not decoding any ordered set. Issue is below the PCS:
-     the SerDes is not aligned, the polarity is inverted, or the SFP
-     has no signal. Check `rx_invalid` (likely 1), check the SerDes
-     alignment status, try flipping `rx_polarity` on the PHY wrapper.
+2. `an_state == 1` (WAIT-ABI), `seen_valid_ci == 0`,
+   `rx_invalid == 1`, `restart_count` climbing every `check_period`:
+   - The PCS is not decoding any ordered set. Most common cause is
+     a **line-rate mismatch** between the FPGA SerDes (fixed at
+     1.25 Gbps for 1000BASE-X / SGMII) and the switch SFP cage
+     (configured for 2.5G or 10G, often the default on multi-rate
+     switches). At the wrong line rate, every 10-bit window fails
+     8b/10b decode. There is no PCS-layer fix - the switch port has
+     to be pinned to 1 Gbps. Check the switch's port config; the
+     SFP module's I2C EEPROM should advertise its supported rate
+     but many multi-rate switches still probe upwards first.
+   - Less common: SerDes is not aligned, polarity is inverted, or
+     the SFP has no signal. Inspect the SerDes wrapper's alignment
+     status and try flipping `rx_polarity` on the PHY wrapper.
 
 3. `an_state == 1` (WAIT-ABI), `seen_valid_ci == 1`,
    `seen_config_abi == 0`:
@@ -112,6 +121,19 @@ expected steady state is `an_state=5`, all four sticky bits set to 1,
      AN here - the peer will clear RF when its situation recovers, and
      `link_up` will rise on its own. Look at `config_reg` bits 12/13
      for the specific RF code.
+
+8. `an_state == 5` (RUNNING), `is_sgmii == 1`, `link_up == 0`,
+   `link_rf == 0`:
+   - SGMII path; `linkdown` is asserted because the partner's
+     `config_reg` bit 15 (link-up advert) is 0. Either the switch
+     itself reports its link as down, or its SGMII MAC implementation
+     does not advertise a usable link page. Inspect the partner
+     `config_reg` bits 10..15 in `pcs_status` to see what they are
+     advertising. Note that our PCS now (since the SGMII TX
+     advertisement fix) advertises link=up / 1G / FD by default in
+     SGMII mode - if the switch is the SGMII MAC and was previously
+     refusing the link because we sent link=down / 10M / HD, this is
+     the relevant fix.
 
 ## Running the unit tests
 
@@ -169,6 +191,23 @@ The tests are organised by scope:
       * Peer flips to RF after the link is up — `link_up` drops
         without an AN restart side-effect.
     ~260 s.
+  - `TestPCSSgmii` — focused SGMII-path coverage. A switch SFP cage
+    in SGMII or auto-detect mode reads our SGMII config_reg bits
+    10/11 (speed), 12 (full-duplex) and 15 (link-up); without those
+    bits set the switch refuses to bring its side up. These tests
+    verify:
+      * The default SGMII advertisement (constructor defaults
+        `sgmii_tx_link_up=True`, `sgmii_tx_speed=0b10`,
+        `sgmii_tx_full_duplex=True`) actually appears in the bytes
+        the encoder emits.
+      * Constructor overrides take effect (e.g. for FPGA-as-MAC
+        SGMII users who want the external PHY to drive link state).
+      * An SGMII MAC peer advertising link=up brings up our link.
+      * An SGMII peer advertising link=down keeps `link_up` low
+        even after AN reaches RUNNING.
+      * A 100M peer drives our `tx.sgmii_speed` / `rx.sgmii_speed`
+        signals to 0b01 so PCSSGMIITimer pads bytes correctly.
+    ~170 s.
 
 ## Hardware monitor script
 

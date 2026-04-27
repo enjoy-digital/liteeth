@@ -1020,5 +1020,210 @@ class TestPCSWithPeer(unittest.TestCase):
             f"single bad symbol caused {restart_count[0]} AN restarts")
 
 
+# ----------------------------------------------------------------------------
+# SGMII-specific scenarios
+# ----------------------------------------------------------------------------
+#
+# A switch SFP cage in SGMII or auto-detect mode tests the link with the
+# Cisco SGMII base-page format. In that format the *PHY* (us, when
+# connected via SFP towards a switch) advertises:
+#   bit 15      -> link up
+#   bits 10..11 -> speed (00=10M, 01=100M, 10=1G)
+#   bit  12     -> full-duplex
+# and the MAC (the switch) brings its side up only if the PHY reports a
+# usable link. These tests exercise that the PCS does the right thing
+# in SGMII mode, both as an SGMII-PHY (default) and after the user has
+# overridden the advertised fields.
+
+# SGMII base-page packers --------------------------------------------------------------------------
+
+def _sgmii_pcs_advert(link_up, speed, full_duplex, ack=False):
+    """Build the SGMII config_reg the PCS itself would send."""
+    cfg = 1                                    # bit 0: SGMII identifier.
+    cfg |= (speed & 0b11)        << 10         # bits 10..11: speed.
+    cfg |= (1 if full_duplex else 0) << 12     # bit 12: duplex.
+    if ack:
+        cfg |= 1 << 14                         # bit 14: acknowledge.
+    if link_up:
+        cfg |= 1 << 15                         # bit 15: link up.
+    return cfg
+
+
+def _sgmii_mac_advert(ack=False):
+    """SGMII config a *MAC* (switch side) would send to its PHY.
+
+    Per the Cisco spec the MAC base page is just the SGMII identifier
+    and the ACK bit; the MAC does not advertise a speed.
+    """
+    cfg = 1
+    if ack:
+        cfg |= 1 << 14
+    return cfg
+
+
+def _capture_pcs_tx_config(dut, n_cycles):
+    """Run a peer that emits SGMII to keep the PCS in SGMII mode and
+    sample what the PCS itself transmits as its config_reg."""
+    # The peer just keeps SGMII alive so the PCS's `is_sgmii` latches.
+    def peer_body():
+        cfg = _sgmii_pcs_advert(link_up=1, speed=0b10, full_duplex=1)
+        yield from _peer_emit_config(dut.peer, cfg, 30)
+        yield from _peer_emit_config(dut.peer, cfg | (1 << 14), 30)
+
+    captured = []
+    def observe():
+        for _ in range(n_cycles):
+            captured.append((yield dut.pcs.tx.config_reg))
+            yield
+
+    run_simulation(
+        dut,
+        {"eth_tx": [_peer_passive(dut.peer, peer_body()), observe()]},
+        clocks = {"sys": 8, "eth_tx": 8, "eth_rx": 8},
+    )
+    return captured
+
+
+class TestPCSSgmii(unittest.TestCase):
+    BUDGET_CYCLES = 12000
+
+    def _run(self, dut, peer_body, observe_gen):
+        run_simulation(
+            dut,
+            {"eth_tx": [_peer_passive(dut.peer, peer_body), observe_gen]},
+            clocks = {"sys": 8, "eth_tx": 8, "eth_rx": 8},
+        )
+
+    # ----- Defaults --------------------------------------------------------
+
+    def test_default_sgmii_advertisement_link_up_1g_fd(self):
+        """By default, in SGMII mode the PCS advertises link=1 / speed=1G / FD.
+
+        The switch cannot tell the link is healthy if our advertisement
+        carries the all-zero default of the original implementation.
+        """
+        dut = _PCSWithPeerDUT()
+        captured = _capture_pcs_tx_config(dut, self.BUDGET_CYCLES)
+
+        # Among captured cycles, find one where we are sending the
+        # SGMII PHY advertisement (bit 0 set, AN-active form).
+        sgmii_cfgs = [c for c in captured if (c & 1) == 1]
+        self.assertGreater(len(sgmii_cfgs), 0,
+            "PCS never entered SGMII-config TX mode")
+        # All of them must have bit 15 (link up), bit 12 (FD), bits 10..11 = 1G.
+        for c in sgmii_cfgs:
+            self.assertEqual((c >> 15) & 1, 1,
+                f"SGMII tx config 0x{c:04x} missing link-up bit (15)")
+            self.assertEqual((c >> 12) & 1, 1,
+                f"SGMII tx config 0x{c:04x} missing full-duplex bit (12)")
+            self.assertEqual((c >> 10) & 0b11, 0b10,
+                f"SGMII tx config 0x{c:04x} has wrong speed bits 10..11")
+
+    def test_user_can_override_sgmii_advertisement(self):
+        """Constructor overrides apply to TX advertised fields."""
+        dut = _PCSWithPeerDUT(
+            sgmii_tx_link_up     = False,
+            sgmii_tx_speed       = 0b01,  # 100M
+            sgmii_tx_full_duplex = False,
+        )
+        captured = _capture_pcs_tx_config(dut, self.BUDGET_CYCLES)
+
+        sgmii_cfgs = [c for c in captured if (c & 1) == 1]
+        self.assertGreater(len(sgmii_cfgs), 0)
+        for c in sgmii_cfgs:
+            self.assertEqual((c >> 15) & 1, 0)
+            self.assertEqual((c >> 12) & 1, 0)
+            self.assertEqual((c >> 10) & 0b11, 0b01)
+
+    # ----- SGMII handshake -------------------------------------------------
+
+    def test_sgmii_mac_peer_link_comes_up(self):
+        """A switch (SGMII MAC) sending the PHY-style PCS advertisement
+        with link=up / 1G / FD: our PCS must complete AN and assert link_up."""
+        dut = _PCSWithPeerDUT()
+
+        # Peer (switch) sends an SGMII PHY-style advert claiming the link
+        # is up at 1G FD - this is what a switch advertises when its own
+        # SFP cage is in SGMII auto-detect and has decided the partner is
+        # SGMII-capable.
+        cfg     = _sgmii_pcs_advert(link_up=1, speed=0b10, full_duplex=1)
+        cfg_ack = cfg | (1 << 14)
+
+        def peer_body():
+            yield from _peer_emit_config(dut.peer, cfg,     30)
+            yield from _peer_emit_config(dut.peer, cfg_ack, 30)
+
+        link_up_history = []
+        is_sgmii_history = []
+        def observe():
+            for _ in range(self.BUDGET_CYCLES):
+                link_up_history.append((yield dut.pcs.link_up))
+                is_sgmii_history.append((yield dut.pcs.is_sgmii))
+                yield
+
+        self._run(dut, peer_body(), observe())
+
+        self.assertEqual(link_up_history[-1], 1, "SGMII link did not come up")
+        self.assertEqual(is_sgmii_history[-1], 1,
+            "PCS is_sgmii latch never asserted despite SGMII peer")
+
+    def test_sgmii_peer_link_down_keeps_link_up_low(self):
+        """SGMII peer reports its own link is down (bit 15 = 0): we must
+        not assert link_up even after AN completes."""
+        dut = _PCSWithPeerDUT()
+        cfg     = _sgmii_pcs_advert(link_up=0, speed=0b10, full_duplex=1)
+        cfg_ack = cfg | (1 << 14)
+
+        def peer_body():
+            yield from _peer_emit_config(dut.peer, cfg,     30)
+            yield from _peer_emit_config(dut.peer, cfg_ack, 30)
+
+        link_up_history = []
+        states_visited  = set()
+        def observe():
+            for _ in range(self.BUDGET_CYCLES):
+                link_up_history.append((yield dut.pcs.link_up))
+                s = (yield from _read_pcs_state(dut))
+                if s:
+                    states_visited.add(s)
+                yield
+
+        self._run(dut, peer_body(), observe())
+
+        self.assertIn("RUNNING", states_visited,
+            "SGMII AN never reached RUNNING")
+        self.assertEqual(max(link_up_history), 0,
+            "link_up asserted while SGMII peer reports its link down")
+
+    def test_sgmii_speed_is_picked_up_from_peer(self):
+        """When the SGMII peer reports 100M, the PCS's tx/rx sgmii_speed
+        signals must reflect that (so PCSSGMIITimer pads bytes 10x)."""
+        dut = _PCSWithPeerDUT()
+        cfg     = _sgmii_pcs_advert(link_up=1, speed=0b01, full_duplex=1)  # 100M
+        cfg_ack = cfg | (1 << 14)
+
+        def peer_body():
+            yield from _peer_emit_config(dut.peer, cfg,     30)
+            yield from _peer_emit_config(dut.peer, cfg_ack, 30)
+
+        observed_speed_tx = []
+        observed_speed_rx = []
+        def observe():
+            for _ in range(self.BUDGET_CYCLES):
+                if (yield dut.pcs.is_sgmii):
+                    observed_speed_tx.append((yield dut.pcs.tx.sgmii_speed))
+                    observed_speed_rx.append((yield dut.pcs.rx.sgmii_speed))
+                yield
+
+        self._run(dut, peer_body(), observe())
+
+        self.assertGreater(len(observed_speed_tx), 0,
+            "is_sgmii never latched")
+        self.assertEqual(observed_speed_tx[-1], 0b01,
+            f"tx.sgmii_speed did not converge to 100M; final={observed_speed_tx[-1]:#04b}")
+        self.assertEqual(observed_speed_rx[-1], 0b01,
+            f"rx.sgmii_speed did not converge to 100M; final={observed_speed_rx[-1]:#04b}")
+
+
 if __name__ == "__main__":
     unittest.main()
