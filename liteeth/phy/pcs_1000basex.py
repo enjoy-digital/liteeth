@@ -304,6 +304,7 @@ class PCS(LiteXModule):
         self.source    = stream.Endpoint(eth_phy_description(8))
 
         self.link_up = Signal()
+        self.link_rf = Signal()  # Peer is advertising remote-fault (RF1 or RF2 set).
         self.restart = Signal()
         self.align   = Signal()
 
@@ -356,8 +357,16 @@ class PCS(LiteXModule):
             If(checker_tick,    checker_error.eq(1))
         ]
 
-        # Linkdown/Speed Detection.
-        # -------------------------
+        # Linkdown / Remote-Fault / Speed Detection.
+        # ------------------------------------------
+        # `linkdown` causes the AN FSM to restart from BREAKLINK.
+        # `link_rf` only suppresses link_up - it does NOT trigger an AN
+        # restart. Restarting on RF would loop forever against a peer
+        # that legitimately wants to keep advertising RF (e.g. its own
+        # upstream link is down): we would restart, AN would converge
+        # again to the same RF config, we would restart again, ...
+        # Suppressing link_up while staying in RUNNING lets the link
+        # come back automatically the moment the peer clears RF.
         self.comb += [
             is_sgmii.eq(self.lp_abi.o[0]),
             # Detect that link is down:
@@ -365,10 +374,15 @@ class PCS(LiteXModule):
             # - SGMII      : linkup is indicated with bit 15.
             If(~is_sgmii,
                 linkdown.eq(self.lp_abi.o == 0),
+                # Clause 37 base page bits 12..13 = RF1, RF2.
+                # Any non-zero combination is a remote fault.
+                self.link_rf.eq(self.lp_abi.o[12:14] != 0),
                 self.tx.sgmii_speed.eq(0b10),
                 self.rx.sgmii_speed.eq(0b10),
             ).Else(
                 linkdown.eq(is_sgmii & ~self.lp_abi.o[15]),
+                # SGMII has no RF bits in its base page.
+                self.link_rf.eq(0),
                 self.tx.sgmii_speed.eq(self.lp_abi.o[10:12]),
                 self.rx.sgmii_speed.eq(self.lp_abi.i[10:12]),
             )
@@ -469,8 +483,12 @@ class PCS(LiteXModule):
             )
         )
         # LINK_OK.
+        # link_up is gated on both the linkdown indication (peer config
+        # gone empty) and link_rf (peer advertising remote fault). Only
+        # linkdown forces an AN restart - link_rf merely keeps link_up
+        # low so the peer can clear RF without us having to re-handshake.
         fsm.act("RUNNING",
-            self.link_up.eq(~linkdown),
+            self.link_up.eq(~linkdown & ~self.link_rf),
             If((checker_tick & checker_error) | linkdown,
                 self.restart.eq(1),
                 NextState("AUTONEG-BREAKLINK")
@@ -520,6 +538,10 @@ class PCS(LiteXModule):
         self.status = CSRStatus(fields=[
             CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
             CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
+            CSRField("link_rf",    size=1,  offset=2,  description=
+                "Peer is advertising remote-fault (Clause 37 RF1 or RF2). "
+                "While set, link_up stays low; AN is NOT restarted, so the "
+                "link comes up automatically once the peer clears RF."),
             CSRField("config_reg", size=16, offset=16, description="Last consistent partner config_reg (post-consistency check)."),
         ])
 
@@ -552,6 +574,7 @@ class PCS(LiteXModule):
         self.sync += [
             self.status.fields.link_up.eq(self.link_up),
             self.status.fields.is_sgmii.eq(self.is_sgmii),
+            self.status.fields.link_rf.eq(self.link_rf),
         ]
 
         # Sticky bits / restart counter (eth_tx domain).
