@@ -124,9 +124,56 @@ The tests are organised by scope:
       * `link_up` reaches 1 within a fixed cycle budget,
       * `AUTONEG-IDLE-DETECT` is visited before `RUNNING`,
       * no AN restart occurs once `RUNNING` is reached.
-    Slower (~45 s for the three loopback cases together) because the
-    handshake is several thousand cycles even with the test timers
-    scaled down ~1000x from the spec values.
+    Slower (~45 s) because the handshake is several thousand cycles
+    even with test timers scaled down ~1000x from the spec values.
+  - `TestPCSBackToBack` — two PCS instances with cross-connected TBI
+    (each side has its own AN FSM). Tests symmetric, asymmetric
+    abilities (`tx_ability` differs between A and B), asymmetric
+    timers, and that no restart happens after both sides reach
+    RUNNING. Catches bugs that only manifest under capability /
+    timing asymmetry, which the self-loopback test cannot expose.
+    ~130 s.
+  - `TestPCSWithPeer` — a single PCS connected to a programmable
+    HDL peer (`_PCSPeer`: an Encoder driven by the testbench so it
+    can emit any symbol stream, plus a Decoder for observing). Each
+    test scripts a specific switch quirk:
+      * AN-disabled peer (only /I/, no /C/) — must not link, must
+        not restart-storm.
+      * Slow COMPLETE_ACKNOWLEDGE peer (holds /C/+ACK 5x longer
+        than our timer) — we must not restart in IDLE_DETECT.
+      * Remote-fault peer (RF1 advertised) — documents current
+        behaviour (PCS does not gate link_up on RF; future
+        change should flip this assertion intentionally).
+      * Peer restarts AN after link is up (goes back to empty
+        config) — our `linkdown` must trip and we must `restart`.
+      * Peer sets NP=1 — FSM must not deadlock; ability to recover
+        when peer drops NP later.
+      * Single invalid 10b code mid-traffic — `rx_invalid` sticky
+        must trip but AN must not restart.
+    ~190 s.
+
+## Hardware monitor script
+
+`bench/pcs_link_monitor.py` polls the PCS observability CSRs over
+Etherbone and prints a live table plus a summary on exit. Typical use,
+from a directory containing the SoC's `csr.csv`:
+
+```
+./bench/pcs_link_monitor.py                            # 1 minute, 0.5 s sample
+./bench/pcs_link_monitor.py --interval 1 --count 600   # 10 minutes
+./bench/pcs_link_monitor.py --csv-out direct.csv       # log raw samples
+./bench/pcs_link_monitor.py --clear                    # re-arm sticky and exit
+```
+
+The summary reports time-to-first-link-up, link-up fraction, restart
+rate per minute, and the distribution of time spent in each AN state.
+This is the diagnostic to capture when comparing the misbehaving
+direct-SFP link against the working SFP+/RJ45 adapter link: same SoC,
+same monitor invocation, two CSV files - the difference between them
+is the failure signature.
+
+If your SoC exposes the PCS under a different CSR namespace
+(e.g. multiple PHYs, or non-default `ethphy` name), pass `--prefix`.
 
 ## Hardware test plan
 
