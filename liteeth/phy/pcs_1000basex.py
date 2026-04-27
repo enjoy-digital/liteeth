@@ -283,7 +283,8 @@ class PCSRX(LiteXModule):
 
 class PCS(LiteXModule):
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, idle_detect_time=10e-3, with_csr=False, tx_ability=0x01a0):
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, idle_detect_time=10e-3, with_csr=False, tx_ability=0x01a0,
+                 sgmii_tx_link_up=True, sgmii_tx_speed=0b10, sgmii_tx_full_duplex=True):
         # tx_ability: 1000BASE-X advertised abilities (Clause 37 base page).
         # Bit 0 (SGMII id) and bit 14 (ACK) are always overridden by the
         # state machine and ignored here. Default 0x01A0 = FD + symmetric +
@@ -294,6 +295,25 @@ class PCS(LiteXModule):
             "and must be 0 in the user-supplied advertised abilities."
         )
         self.tx_ability = tx_ability
+
+        # SGMII-mode TX advertised fields (Cisco SGMII base page).
+        # When the peer indicates SGMII (bit 0 = 1), the partner reads:
+        #   bits 10..11 -> speed (00=10M, 01=100M, 10=1G)
+        #   bit  12     -> duplex (1=Full)
+        #   bit  15     -> link (1=Up)
+        # The defaults match an FPGA PCS playing the *PHY* role over an
+        # SFP towards a switch acting as the SGMII MAC: claim 1Gbps FD
+        # link-up. For the MAC role (FPGA driving an external SGMII PHY),
+        # set sgmii_tx_link_up=False so the PHY drives its own link state
+        # and override the others as needed at runtime via the exposed
+        # Signals (sgmii_tx_link_up_sig, sgmii_tx_speed_sig,
+        # sgmii_tx_full_duplex_sig).
+        assert sgmii_tx_speed in (0b00, 0b01, 0b10), (
+            f"sgmii_tx_speed must be 0b00 (10M), 0b01 (100M) or 0b10 (1G); got {sgmii_tx_speed:#04b}"
+        )
+        self.sgmii_tx_link_up_sig     = Signal(   reset=int(bool(sgmii_tx_link_up)))
+        self.sgmii_tx_speed_sig       = Signal(2, reset=sgmii_tx_speed)
+        self.sgmii_tx_full_duplex_sig = Signal(   reset=int(bool(sgmii_tx_full_duplex)))
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -391,14 +411,24 @@ class PCS(LiteXModule):
         # TX Config.
         # ----------
         # Bit 0 (SGMII identifier) and bit 14 (ACK) are always driven by the
-        # AN FSM. The remaining bits 1..13 are taken from `tx_ability` only
-        # in 1000BASE-X mode; in SGMII mode they must be 0 per the SGMII
-        # specification.
+        # AN FSM.
+        # In 1000BASE-X mode (peer bit 0 = 0), bits 1..13 come from
+        # `tx_ability`.
+        # In SGMII mode (peer bit 0 = 1), bits 10..15 carry the PHY-side
+        # advertisement (speed / duplex / link-up). All other SGMII bits
+        # are reserved and must be 0.
+        # Without the SGMII bit-15 advertisement, a switch acting as the
+        # SGMII MAC would read link=Down / 10M / Half-duplex from us and
+        # never bring its side up.
         self.comb += [
             If(~config_empty,
                 self.tx.config_reg[0].eq(is_sgmii),     # SGMII: SGMII in-use.
                 If(~is_sgmii,
                     self.tx.config_reg[1:14].eq((tx_ability >> 1) & 0x1fff),
+                ).Else(
+                    self.tx.config_reg[10:12].eq(self.sgmii_tx_speed_sig),
+                    self.tx.config_reg[12].eq(self.sgmii_tx_full_duplex_sig),
+                    self.tx.config_reg[15].eq(self.sgmii_tx_link_up_sig),
                 ),
                 self.tx.config_reg[14].eq(autoneg_ack), # SGMII/1000BASE-X: Acknowledge Bit.
             )
