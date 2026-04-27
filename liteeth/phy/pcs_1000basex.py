@@ -283,7 +283,17 @@ class PCSRX(LiteXModule):
 
 class PCS(LiteXModule):
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, with_csr=False):
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, with_csr=False, tx_ability=0x01a0):
+        # tx_ability: 1000BASE-X advertised abilities (Clause 37 base page).
+        # Bit 0 (SGMII id) and bit 14 (ACK) are always overridden by the
+        # state machine and ignored here. Default 0x01A0 = FD + symmetric +
+        # asymmetric pause; some switches require pause to be advertised
+        # for the link to come up.
+        assert (tx_ability & ((1 << 0) | (1 << 14))) == 0, (
+            "tx_ability bits 0 (SGMII id) and 14 (ACK) are driven by the AN FSM "
+            "and must be 0 in the user-supplied advertised abilities."
+        )
+        self.tx_ability = tx_ability
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -365,10 +375,16 @@ class PCS(LiteXModule):
 
         # TX Config.
         # ----------
+        # Bit 0 (SGMII identifier) and bit 14 (ACK) are always driven by the
+        # AN FSM. The remaining bits 1..13 are taken from `tx_ability` only
+        # in 1000BASE-X mode; in SGMII mode they must be 0 per the SGMII
+        # specification.
         self.comb += [
             If(~config_empty,
                 self.tx.config_reg[0].eq(is_sgmii),     # SGMII: SGMII in-use.
-                self.tx.config_reg[5].eq(~is_sgmii),    # 1000BASE-X: Full-duplex.
+                If(~is_sgmii,
+                    self.tx.config_reg[1:14].eq((tx_ability >> 1) & 0x1fff),
+                ),
                 self.tx.config_reg[14].eq(autoneg_ack), # SGMII/1000BASE-X: Acknowledge Bit.
             )
         ]
