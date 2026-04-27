@@ -732,14 +732,19 @@ class TestPCSWithPeer(unittest.TestCase):
         self.assertEqual(link_seen[-1], 1,
             "link did not come up against slow-COMPLETE-ACK peer")
 
-    # ----- Scenario 3: peer advertises remote fault (RF1=1) -----
+    # ----- Scenario 3: remote fault handling -----
 
     def test_peer_remote_fault_does_not_link(self):
         """A peer advertising remote fault (RF1 set) must NOT bring link_up.
 
-        The current PCS does not explicitly check RF bits; this test
-        documents the present behaviour so a future RF-handling change
-        is forced to update the test deliberately.
+        Per IEEE 802.3 Clause 37, base page bits 12 (RF1) and 13 (RF2)
+        encode a remote-fault condition; any non-zero combination means
+        the link must not be declared up. The PCS must:
+          - reach RUNNING (the AN handshake itself completes),
+          - keep link_up low (because link_rf is set),
+          - assert link_rf,
+          - NOT restart AN (a restart loop would prevent the peer from
+            ever clearing RF without us having to re-handshake).
         """
         dut = _PCSWithPeerDUT()
 
@@ -750,27 +755,126 @@ class TestPCSWithPeer(unittest.TestCase):
         def peer():
             yield from _peer_emit_config(dut.peer, cfg_no_ack, 30)
             yield from _peer_emit_config(dut.peer, cfg_ack,    30)
-            yield from _peer_emit_idle(dut.peer, 5000)
 
-        link_after_an = [None]
+        link_up_in_running = []
+        link_rf_in_running = []
+        restart_count      = [0]
+        states_visited     = set()
         def observe():
-            in_idle = False
             for _ in range(self.BUDGET_CYCLES):
-                # When we reach IDLE_DETECT or RUNNING, sample link_up.
                 s = (yield from _read_pcs_state(dut))
-                if s in ("AUTONEG-IDLE-DETECT", "RUNNING"):
-                    in_idle = True
-                if in_idle:
-                    link_after_an[0] = (yield dut.pcs.link_up)
+                if s:
+                    states_visited.add(s)
+                if s == "RUNNING":
+                    link_up_in_running.append((yield dut.pcs.link_up))
+                    link_rf_in_running.append((yield dut.pcs.link_rf))
+                if (yield dut.pcs.restart):
+                    restart_count[0] += 1
                 yield
 
         self._run(dut, peer(), observe())
 
-        # Documented current behaviour: PCS does not gate link_up on RF.
-        # If this assertion ever flips, it means RF handling was added -
-        # update the test (and probably want a positive companion test).
-        self.assertIsNotNone(link_after_an[0],
-            "PCS never reached IDLE_DETECT/RUNNING phase against RF peer")
+        self.assertIn("RUNNING", states_visited,
+            f"AN never completed against RF peer; states={sorted(states_visited)}")
+        # Once in RUNNING, link_up must stay low and link_rf must be high.
+        self.assertGreater(len(link_up_in_running), 0)
+        self.assertEqual(max(link_up_in_running), 0,
+            "link_up asserted while peer is advertising RF")
+        self.assertEqual(min(link_rf_in_running), 1,
+            "link_rf was not set despite peer advertising RF")
+        # And we must NOT restart AN (otherwise we loop against an RF peer).
+        self.assertEqual(restart_count[0], 0,
+            f"PCS restarted AN ({restart_count[0]}x) while peer was holding RF")
+
+    def test_peer_clears_rf_link_comes_up(self):
+        """Peer holds RF for a while, then clears it: link_up must rise.
+
+        Verifies the asymmetric design choice that RF only suppresses
+        link_up without restarting AN - so when the peer drops RF, the
+        link comes up immediately without a fresh handshake.
+        """
+        dut = _PCSWithPeerDUT()
+
+        cfg_rf_no_ack = 0x11a0  # RF1 + FD + pause
+        cfg_rf_ack    = cfg_rf_no_ack | (1 << 14)
+        cfg_clean     = 0x01a0  # FD + pause, no RF
+        cfg_clean_ack = cfg_clean    | (1 << 14)
+
+        def peer():
+            # Bring up AN with RF set.
+            yield from _peer_emit_config(dut.peer, cfg_rf_no_ack, 30)
+            yield from _peer_emit_config(dut.peer, cfg_rf_ack,    30)
+            # Hold RF for a while.
+            yield from _peer_emit_idle(dut.peer, 200)
+            # Clear RF: send fresh consistent config without RF.
+            yield from _peer_emit_config(dut.peer, cfg_clean,     30)
+            yield from _peer_emit_config(dut.peer, cfg_clean_ack, 30)
+
+        link_up_history = []
+        restart_count   = [0]
+        def observe():
+            for _ in range(self.BUDGET_CYCLES):
+                link_up_history.append((yield dut.pcs.link_up))
+                if (yield dut.pcs.restart):
+                    restart_count[0] += 1
+                yield
+
+        self._run(dut, peer(), observe())
+
+        # link_up must transition 0 -> 1 at some point.
+        first_up = next(
+            (i for i, v in enumerate(link_up_history) if v),
+            None,
+        )
+        self.assertIsNotNone(first_up,
+            f"link_up never came up after peer cleared RF; "
+            f"restart_count={restart_count[0]}")
+        self.assertEqual(link_up_history[-1], 1,
+            "link_up did not stay up after peer cleared RF")
+
+    def test_peer_sets_rf_after_link_drops_link_no_restart(self):
+        """Link is up; peer then sets RF: link_up must drop, no AN restart."""
+        dut = _PCSWithPeerDUT()
+
+        cfg_clean     = 0x01a0
+        cfg_clean_ack = cfg_clean | (1 << 14)
+        # New consistent config that keeps everything else but adds RF1.
+        cfg_rf        = cfg_clean | (1 << 12)
+
+        def peer():
+            # Bring link up cleanly.
+            yield from _peer_emit_config(dut.peer, cfg_clean,     30)
+            yield from _peer_emit_config(dut.peer, cfg_clean_ack, 30)
+            yield from _peer_emit_idle(dut.peer, 600)
+            # Now flip to RF without going through empty config (no AN
+            # restart from the peer's side - just a config change).
+            yield from _peer_emit_config(dut.peer, cfg_rf,         30)
+            yield from _peer_emit_config(dut.peer, cfg_rf | (1 << 14), 30)
+
+        link_up_history = []
+        restart_after_first_up = [0]
+        def observe():
+            saw_up = False
+            for _ in range(self.BUDGET_CYCLES):
+                up = (yield dut.pcs.link_up)
+                link_up_history.append(up)
+                if up:
+                    saw_up = True
+                if saw_up and (yield dut.pcs.restart):
+                    restart_after_first_up[0] += 1
+                yield
+
+        self._run(dut, peer(), observe())
+
+        first_up = next((i for i, v in enumerate(link_up_history) if v), None)
+        self.assertIsNotNone(first_up, "link never came up at all")
+        # After the peer flipped to RF, link_up must end low.
+        self.assertEqual(link_up_history[-1], 0,
+            "link_up stayed asserted after peer set RF")
+        # And we must not have restarted AN as a side-effect of RF.
+        self.assertEqual(restart_after_first_up[0], 0,
+            f"PCS restarted AN ({restart_after_first_up[0]}x) when peer set RF; "
+            f"this would create a restart loop against an RF-holding peer")
 
     # ----- Scenario 4: peer restarts AN after we have linked up -----
 
