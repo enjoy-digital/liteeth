@@ -84,6 +84,7 @@ class PCSDriver:
         return {
             "link_up":    (v >>  0) & 1,
             "is_sgmii":   (v >>  1) & 1,
+            "link_rf":    (v >>  2) & 1,
             "config_reg": (v >> 16) & 0xffff,
         }
 
@@ -107,7 +108,7 @@ class PCSDriver:
 # Pretty printing ---------------------------------------------------------------------------------
 
 HEADER = (
-    f"{'time':>7s}  {'link':>4s}  sgmii  {'state':<14s}  "
+    f"{'time':>7s}  {'link':>4s}  sgmii  rf  {'state':<14s}  "
     f"{'restarts':>8s}  {'+r':>3s}  ci  abi  ack  inv  config"
 )
 SEP = "-" * len(HEADER)
@@ -135,6 +136,12 @@ def fmt_restart_delta(d):
     return f"{C.RED}{d:>3d}{C.RESET}" if d else f"{C.DIM}{d:>3d}{C.RESET}"
 
 
+def fmt_rf(v):
+    # RF being set is a useful diagnostic (peer is signalling fault),
+    # so highlight it; absence is the normal case so dim it.
+    return f"{C.RED}1{C.RESET}" if v else f"{C.DIM}0{C.RESET}"
+
+
 def print_sample(t, sample, delta_restart):
     s = sample
     state = AN_STATES.get(s["an_state"], f"?{s['an_state']}")
@@ -142,6 +149,7 @@ def print_sample(t, sample, delta_restart):
         f"{t:7.2f}  "
         f"{fmt_link(s['link_up'])}  "
         f"  {s['is_sgmii']:d}    "
+        f"{fmt_rf(s['link_rf'])}   "
         f"{fmt_state(state)}  "
         f"{s['restart_count']:>8d}  "
         f"{fmt_restart_delta(delta_restart)}  "
@@ -240,7 +248,8 @@ def monitor(bus, prefix, interval, count, csv_path=None, header_every=20,
         with open(csv_path, "w", newline="") as f:
             fieldnames = ["time_s", "delta_restart"] + list(rows[0].keys() - {"time_s", "delta_restart"})
             # Stable column order:
-            fieldnames = ["time_s", "link_up", "is_sgmii", "an_state",
+            fieldnames = ["time_s", "link_up", "is_sgmii", "link_rf",
+                          "an_state",
                           "seen_valid_ci", "seen_config_abi", "seen_config_ack",
                           "rx_invalid", "config_reg", "restart_count",
                           "delta_restart"]

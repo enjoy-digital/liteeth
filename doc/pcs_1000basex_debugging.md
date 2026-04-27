@@ -33,8 +33,9 @@ all wrapper PHYs in `liteeth/phy/*_1000basex.py`):
 
 | CSR                  | Field            | Meaning                                         |
 | -------------------- | ---------------- | ----------------------------------------------- |
-| `pcs_status`         | `link_up`        | Final link status                               |
+| `pcs_status`         | `link_up`        | Final link status (gated by both linkdown and link_rf) |
 |                      | `is_sgmii`       | SGMII identifier bit observed in partner config |
+|                      | `link_rf`        | Peer is advertising remote-fault (Clause 37 RF1 or RF2). While set, link_up stays low; AN is NOT restarted, so the link comes back up automatically once the peer clears RF |
 |                      | `config_reg`     | Last *consistent* partner config_reg            |
 | `pcs_debug`          | `an_state`       | Current AN FSM state (see table below)          |
 |                      | `seen_valid_ci`  | Sticky: any /C/ or /I/ ordered set decoded      |
@@ -103,6 +104,15 @@ expected steady state is `an_state=5`, all four sticky bits set to 1,
      occasionally dropping bytes. Look at `rx_invalid` (sticky).
      Could be a marginal optical signal or a clocking issue.
 
+7. `an_state == 5` (RUNNING), `link_up == 0`, `link_rf == 1`,
+   `restart_count` not climbing:
+   - The peer is in remote-fault. AN itself is healthy (we reach
+     RUNNING and stay there); the peer is signalling that *its* upstream
+     link or its own AN had a problem. We deliberately do not restart
+     AN here - the peer will clear RF when its situation recovers, and
+     `link_up` will rise on its own. Look at `config_reg` bits 12/13
+     for the specific RF code.
+
 ## Running the unit tests
 
 ```
@@ -150,7 +160,15 @@ The tests are organised by scope:
         when peer drops NP later.
       * Single invalid 10b code mid-traffic — `rx_invalid` sticky
         must trip but AN must not restart.
-    ~190 s.
+      * Peer advertises RF (RF1 set in base page) — AN reaches
+        RUNNING, `link_up` stays low, `link_rf` is set, no AN
+        restart fires (otherwise we would loop against an
+        RF-holding peer).
+      * Peer first holds RF then clears it — `link_up` rises with
+        no fresh handshake.
+      * Peer flips to RF after the link is up — `link_up` drops
+        without an AN restart side-effect.
+    ~260 s.
 
 ## Hardware monitor script
 
