@@ -451,19 +451,17 @@ class PCS(LiteXModule):
         )
         # IDLE_DETECT (1000BASE-X only).
         # Stop transmitting /C/ (config_valid low → TX FSM emits /I/) and
-        # wait idle_detect_time. A partner config (/C/) means the partner
-        # restarted AN, so we restart too. The existing checker (whose
-        # error is cleared by any /C/-or-/I/ pulse via seen_valid_ci)
-        # already restarts the FSM on loss of sync, so reaching the timer
-        # implies we have been observing /I/ continuously.
+        # wait idle_detect_time. The partner is allowed to keep sending
+        # /C/ during this window (it has not yet reached its own
+        # IDLE_DETECT), so we must not restart on a fresh consistent /C/
+        # here - that would oscillate forever in symmetric handshakes
+        # like back-to-back FPGAs or self-loopback. Restart only on hard
+        # loss-of-sync via the existing checker (cleared by any /C/-or-/I/
+        # ordered set), which catches catastrophic link failure.
         fsm.act("AUTONEG-IDLE-DETECT",
             idle_detect_timer.wait.eq(1),
             If(idle_detect_timer.done,
                 NextState("RUNNING")
-            ),
-            If(rx_config_reg_abi.o | rx_config_reg_ack.o,
-                self.restart.eq(1),
-                NextState("AUTONEG-BREAKLINK")
             ),
             If(checker_tick & checker_error,
                 self.restart.eq(1),
