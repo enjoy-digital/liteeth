@@ -1139,6 +1139,8 @@ class LiteEthPTPControl(LiteXModule):
         self.peer_mismatch      = Signal() # o
         self.requester_mismatch = Signal() # o
         self.announce_expired   = Signal() # o
+        self.delay_resp_seen    = Signal() # o
+        self.delay_resp_seq_mismatch = Signal() # o
 
         # Master IP Storage.
         # ------------------
@@ -1207,6 +1209,10 @@ class LiteEthPTPControl(LiteXModule):
             (rx_ge.msg_type == PTP_MSG_ANNOUNCE)
         )
         self.sync += self.announce_expired.eq(0)
+        self.comb += [
+            self.delay_resp_seen.eq(0),
+            self.delay_resp_seq_mismatch.eq(0),
+        ]
 
         # FSM -> TX.
         self.comb += [
@@ -1375,8 +1381,15 @@ class LiteEthPTPControl(LiteXModule):
             ),
             If(rx_ge.present &
                (rx_ge.msg_type == PTP_MSG_DELAY_RESP) &
+               (rx_ge.seq_id  != seq),
+                self.delay_resp_seen.eq(1),
+                self.delay_resp_seq_mismatch.eq(1)
+            ),
+            If(rx_ge.present &
+               (rx_ge.msg_type == PTP_MSG_DELAY_RESP) &
                (rx_ge.seq_id  == seq) &
                ~general_from_master,
+                self.delay_resp_seen.eq(1),
                 self.peer_mismatch.eq(1)
             ),
             If(rx_ge.present &
@@ -1384,6 +1397,7 @@ class LiteEthPTPControl(LiteXModule):
                (rx_ge.seq_id  == seq) &
                general_from_master &
                (rx_ge.requesting_port_id != tx.clock_id),
+                self.delay_resp_seen.eq(1),
                 self.requester_mismatch.eq(1)
             ),
             # Wait for Delay_Resp on General port (matching sequence ID).
@@ -1392,6 +1406,7 @@ class LiteEthPTPControl(LiteXModule):
                (rx_ge.seq_id  == seq) &
                general_from_master &
                (rx_ge.requesting_port_id == tx.clock_id),
+                self.delay_resp_seen.eq(1),
                 NextValue(t4, rx_ge.timestamp),
                 NextValue(have_t4, 1),
                 NextState("SERVE")
@@ -1675,6 +1690,10 @@ class LiteEthPTP(LiteXModule):
         self.rx_timeout_count      = Signal(32)
         self.announce_expiry_count = Signal(32)
         self.tx_launch_count       = Signal(32)
+        self.tx_complete_count     = Signal(32)
+        self.rx_delay_resp_count   = Signal(32)
+        self.rx_delay_resp_wait_count = Signal(32)
+        self.rx_delay_resp_seq_mismatch_count = Signal(32)
 
         # Parameters.
         # -----------
@@ -1770,6 +1789,18 @@ class LiteEthPTP(LiteXModule):
             ),
             If(tx.launch,
                 self.tx_launch_count.eq(self.tx_launch_count + 1)
+            ),
+            If(tx.source.valid & tx.source.ready & tx.source.last,
+                self.tx_complete_count.eq(self.tx_complete_count + 1)
+            ),
+            If(rx_ge.present & (rx_ge.msg_type == PTP_MSG_DELAY_RESP),
+                self.rx_delay_resp_count.eq(self.rx_delay_resp_count + 1)
+            ),
+            If(control.delay_resp_seen,
+                self.rx_delay_resp_wait_count.eq(self.rx_delay_resp_wait_count + 1)
+            ),
+            If(control.delay_resp_seq_mismatch,
+                self.rx_delay_resp_seq_mismatch_count.eq(self.rx_delay_resp_seq_mismatch_count + 1)
             )
         ]
 
@@ -1785,6 +1816,10 @@ class LiteEthPTP(LiteXModule):
         self._rx_timeout_count      = CSRStatus(32, description="RX timeout count.")
         self._announce_expiry_count = CSRStatus(32, description="Announce expiry count.")
         self._tx_launch_count       = CSRStatus(32, description="PTP request TX launch count.")
+        self._tx_complete_count     = CSRStatus(32, description="PTP request TX packet completion count.")
+        self._rx_delay_resp_count   = CSRStatus(32, description="Accepted PTP Delay_Resp RX count.")
+        self._rx_delay_resp_wait_count = CSRStatus(32, description="PTP Delay_Resp RX count while waiting for response.")
+        self._rx_delay_resp_seq_mismatch_count = CSRStatus(32, description="PTP Delay_Resp sequence mismatch count.")
         self.comb += [
             self._locked.status.eq(self.locked),
             self._master_ip.status.eq(self.master_ip),
@@ -1796,6 +1831,10 @@ class LiteEthPTP(LiteXModule):
             self._rx_timeout_count.status.eq(self.rx_timeout_count),
             self._announce_expiry_count.status.eq(self.announce_expiry_count),
             self._tx_launch_count.status.eq(self.tx_launch_count),
+            self._tx_complete_count.status.eq(self.tx_complete_count),
+            self._rx_delay_resp_count.status.eq(self.rx_delay_resp_count),
+            self._rx_delay_resp_wait_count.status.eq(self.rx_delay_resp_wait_count),
+            self._rx_delay_resp_seq_mismatch_count.status.eq(self.rx_delay_resp_seq_mismatch_count),
         ]
 
         # Monitor (optional, enabled by default).

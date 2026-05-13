@@ -125,7 +125,7 @@ def _make_ptp_dut(timeout=0.001, monitor_debug=None, **kwargs):
     return dut, event_port, general_port
 
 def _run_e2e_exchange(event_port, general_port, dut, seq, t1_sec, t1_ns, t4_sec, t4_ns,
-                      fup_seq=None, dresp_requester=SLAVE_CLOCK_ID):
+                      fup_seq=None, dresp_seq=None, dresp_requester=SLAVE_CLOCK_ID):
     """Generator: run one complete E2E exchange (Sync + FUp + wait + Delay_Resp)."""
     two_step_flag = 1 << PTP_TWO_STEP_FLAG_BIT
 
@@ -150,7 +150,8 @@ def _run_e2e_exchange(event_port, general_port, dut, seq, t1_sec, t1_ns, t4_sec,
 
     # 3. Delay_Resp.
     dresp_body = _build_ptp_body_with_requester(t4_sec, t4_ns, dresp_requester)
-    dresp_pkt, ip, _ = _build_ptp_packet(PTP_MSG_DELAY_RESP, dresp_body, seq_id=seq)
+    dresp_pkt, ip, _ = _build_ptp_packet(
+        PTP_MSG_DELAY_RESP, dresp_body, seq_id=dresp_seq if dresp_seq is not None else seq)
     yield from _send_udp_packet(general_port, dresp_pkt, ip_address=ip,
                                 src_port=PTP_GENERAL_PORT, dst_port=PTP_GENERAL_PORT)
 
@@ -730,6 +731,7 @@ class TestPTPTop(unittest.TestCase):
                     results["msg_type"]   = (yield event_port.sink.data) & 0x0f
                 yield
             results["tx_launch_count"] = (yield dut.tx_launch_count)
+            results["tx_complete_count"] = (yield dut.tx_complete_count)
 
         run_simulation(dut, gen(dut))
         self.assertEqual(results.get("seen"), 1)
@@ -743,6 +745,7 @@ class TestPTPTop(unittest.TestCase):
         self.assertEqual(results["dst_port"],   PTP_EVENT_PORT)
         self.assertEqual(results["ip_address"], PTP_PRIMARY_MCAST_IP)
         self.assertGreater(results["tx_launch_count"], 0)
+        self.assertGreater(results["tx_complete_count"], 0)
 
     def test_delay_req_can_use_legacy_unicast_destination(self):
         """Designs can opt back into learned-master unicast Delay_Req traffic."""
@@ -781,11 +784,17 @@ class TestPTPTop(unittest.TestCase):
 
             results["locked"]    = (yield dut.locked)
             results["master_ip"] = (yield dut.master_ip)
+            results["tx_complete_count"]   = (yield dut.tx_complete_count)
+            results["rx_delay_resp_count"] = (yield dut.rx_delay_resp_count)
+            results["rx_delay_resp_wait_count"] = (yield dut.rx_delay_resp_wait_count)
 
         run_simulation(dut, gen(dut))
 
         self.assertEqual(results["locked"],    1)
         self.assertEqual(results["master_ip"], MASTER_IP)
+        self.assertGreater(results["tx_complete_count"], 0)
+        self.assertGreater(results["rx_delay_resp_count"], 0)
+        self.assertGreater(results["rx_delay_resp_wait_count"], 0)
 
     def test_timeout_when_no_sync(self):
         """PTP should timeout if no Sync is received."""
@@ -862,11 +871,49 @@ class TestPTPTop(unittest.TestCase):
                 yield
 
             results["wrong_requester_count"] = (yield dut.wrong_requester_count)
+            results["rx_delay_resp_count"]   = (yield dut.rx_delay_resp_count)
+            results["rx_delay_resp_wait_count"] = (yield dut.rx_delay_resp_wait_count)
             results["locked"]                = (yield dut.locked)
 
         run_simulation(dut, gen(dut))
 
         self.assertGreater(results["wrong_requester_count"], 0)
+        self.assertGreater(results["rx_delay_resp_count"], 0)
+        self.assertGreater(results["rx_delay_resp_wait_count"], 0)
+        self.assertEqual(results["locked"], 0)
+
+    def test_delay_resp_sequence_mismatch_counted(self):
+        """Delay_Resp with a stale sequence should be counted for debug."""
+        dut, event_port, general_port = _make_ptp_dut()
+        results = {}
+
+        def gen(dut):
+            yield dut.clock_id.eq(SLAVE_CLOCK_ID)
+            yield dut.p2p_mode.eq(0)
+            yield dut.domain.eq(0)
+            yield
+            yield event_port.sink.ready.eq(1)
+            yield
+
+            yield from _run_e2e_exchange(event_port, general_port, dut,
+                seq=0, t1_sec=1000, t1_ns=100_000_000,
+                t4_sec=1000, t4_ns=100_030_000,
+                dresp_seq=1)
+
+            for _ in range(100):
+                yield
+
+            results["rx_delay_resp_count"] = (yield dut.rx_delay_resp_count)
+            results["rx_delay_resp_wait_count"] = (yield dut.rx_delay_resp_wait_count)
+            results["rx_delay_resp_seq_mismatch_count"] = (
+                yield dut.rx_delay_resp_seq_mismatch_count)
+            results["locked"] = (yield dut.locked)
+
+        run_simulation(dut, gen(dut))
+
+        self.assertGreater(results["rx_delay_resp_count"], 0)
+        self.assertGreater(results["rx_delay_resp_wait_count"], 0)
+        self.assertGreater(results["rx_delay_resp_seq_mismatch_count"], 0)
         self.assertEqual(results["locked"], 0)
 
     def test_servo_phase_decreases(self):
