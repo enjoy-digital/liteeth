@@ -13,6 +13,7 @@ from litex.gen.sim import *
 from liteeth.common import *
 from liteeth.core import LiteEthIPCore
 from liteeth.core.igmp import LiteEthIGMPJoiner, igmp_checksum
+from liteeth.core.ip import LiteEthIPV4UserPort
 
 from test.model import phy, mac, arp, ip
 
@@ -45,6 +46,30 @@ class TestIGMPJoiner(unittest.TestCase):
 
     def test_two_groups(self):
         self._run(groups=ptp_groups, cycles=500)
+
+    def test_uses_ip_crossbar_width(self):
+        class Crossbar:
+            def __init__(self, dw):
+                self.master = type("Master", (), {"dw": dw})()
+                self.requested_protocol = None
+                self.requested_dw = None
+
+            def get_port(self, protocol, dw=8):
+                self.requested_protocol = protocol
+                self.requested_dw = dw
+                return LiteEthIPV4UserPort(dw)
+
+        class IP:
+            def __init__(self, dw):
+                self.crossbar = Crossbar(dw)
+
+        fake_ip = IP(32)
+        joiner = LiteEthIGMPJoiner(fake_ip, groups=ptp_groups)
+
+        self.assertEqual(joiner.dw, 32)
+        self.assertEqual(fake_ip.crossbar.requested_protocol, 0x02)
+        self.assertEqual(fake_ip.crossbar.requested_dw, 32)
+        self.assertTrue(hasattr(joiner, "converter"))
 
     def _run(self, groups, cycles):
         class DUT(LiteXModule):

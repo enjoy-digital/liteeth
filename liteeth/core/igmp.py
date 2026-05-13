@@ -37,17 +37,34 @@ class LiteEthIGMPJoiner(LiteXModule):
     - groups       : List of multicast group IPv4 addresses as integers.
     - interval     : Report interval in seconds (default 10).
     - sys_clk_freq : System clock frequency.
+    - dw           : Optional IP datapath width; defaults to the IP crossbar width.
     """
-    def __init__(self, ip, groups, interval=10, sys_clk_freq=int(100e6)):
+    def __init__(self, ip, groups, interval=10, sys_clk_freq=int(100e6), dw=None):
+        if dw is None:
+            dw = ip.crossbar.master.dw
+        self.dw = dw
 
         # # #
 
         # IP Port (protocol=2 IGMP).
         # --------------------------
-        ip_port = ip.crossbar.get_port(igmp_protocol, dw=8)
+        ip_port = ip.crossbar.get_port(igmp_protocol, dw=dw)
 
         # Discard incoming IGMP packets (queries).
         self.comb += ip_port.source.ready.eq(1)
+
+        source = stream.Endpoint(eth_ipv4_user_description(8))
+        if dw == 8:
+            self.comb += source.connect(ip_port.sink)
+        else:
+            self.converter = stream.StrideConverter(
+                eth_ipv4_user_description(8),
+                eth_ipv4_user_description(dw),
+            )
+            self.comb += [
+                source.connect(self.converter.sink),
+                self.converter.source.connect(ip_port.sink),
+            ]
 
         # Pre-compute IGMP payloads.
         # --------------------------
@@ -109,14 +126,15 @@ class LiteEthIGMPJoiner(LiteXModule):
 
         # SEND: drive data directly from combinational Case lookup.
         fsm.act("SEND",
-            ip_port.sink.valid.eq(1),
-            ip_port.sink.last.eq(last),
-            ip_port.sink.last_be.eq(last),
-            ip_port.sink.data.eq(igmp_data),
-            ip_port.sink.ip_address.eq(igmp_ip),
-            ip_port.sink.protocol.eq(igmp_protocol),
-            ip_port.sink.length.eq(igmp_len),
-            If(ip_port.sink.ready,
+            source.valid.eq(1),
+            source.last.eq(last),
+            source.last_be.eq(last),
+            source.error.eq(0),
+            source.data.eq(igmp_data),
+            source.ip_address.eq(igmp_ip),
+            source.protocol.eq(igmp_protocol),
+            source.length.eq(igmp_len),
+            If(source.ready,
                 NextValue(count, count + 1),
                 If(last,
                     If(count == (total - 1),
