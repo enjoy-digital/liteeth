@@ -1674,6 +1674,7 @@ class LiteEthPTP(LiteXModule):
         self.wrong_requester_count = Signal(32)
         self.rx_timeout_count      = Signal(32)
         self.announce_expiry_count = Signal(32)
+        self.tx_launch_count       = Signal(32)
 
         # Parameters.
         # -----------
@@ -1766,6 +1767,9 @@ class LiteEthPTP(LiteXModule):
             ),
             If(control.announce_expired,
                 self.announce_expiry_count.eq(self.announce_expiry_count + 1)
+            ),
+            If(tx.launch,
+                self.tx_launch_count.eq(self.tx_launch_count + 1)
             )
         ]
 
@@ -1780,6 +1784,7 @@ class LiteEthPTP(LiteXModule):
         self._wrong_requester_count = CSRStatus(32, description="Wrong requester count.")
         self._rx_timeout_count      = CSRStatus(32, description="RX timeout count.")
         self._announce_expiry_count = CSRStatus(32, description="Announce expiry count.")
+        self._tx_launch_count       = CSRStatus(32, description="PTP request TX launch count.")
         self.comb += [
             self._locked.status.eq(self.locked),
             self._master_ip.status.eq(self.master_ip),
@@ -1790,6 +1795,7 @@ class LiteEthPTP(LiteXModule):
             self._wrong_requester_count.status.eq(self.wrong_requester_count),
             self._rx_timeout_count.status.eq(self.rx_timeout_count),
             self._announce_expiry_count.status.eq(self.announce_expiry_count),
+            self._tx_launch_count.status.eq(self.tx_launch_count),
         ]
 
         # Monitor (optional, enabled by default).

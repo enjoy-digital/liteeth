@@ -719,15 +719,17 @@ class TestPTPTop(unittest.TestCase):
             yield from _send_udp_packet(general_port, fup_pkt, ip_address=ip,
                 src_port=PTP_GENERAL_PORT, dst_port=PTP_GENERAL_PORT)
 
+            seen = 0
             for _ in range(500):
                 valid = (yield event_port.sink.valid)
-                if valid:
+                if valid and not seen:
+                    seen = 1
                     results["seen"]       = 1
                     results["ip_address"] = (yield event_port.sink.ip_address)
                     results["dst_port"]   = (yield event_port.sink.dst_port)
                     results["msg_type"]   = (yield event_port.sink.data) & 0x0f
-                    break
                 yield
+            results["tx_launch_count"] = (yield dut.tx_launch_count)
 
         run_simulation(dut, gen(dut))
         self.assertEqual(results.get("seen"), 1)
@@ -740,6 +742,7 @@ class TestPTPTop(unittest.TestCase):
         self.assertEqual(results["msg_type"],   PTP_MSG_DELAY_REQ)
         self.assertEqual(results["dst_port"],   PTP_EVENT_PORT)
         self.assertEqual(results["ip_address"], PTP_PRIMARY_MCAST_IP)
+        self.assertGreater(results["tx_launch_count"], 0)
 
     def test_delay_req_can_use_legacy_unicast_destination(self):
         """Designs can opt back into learned-master unicast Delay_Req traffic."""
