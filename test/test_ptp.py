@@ -116,12 +116,12 @@ def _send_udp_packet(port, data_bytes, ip_address=MASTER_IP, src_port=319, dst_p
     yield port.source.valid.eq(0)
     yield
 
-def _make_ptp_dut(timeout=0.001, monitor_debug=None):
+def _make_ptp_dut(timeout=0.001, monitor_debug=None, **kwargs):
     """Create a top-level PTP DUT with UDP ports."""
     event_port   = UDPPort()
     general_port = UDPPort()
     dut = LiteEthPTP(event_port, general_port, SYS_CLK_FREQ,
-                     timeout=timeout, monitor_debug=monitor_debug)
+                     timeout=timeout, monitor_debug=monitor_debug, **kwargs)
     return dut, event_port, general_port
 
 def _run_e2e_exchange(event_port, general_port, dut, seq, t1_sec, t1_ns, t4_sec, t4_ns,
@@ -673,6 +673,70 @@ class TestPTPTX(unittest.TestCase):
 
 class TestPTPTop(unittest.TestCase):
     """Integration tests for the full PTP top-level module."""
+
+    def _capture_request_destination(self, *, p2p_mode=0, unicast_delay_req=False):
+        dut, event_port, general_port = _make_ptp_dut(unicast_delay_req=unicast_delay_req)
+        results = {}
+
+        def gen(dut):
+            yield dut.clock_id.eq(SLAVE_CLOCK_ID)
+            yield dut.p2p_mode.eq(p2p_mode)
+            yield dut.domain.eq(0)
+            yield event_port.sink.ready.eq(1)
+            yield
+
+            two_step_flag = 1 << PTP_TWO_STEP_FLAG_BIT
+
+            sync_body = _build_ptp_body_timestamp(0, 0)
+            sync_pkt, ip, _ = _build_ptp_packet(PTP_MSG_SYNC, sync_body,
+                seq_id=7, flags=two_step_flag)
+            yield from _send_udp_packet(event_port, sync_pkt, ip_address=ip,
+                src_port=PTP_EVENT_PORT, dst_port=PTP_EVENT_PORT)
+            for _ in range(20):
+                yield
+
+            fup_body = _build_ptp_body_timestamp(1000, 100_000_000)
+            fup_pkt, ip, _ = _build_ptp_packet(PTP_MSG_FOLLOW_UP, fup_body, seq_id=7)
+            yield from _send_udp_packet(general_port, fup_pkt, ip_address=ip,
+                src_port=PTP_GENERAL_PORT, dst_port=PTP_GENERAL_PORT)
+
+            for _ in range(500):
+                valid = (yield event_port.sink.valid)
+                if valid:
+                    results["seen"]       = 1
+                    results["ip_address"] = (yield event_port.sink.ip_address)
+                    results["dst_port"]   = (yield event_port.sink.dst_port)
+                    results["msg_type"]   = (yield event_port.sink.data) & 0x0f
+                    break
+                yield
+
+        run_simulation(dut, gen(dut))
+        self.assertEqual(results.get("seen"), 1)
+        return results
+
+    def test_delay_req_destination_defaults_to_ptp_multicast(self):
+        """E2E Delay_Req should use the standard multicast service by default."""
+        results = self._capture_request_destination()
+
+        self.assertEqual(results["msg_type"],   PTP_MSG_DELAY_REQ)
+        self.assertEqual(results["dst_port"],   PTP_EVENT_PORT)
+        self.assertEqual(results["ip_address"], PTP_PRIMARY_MCAST_IP)
+
+    def test_delay_req_can_use_legacy_unicast_destination(self):
+        """Designs can opt back into learned-master unicast Delay_Req traffic."""
+        results = self._capture_request_destination(unicast_delay_req=True)
+
+        self.assertEqual(results["msg_type"],   PTP_MSG_DELAY_REQ)
+        self.assertEqual(results["dst_port"],   PTP_EVENT_PORT)
+        self.assertEqual(results["ip_address"], MASTER_IP)
+
+    def test_pdelay_req_destination_uses_peer_delay_multicast(self):
+        """P2P Pdelay_Req should use the peer-delay multicast group."""
+        results = self._capture_request_destination(p2p_mode=1)
+
+        self.assertEqual(results["msg_type"],   PTP_MSG_PDELAY_REQ)
+        self.assertEqual(results["dst_port"],   PTP_EVENT_PORT)
+        self.assertEqual(results["ip_address"], PTP_PDELAY_MCAST_IP)
 
     def test_e2e_exchange_locks(self):
         """PTP should lock after receiving valid E2E exchanges."""

@@ -38,6 +38,9 @@ from liteeth.common import *
 PTP_EVENT_PORT          = 319
 PTP_GENERAL_PORT        = 320
 
+PTP_PRIMARY_MCAST_IP    = 0xE0000181 # 224.0.1.129.
+PTP_PDELAY_MCAST_IP     = 0xE000006B # 224.0.0.107.
+
 PTP_HEADER_LENGTH       = 34 # Bytes.
 
 # Message types (low nibble).
@@ -1649,13 +1652,14 @@ class LiteEthPTP(LiteXModule):
     - monitor_debug : True=full, False=common-only, None=no monitor.
     """
     def __init__(self, event_port, general_port, sys_clk_freq, timeout=1.0, announce_timeout=None,
-        require_announce=False, monitor_debug=False):
+        require_announce=False, monitor_debug=False, unicast_delay_req=False):
         # Control/Status.
         # ---------------
         self.enable                = Signal(reset=1)
         self.locked                = Signal()
         self.timeout               = Signal()
         self.p2p_mode              = Signal(reset=0)
+        self.unicast_delay_req     = Signal(reset=1 if unicast_delay_req else 0)
         self.require_announce      = Signal(reset=1 if require_announce else 0)
         self.master_ip             = Signal(32)
         self.last_rx_msg_type      = Signal(4)
@@ -1713,17 +1717,19 @@ class LiteEthPTP(LiteXModule):
             tx.domain.eq(self.domain),
             tx.clock_id.eq(self.clock_id),
 
-            # Use the dynamically learned master IP from the control module.
-            tx.ip_address.eq(control.master_ip),
-
             tx.src_port.eq(PTP_EVENT_PORT),
             tx.dst_port.eq(PTP_EVENT_PORT),
             # Propagate P2P mode to TX helper and select message type.
             tx.p2p_mode.eq(self.p2p_mode),
             If(self.p2p_mode,
-                tx.msg_type.eq(PTP_MSG_PDELAY_REQ)
+                tx.msg_type.eq(PTP_MSG_PDELAY_REQ),
+                tx.ip_address.eq(PTP_PDELAY_MCAST_IP),
+            ).Elif(self.unicast_delay_req,
+                tx.msg_type.eq(PTP_MSG_DELAY_REQ),
+                tx.ip_address.eq(control.master_ip),
             ).Else(
-                tx.msg_type.eq(PTP_MSG_DELAY_REQ)
+                tx.msg_type.eq(PTP_MSG_DELAY_REQ),
+                tx.ip_address.eq(PTP_PRIMARY_MCAST_IP),
             )
         ]
 
@@ -2044,4 +2050,3 @@ class LiteEthPTPMonitor(LiteXModule):
                 self._serve_addend_next.status.eq(d.serve_addend_next),
                 self._serve_freq_step.status.eq(d.serve_freq_step),
             ]
-
