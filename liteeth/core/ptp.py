@@ -108,9 +108,10 @@ class LiteEthTSU(LiteXModule):
         # ---------------
         self.seconds     = Signal(48)
         self.nanoseconds = Signal(32)
-        default_addend   = int(((1 << 32) + (clk_freq // 2)) // clk_freq)
-        self.addend      = Signal(32, reset=default_addend)
-        self.addend_frac = Signal(20)
+        addend_frac_bits = 20
+        default_addend   = int(((1 << (32 + addend_frac_bits)) + (clk_freq // 2)) // clk_freq)
+        self.addend      = Signal(32, reset=default_addend >> addend_frac_bits)
+        self.addend_frac = Signal(addend_frac_bits, reset=default_addend & ((1 << addend_frac_bits) - 1))
         self.offset      = Signal((81, True))
         self.step        = Signal()
         self.step_target = Signal(80)
@@ -587,28 +588,32 @@ class LiteEthPTPClockServo(LiteXModule):
             adding to the addend. For stability, freq_shift must satisfy:
                 2^freq_shift > lsb_drift / 2
             """
-            clk_freq   = (1 << 32) / max(1, addend)
+            clk_freq   = (1 << (32 + frac_bits)) / max(1, addend)
             lsb_drift  = clk_freq * 1e9 / (1 << (32 + frac_bits))
             return max(1, math.ceil(math.log2(max(1, lsb_drift))) + 1)
 
         addend_frac_bits = len(tsu.addend_frac)
-        nominal_addend   = tsu.addend.reset.value
+        nominal_addend_full = (
+            (tsu.addend.reset.value << addend_frac_bits) |
+            tsu.addend_frac.reset.value
+        )
         one_billion      = int(1_000_000_000)
 
         # Phase servo gain (kp=1: full correction each exchange).
         kp = 1
 
         # Frequency integrator parameters.
-        freq_shift       = compute_freq_shift(nominal_addend, addend_frac_bits)
+        freq_shift       = compute_freq_shift(nominal_addend_full, addend_frac_bits)
         freq_deadband    = 256               # ns: ignore phase errors below this.
         freq_max_step    = 1 << max(0, addend_frac_bits - 3)  # Max step per serve.
         phase_clamp      = one_billion - 1   # Max phase correction (ns).
 
         # Addend clamping (nominal ± 1 integer unit).
-        min_addend      = max(1, nominal_addend - 1)
-        max_addend      = min((1 << 32) - 1, nominal_addend + 1)
-        min_addend_full = min_addend << addend_frac_bits
-        max_addend_full = max_addend << addend_frac_bits
+        min_addend_full = max(1, nominal_addend_full - (1 << addend_frac_bits))
+        max_addend_full = min(
+            (1 << (32 + addend_frac_bits)) - 1,
+            nominal_addend_full + (1 << addend_frac_bits)
+        )
 
         # Outlier detection thresholds.
         outlier_near_ns  = 50_000_000   # ±50ms window around second boundary.
@@ -622,7 +627,7 @@ class LiteEthPTPClockServo(LiteXModule):
         # Authoritative addend copy maintained by the servo. The TSU register
         # is written from shadow (never read back) to prevent any external
         # perturbation from entering the feedback loop.
-        shadow_addend       = Signal(full_addend_bits, reset=nominal_addend << addend_frac_bits)
+        shadow_addend       = Signal(full_addend_bits, reset=nominal_addend_full)
         self._shadow_addend = shadow_addend
 
         # Pipeline valid shift register.
@@ -1009,9 +1014,9 @@ class LiteEthPTPClockServo(LiteXModule):
             addend_s.eq(addend_u),
             freq_sum.eq(addend_s + s4_freq_step),
             If(freq_sum < min_addend_full,
-                addend_next.eq(Cat(freq_sum[:addend_frac_bits], min_addend))
+                addend_next.eq(min_addend_full)
             ).Elif(freq_sum > max_addend_full,
-                addend_next.eq(Cat(freq_sum[:addend_frac_bits], max_addend))
+                addend_next.eq(max_addend_full)
             ).Else(
                 addend_next.eq(freq_sum[:full_addend_bits])
             ),

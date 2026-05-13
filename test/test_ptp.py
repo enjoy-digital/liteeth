@@ -179,6 +179,25 @@ class TestTSU(unittest.TestCase):
         self.assertGreater(results["nanoseconds"], 0)
         self.assertEqual(results["seconds"], 0)
 
+    def test_tsu_default_addend_uses_fractional_reset(self):
+        """TSU reset addend should use the full fixed-point clock ratio."""
+        dut = LiteEthTSU(clk_freq=SYS_CLK_FREQ)
+        frac_bits = len(dut.addend_frac)
+        expected = int(((1 << (32 + frac_bits)) + (SYS_CLK_FREQ // 2)) // SYS_CLK_FREQ)
+        actual = (dut.addend.reset.value << frac_bits) | dut.addend_frac.reset.value
+
+        self.assertEqual(actual, expected)
+        self.assertNotEqual(dut.addend_frac.reset.value, 0)
+
+    def test_servo_shadow_uses_fractional_nominal_addend(self):
+        """Servo shadow reset should match the TSU full fixed-point addend."""
+        tsu = LiteEthTSU(clk_freq=SYS_CLK_FREQ)
+        servo = LiteEthPTPClockServo(tsu)
+        frac_bits = len(tsu.addend_frac)
+        expected = (tsu.addend.reset.value << frac_bits) | tsu.addend_frac.reset.value
+
+        self.assertEqual(servo._shadow_addend.reset.value, expected)
+
     def test_tsu_second_rollover(self):
         """TSU should roll nanoseconds at 1e9 and increment seconds."""
         dut = LiteEthTSU(clk_freq=SYS_CLK_FREQ)
