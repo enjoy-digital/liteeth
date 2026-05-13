@@ -23,6 +23,8 @@ from liteeth.phy.pcs_1000basex import (
 )
 
 
+# Helpers ------------------------------------------------------------------------------------------
+
 class PCSLoopbackDUT(LiteXModule):
     def __init__(self, lsb_first=False):
         self.pcs_a = PCS(
@@ -64,6 +66,8 @@ class PCSGearboxDUT(LiteXModule):
         self.gearbox = PCSGearbox()
 
 
+# Test PCS Gearbox ---------------------------------------------------------------------------------
+
 class TestPCSGearbox(unittest.TestCase):
     def test_tx_packs_two_10b_symbols_to_half_rate_word(self):
         dut = PCSGearboxDUT()
@@ -82,7 +86,12 @@ class TestPCSGearbox(unittest.TestCase):
         run_simulation(dut, {
             "eth_tx":      [eth_tx_generator()],
             "eth_tx_half": [eth_tx_half_generator()],
-        }, clocks={"eth_tx": 10, "eth_tx_half": 20, "eth_rx": 10, "eth_rx_half": 20})
+        }, clocks={
+            "eth_tx":      10,
+            "eth_tx_half": 20,
+            "eth_rx":      10,
+            "eth_rx_half": 20,
+        })
         self.assertEqual(observed[1:5], [
             (2 << 10) | 1,
             (4 << 10) | 3,
@@ -107,9 +116,16 @@ class TestPCSGearbox(unittest.TestCase):
         run_simulation(dut, {
             "eth_rx":      [eth_rx_generator()],
             "eth_rx_half": [eth_rx_half_generator()],
-        }, clocks={"eth_tx": 10, "eth_tx_half": 20, "eth_rx": 10, "eth_rx_half": 20})
+        }, clocks={
+            "eth_tx":      10,
+            "eth_tx_half": 20,
+            "eth_rx":      10,
+            "eth_rx_half": 20,
+        })
         self.assertEqual(observed[1:7], [2, 1, 4, 3, 6, 5])
 
+
+# Test PCS SGMII Timer -----------------------------------------------------------------------------
 
 class TestPCSSGMIITimer(unittest.TestCase):
     def check_timer_period(self, speed, period):
@@ -138,6 +154,8 @@ class TestPCSSGMIITimer(unittest.TestCase):
         self.check_timer_period(SGMII_1000MBPS_SPEED, 1)
 
 
+# Test PCS Autoneg Config --------------------------------------------------------------------------
+
 class TestPCSAutonegConfig(unittest.TestCase):
     def make_dut(self):
         return PCS(
@@ -159,7 +177,11 @@ class TestPCSAutonegConfig(unittest.TestCase):
             self.assertEqual((yield dut.tx.sgmii_speed), SGMII_1000MBPS_SPEED)
             self.assertEqual((yield dut.rx.sgmii_speed), SGMII_1000MBPS_SPEED)
 
-        run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+        run_simulation(dut, generator(), clocks={
+            "sys":    10,
+            "eth_tx": 10,
+            "eth_rx": 10,
+        })
 
     def test_with_csr_keeps_autoneg_and_csr_fsms(self):
         class Top:
@@ -194,7 +216,11 @@ class TestPCSAutonegConfig(unittest.TestCase):
                 self.assertEqual((yield dut.tx.config_reg),
                     (1 << 12) | (speed << 10) | 1)
 
-        run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+        run_simulation(dut, generator(), clocks={
+            "sys":    10,
+            "eth_tx": 10,
+            "eth_rx": 10,
+        })
 
     def test_sgmii_remote_link_down_is_not_advertised_up(self):
         dut = self.make_dut()
@@ -208,7 +234,11 @@ class TestPCSAutonegConfig(unittest.TestCase):
             self.assertEqual((yield dut.linkdown), 1)
             self.assertEqual((yield dut.tx.config_reg[15]), 0)
 
-        run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+        run_simulation(dut, generator(), clocks={
+            "sys":    10,
+            "eth_tx": 10,
+            "eth_rx": 10,
+        })
 
     def test_sgmii_reserved_speed_forces_link_down_and_clamps_timer_speed(self):
         dut = self.make_dut()
@@ -225,7 +255,11 @@ class TestPCSAutonegConfig(unittest.TestCase):
             self.assertEqual((yield dut.rx.sgmii_speed), SGMII_1000MBPS_SPEED)
             self.assertEqual((yield dut.tx.config_reg[10:12]), SGMII_1000MBPS_SPEED)
 
-        run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+        run_simulation(dut, generator(), clocks={
+            "sys":    10,
+            "eth_tx": 10,
+            "eth_rx": 10,
+        })
 
     def test_two_1000basex_pcs_autonegotiate_to_link_up(self):
         for lsb_first in [False, True]:
@@ -240,7 +274,11 @@ class TestPCSAutonegConfig(unittest.TestCase):
                     yield
                 self.fail("1000BASE-X PCS pair did not complete autonegotiation")
 
-            run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+            run_simulation(dut, generator(), clocks={
+                "sys":    10,
+                "eth_tx": 10,
+                "eth_rx": 10,
+            })
 
     def test_two_1000basex_pcs_autonegotiate_with_asymmetric_clocks(self):
         dut = PCSLoopbackDUT()
@@ -254,7 +292,11 @@ class TestPCSAutonegConfig(unittest.TestCase):
                 yield
             self.fail("1000BASE-X PCS pair did not complete autonegotiation")
 
-        run_simulation(dut, generator(), clocks={"sys": 7, "eth_tx": 10, "eth_rx": 11})
+        run_simulation(dut, generator(), clocks={
+            "sys":     7,
+            "eth_tx": 10,
+            "eth_rx": 11,
+        })
 
     def test_autoneg_timers_scale_with_eth_tx_clk_freq(self):
         state_cycles = {}
@@ -276,10 +318,16 @@ class TestPCSAutonegConfig(unittest.TestCase):
                     yield
                 self.fail("PCS did not leave breaklink state")
 
-            run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+            run_simulation(dut, generator(), clocks={
+                "sys":    10,
+                "eth_tx": 10,
+                "eth_rx": 10,
+            })
 
         self.assertEqual(state_cycles[250e6] - 1, 2 * (state_cycles[125e6] - 1))
 
+
+# Test PCS TX --------------------------------------------------------------------------------------
 
 class TestPCSTX(unittest.TestCase):
     def test_config_words_alternate_and_latch_config_register_bytes(self):
@@ -329,6 +377,8 @@ class TestPCSTX(unittest.TestCase):
         self.check_data_ready_period(SGMII_100MBPS_SPEED, 10)
         self.check_data_ready_period(SGMII_10MBPS_SPEED, 100)
 
+
+# Test PCS RX --------------------------------------------------------------------------------------
 
 class TestPCSRX(unittest.TestCase):
     def test_config_ordered_sets_decode_config_register(self):
