@@ -283,7 +283,7 @@ class PCSRX(LiteXModule):
 
 class PCS(LiteXModule):
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, with_csr=False):
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, eth_tx_clk_freq=125e6, with_csr=False):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -323,13 +323,13 @@ class PCS(LiteXModule):
 
         # Timers.
         # -------
-        self.breaklink_timer = breaklink_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(breaklink_time * 125e6))
-        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * 125e6))
-        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * 125e6))
+        self.breaklink_timer = breaklink_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(breaklink_time * eth_tx_clk_freq))
+        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * eth_tx_clk_freq))
+        self.sgmii_ack_timer = sgmii_ack_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(sgmii_ack_time * eth_tx_clk_freq))
 
         # Checker.
         # --------
-        checker_max   = int(check_period*125e6)
+        checker_max   = int(check_period*eth_tx_clk_freq)
         checker_count = Signal(max=checker_max + 1)
         checker_tick  = Signal()
         checker_error = Signal()

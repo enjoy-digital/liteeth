@@ -589,7 +589,7 @@ class EfinixTitaniumLVDS_1000BASEX(LiteXModule):
     tx_clk_freq       = 125e6
     with_preamble_crc = True
     def __init__(self, pads, refclk=None, refclk_freq=200e6, crg=None, rx_delay=None, with_i2c=True, rx_term=True):
-        self.pcs = pcs = PCS(lsb_first=True, with_csr=True)
+        self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq, with_csr=True)
 
         self.sink    = pcs.sink
         self.source  = pcs.source

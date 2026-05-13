@@ -36,7 +36,7 @@ class A7_1000BASEX(LiteXModule):
         rx_cm_buf_type = "BUFG",
         rx_polarity    = 0,
     ):
-        self.pcs = pcs = PCS(lsb_first=True)
+        self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
 
         self.sink    = pcs.sink
         self.source  = pcs.source

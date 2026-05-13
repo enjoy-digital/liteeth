@@ -182,6 +182,30 @@ class TestPCSAutonegConfig(unittest.TestCase):
 
         run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
 
+    def test_autoneg_timers_scale_with_eth_tx_clk_freq(self):
+        state_cycles = {}
+
+        for clk_freq in [125e6, 250e6]:
+            dut = PCS(
+                check_period=100/125e6,
+                breaklink_time=4/125e6,
+                more_ack_time=1/125e6,
+                sgmii_ack_time=1/125e6,
+                eth_tx_clk_freq=clk_freq,
+            )
+
+            def generator():
+                for cycle in range(20):
+                    if (yield dut.fsm.state) == 1:
+                        state_cycles[clk_freq] = cycle
+                        return
+                    yield
+                self.fail("PCS did not leave breaklink state")
+
+            run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
+
+        self.assertEqual(state_cycles[250e6] - 1, 2 * (state_cycles[125e6] - 1))
+
 
 class TestPCSTX(unittest.TestCase):
     def test_config_words_alternate_and_latch_config_register_bytes(self):
