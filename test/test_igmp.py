@@ -121,6 +121,58 @@ class TestIGMPJoiner(unittest.TestCase):
         self.assertFalse(seen_before_enable[0])
         self.assertTrue(seen_after_enable[0])
 
+    def test_ip_core_gates_reports_with_phy_link_up(self):
+        class DUT(LiteXModule):
+            def __init__(self):
+                self.phy_model = phy.PHY(8, debug=False)
+                self.phy_model.link_up = Signal(reset=0)
+                self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
+                self.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
+                self.ip_model  = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
+                self.ip_core   = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000,
+                    dw=32,
+                    with_icmp=False,
+                    with_igmp=True,
+                    igmp_groups=ptp_groups,
+                    igmp_interval=0.0001,
+                    with_sys_datapath=True,
+                )
+
+        dut = DUT()
+        link_phase = [False]
+        seen_before_link = [False]
+        seen_after_link  = [False]
+
+        def capture_generator(dut):
+            for _ in range(120):
+                valid = yield dut.phy_model.sink.valid
+                ready = yield dut.phy_model.sink.ready
+                if valid and ready:
+                    if link_phase[0]:
+                        seen_after_link[0] = True
+                    else:
+                        seen_before_link[0] = True
+                yield
+
+        def main_generator(dut):
+            for _ in range(40):
+                yield
+            link_phase[0] = True
+            yield dut.phy_model.link_up.eq(1)
+            for _ in range(80):
+                yield
+
+        generators = {
+            "sys":    [main_generator(dut), capture_generator(dut)],
+            "eth_tx": [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
+            "eth_rx": [dut.phy_model.phy_source.generator()],
+        }
+        clocks = {"sys": 10, "eth_rx": 10, "eth_tx": 10}
+        run_simulation(dut, generators, clocks)
+
+        self.assertFalse(seen_before_link[0])
+        self.assertTrue(seen_after_link[0])
+
     def _run(self, groups, cycles, dw=8, with_sys_datapath=False):
         class DUT(LiteXModule):
             def __init__(self):

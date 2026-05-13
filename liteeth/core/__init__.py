@@ -6,6 +6,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from litex.gen import *
+from migen.genlib.cdc import MultiReg
 
 from liteeth.common    import *
 from liteeth.mac       import LiteEthMAC
@@ -20,7 +21,7 @@ from liteeth.core.igmp import LiteEthIGMPJoiner
 class LiteEthIPCore(LiteXModule):
     def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True, icmp_fifo_depth=128,
-        with_igmp         = False, igmp_groups=None, igmp_interval=10,
+        with_igmp         = False, igmp_groups=None, igmp_interval=10, igmp_enable=None,
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
@@ -87,11 +88,19 @@ class LiteEthIPCore(LiteXModule):
         # ----------------
         if with_igmp:
             assert igmp_groups is not None and len(igmp_groups) > 0
+            if igmp_enable is None:
+                igmp_enable = getattr(phy, "link_up", 1)
+            if isinstance(igmp_enable, (bool, int)):
+                igmp_enable_sys = int(igmp_enable)
+            else:
+                igmp_enable_sys = Signal()
+                self.specials += MultiReg(igmp_enable, igmp_enable_sys)
             self.igmp = LiteEthIGMPJoiner(
                 ip           = self.ip,
                 groups       = igmp_groups,
                 interval     = igmp_interval,
                 sys_clk_freq = clk_freq,
+                enable       = igmp_enable_sys,
             )
 
 # UDP IP Core --------------------------------------------------------------------------------------
@@ -99,7 +108,7 @@ class LiteEthIPCore(LiteXModule):
 class LiteEthUDPIPCore(LiteEthIPCore):
     def __init__(self, phy, mac_address, ip_address, clk_freq, arp_entries=1, dw=8,
         with_icmp         = True, icmp_fifo_depth=128,
-        with_igmp         = False, igmp_groups=None, igmp_interval=10,
+        with_igmp         = False, igmp_groups=None, igmp_interval=10, igmp_enable=None,
         with_ip_broadcast = True,
         with_sys_datapath = False,
         tx_cdc_depth      = 32,
@@ -127,6 +136,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             with_igmp         = with_igmp,
             igmp_groups       = igmp_groups,
             igmp_interval     = igmp_interval,
+            igmp_enable       = igmp_enable,
             dw                = dw,
             interface         = interface,
             endianness        = endianness,
