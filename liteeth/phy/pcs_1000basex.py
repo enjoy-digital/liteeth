@@ -347,8 +347,14 @@ class PCS(LiteXModule):
 
         # Linkdown/Speed Detection.
         # -------------------------
+        sgmii_speed_valid = Signal()
+        sgmii_tx_speed    = Signal(2)
+        sgmii_rx_speed    = Signal(2)
         self.comb += [
             is_sgmii.eq(self.lp_abi.o[0]),
+            sgmii_speed_valid.eq(self.lp_abi.o[10:12] != 0b11),
+            sgmii_tx_speed.eq(Mux(sgmii_speed_valid, self.lp_abi.o[10:12], SGMII_1000MBPS_SPEED)),
+            sgmii_rx_speed.eq(Mux(self.lp_abi.i[10:12] != 0b11, self.lp_abi.i[10:12], SGMII_1000MBPS_SPEED)),
             # Detect that link is down:
             # - 1000BASE-X : linkup can be inferred by non-empty reg.
             # - SGMII      : linkup is indicated with bit 15.
@@ -357,9 +363,9 @@ class PCS(LiteXModule):
                 self.tx.sgmii_speed.eq(0b10),
                 self.rx.sgmii_speed.eq(0b10),
             ).Else(
-                linkdown.eq(is_sgmii & ~self.lp_abi.o[15]),
-                self.tx.sgmii_speed.eq(self.lp_abi.o[10:12]),
-                self.rx.sgmii_speed.eq(self.lp_abi.i[10:12]),
+                linkdown.eq(~self.lp_abi.o[15] | ~sgmii_speed_valid),
+                self.tx.sgmii_speed.eq(sgmii_tx_speed),
+                self.rx.sgmii_speed.eq(sgmii_rx_speed),
             )
         ]
 
@@ -370,7 +376,7 @@ class PCS(LiteXModule):
                 self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
                 self.tx.config_reg[5].eq(~is_sgmii),                    # 1000BASE-X: Full-duplex.
                 If(is_sgmii,
-                    self.tx.config_reg[10:12].eq(self.lp_abi.o[10:12]), # SGMII: Speed.
+                    self.tx.config_reg[10:12].eq(sgmii_tx_speed),       # SGMII: Speed.
                     self.tx.config_reg[12].eq(1),                       # SGMII: Full-duplex.
                     self.tx.config_reg[15].eq(self.link_up),            # SGMII: Link-up.
                 ),
