@@ -74,6 +74,53 @@ class TestIGMPJoiner(unittest.TestCase):
         self.assertEqual(fake_ip.crossbar.requested_dw, 32)
         self.assertTrue(hasattr(joiner, "converter"))
 
+    def test_enable_gates_reports(self):
+        class DUT(LiteXModule):
+            def __init__(self):
+                self.enable = Signal(reset=0)
+                self.port   = LiteEthIPV4UserPort(8)
+
+                class Crossbar:
+                    def __init__(self, port):
+                        self.master = type("Master", (), {"dw": 8})()
+                        self.port = port
+
+                    def get_port(self, protocol, dw=8):
+                        return self.port
+
+                class IP:
+                    def __init__(self, port):
+                        self.crossbar = Crossbar(port)
+
+                self.igmp = LiteEthIGMPJoiner(
+                    IP(self.port),
+                    groups       = ptp_groups,
+                    interval     = 0.0001,
+                    sys_clk_freq = 100000,
+                    enable       = self.enable,
+                )
+
+        dut = DUT()
+        seen_before_enable = [False]
+        seen_after_enable  = [False]
+
+        def gen(dut):
+            yield dut.port.sink.ready.eq(1)
+            for _ in range(25):
+                if (yield dut.port.sink.valid):
+                    seen_before_enable[0] = True
+                yield
+            yield dut.enable.eq(1)
+            for _ in range(25):
+                if (yield dut.port.sink.valid):
+                    seen_after_enable[0] = True
+                yield
+
+        run_simulation(dut, gen(dut))
+
+        self.assertFalse(seen_before_enable[0])
+        self.assertTrue(seen_after_enable[0])
+
     def _run(self, groups, cycles, dw=8, with_sys_datapath=False):
         class DUT(LiteXModule):
             def __init__(self):

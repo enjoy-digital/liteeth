@@ -38,8 +38,9 @@ class LiteEthIGMPJoiner(LiteXModule):
     - interval     : Report interval in seconds (default 10).
     - sys_clk_freq : System clock frequency.
     - dw           : Optional IP datapath width; defaults to the IP crossbar width.
+    - enable       : Optional sys-domain enable/link-ready signal.
     """
-    def __init__(self, ip, groups, interval=10, sys_clk_freq=int(100e6), dw=None):
+    def __init__(self, ip, groups, interval=10, sys_clk_freq=int(100e6), dw=None, enable=1):
         if dw is None:
             dw = ip.crossbar.master.dw
         self.dw = dw
@@ -117,8 +118,8 @@ class LiteEthIGMPJoiner(LiteXModule):
 
         # WAIT: wait for timer to expire.
         fsm.act("WAIT",
-            timer.wait.eq(1),
-            If(timer.done,
+            timer.wait.eq(enable),
+            If(enable & timer.done,
                 NextValue(count, 0),
                 NextState("SEND"),
             ),
