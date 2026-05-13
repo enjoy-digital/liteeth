@@ -367,9 +367,14 @@ class PCS(LiteXModule):
         # ----------
         self.comb += [
             If(~config_empty,
-                self.tx.config_reg[0].eq(is_sgmii),     # SGMII: SGMII in-use.
-                self.tx.config_reg[5].eq(~is_sgmii),    # 1000BASE-X: Full-duplex.
-                self.tx.config_reg[14].eq(autoneg_ack), # SGMII/1000BASE-X: Acknowledge Bit.
+                self.tx.config_reg[0].eq(is_sgmii),                     # SGMII: SGMII in-use.
+                self.tx.config_reg[5].eq(~is_sgmii),                    # 1000BASE-X: Full-duplex.
+                If(is_sgmii,
+                    self.tx.config_reg[10:12].eq(self.lp_abi.o[10:12]), # SGMII: Speed.
+                    self.tx.config_reg[12].eq(1),                       # SGMII: Full-duplex.
+                    self.tx.config_reg[15].eq(self.link_up),            # SGMII: Link-up.
+                ),
+                self.tx.config_reg[14].eq(autoneg_ack),                 # SGMII/1000BASE-X: Acknowledge Bit.
             )
         ]
 
@@ -446,16 +451,15 @@ class PCS(LiteXModule):
                 ).Else(
                     If(rx_config_reg_count != 0,
                         rx_config_reg_count.eq(rx_config_reg_count - 1),
-                    )
-                ),
-                # When RX Config is consistent.
-                If(rx_config_reg_count == 0,
-                    # Acknowledgement.
-                    If(self.rx.config_reg[14],
-                        rx_config_reg_ack.i.eq(1),
-                    # Ability match.
                     ).Else(
-                        rx_config_reg_abi.i.eq(1),
+                        # When RX Config is consistent.
+                        # Acknowledgement.
+                        If(self.rx.config_reg[14],
+                            rx_config_reg_ack.i.eq(1),
+                        # Ability match.
+                        ).Else(
+                            rx_config_reg_abi.i.eq(1),
+                        )
                     )
                 ),
                 self.lp_abi.i.eq(self.rx.config_reg)
@@ -490,7 +494,7 @@ class PCS(LiteXModule):
 
         self.link_up_timer = link_up_timer = WaitTimer(int(LiteXContext.top.sys_clk_freq))
 
-        self.fsm = fsm = FSM()
+        self.csr_fsm = fsm = FSM()
         fsm.act("DOWN",
             If(self.link_up,
                 NextState("UP")
