@@ -242,6 +242,20 @@ class TestPCSAutonegConfig(unittest.TestCase):
 
             run_simulation(dut, generator(), clocks={"sys": 10, "eth_tx": 10, "eth_rx": 10})
 
+    def test_two_1000basex_pcs_autonegotiate_with_asymmetric_clocks(self):
+        dut = PCSLoopbackDUT()
+
+        def generator():
+            for _ in range(260):
+                if (yield dut.pcs_a.link_up) and (yield dut.pcs_b.link_up):
+                    self.assertEqual((yield dut.pcs_a.is_sgmii), 0)
+                    self.assertEqual((yield dut.pcs_b.is_sgmii), 0)
+                    return
+                yield
+            self.fail("1000BASE-X PCS pair did not complete autonegotiation")
+
+        run_simulation(dut, generator(), clocks={"sys": 7, "eth_tx": 10, "eth_rx": 11})
+
     def test_autoneg_timers_scale_with_eth_tx_clk_freq(self):
         state_cycles = {}
 
