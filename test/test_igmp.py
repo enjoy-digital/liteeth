@@ -47,6 +47,9 @@ class TestIGMPJoiner(unittest.TestCase):
     def test_two_groups(self):
         self._run(groups=ptp_groups, cycles=500)
 
+    def test_two_groups_32bit_sys_datapath(self):
+        self._run(groups=ptp_groups, cycles=300, dw=32, with_sys_datapath=True)
+
     def test_uses_ip_crossbar_width(self):
         class Crossbar:
             def __init__(self, dw):
@@ -71,14 +74,15 @@ class TestIGMPJoiner(unittest.TestCase):
         self.assertEqual(fake_ip.crossbar.requested_dw, 32)
         self.assertTrue(hasattr(joiner, "converter"))
 
-    def _run(self, groups, cycles):
+    def _run(self, groups, cycles, dw=8, with_sys_datapath=False):
         class DUT(LiteXModule):
             def __init__(self):
                 self.phy_model = phy.PHY(8, debug=False)
                 self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
                 self.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
                 self.ip_model  = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
-                self.ip_core   = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000, with_icmp=False)
+                self.ip_core   = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000,
+                    dw=dw, with_icmp=False, with_sys_datapath=with_sys_datapath)
                 self.igmp      = LiteEthIGMPJoiner(self.ip_core.ip, groups=groups, interval=0.0001, sys_clk_freq=100000)
 
         dut = DUT()
@@ -100,13 +104,20 @@ class TestIGMPData(unittest.TestCase):
     """Capture PHY output and verify IGMP packet content."""
 
     def test_igmp_payload(self):
+        self._test_igmp_payload(dw=8)
+
+    def test_igmp_payload_32bit_ip_datapath(self):
+        self._test_igmp_payload(dw=32, with_sys_datapath=True, cycles=300)
+
+    def _test_igmp_payload(self, dw, with_sys_datapath=False, cycles=2000):
         class DUT(LiteXModule):
             def __init__(self):
                 self.phy_model = phy.PHY(8, debug=False)
                 self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
                 self.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
                 self.ip_model  = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
-                self.ip_core   = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000, with_icmp=False)
+                self.ip_core   = LiteEthIPCore(self.phy_model, mac_address, ip_address, 100000,
+                    dw=dw, with_icmp=False, with_sys_datapath=with_sys_datapath)
                 self.igmp      = LiteEthIGMPJoiner(self.ip_core.ip, groups=[0xE0000181], interval=0.0001, sys_clk_freq=100000)
 
         dut = DUT()
@@ -114,7 +125,7 @@ class TestIGMPData(unittest.TestCase):
 
         def capture_generator(dut):
             frame = []
-            for _ in range(2000):
+            for _ in range(cycles):
                 valid = yield dut.phy_model.sink.valid
                 ready = yield dut.phy_model.sink.ready
                 if valid and ready:
@@ -127,7 +138,7 @@ class TestIGMPData(unittest.TestCase):
                 yield
 
         def main_generator(dut):
-            for _ in range(2000):
+            for _ in range(cycles):
                 yield
 
         generators = {
