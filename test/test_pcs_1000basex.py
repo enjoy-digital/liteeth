@@ -13,6 +13,7 @@ from litex.soc.cores.code_8b10b import K, D, Encoder
 
 from liteeth.phy.pcs_1000basex import (
     PCS,
+    PCSGearbox,
     PCSSGMIITimer,
     PCSRX,
     PCSTX,
@@ -52,6 +53,62 @@ class PCSRXEncodedDUT(LiteXModule):
         self.rx  = PCSRX(lsb_first=lsb_first)
         self.enc = Encoder(lsb_first=lsb_first)
         self.comb += self.rx.decoder.input.eq(self.enc.output[0])
+
+
+class PCSGearboxDUT(LiteXModule):
+    def __init__(self):
+        self.clock_domains.cd_eth_tx      = ClockDomain("eth_tx")
+        self.clock_domains.cd_eth_tx_half = ClockDomain("eth_tx_half")
+        self.clock_domains.cd_eth_rx      = ClockDomain("eth_rx")
+        self.clock_domains.cd_eth_rx_half = ClockDomain("eth_rx_half")
+        self.gearbox = PCSGearbox()
+
+
+class TestPCSGearbox(unittest.TestCase):
+    def test_tx_packs_two_10b_symbols_to_half_rate_word(self):
+        dut = PCSGearboxDUT()
+        observed = []
+
+        def eth_tx_generator():
+            for data in range(1, 9):
+                yield dut.gearbox.tx_data.eq(data)
+                yield
+
+        def eth_tx_half_generator():
+            for _ in range(6):
+                yield
+                observed.append((yield dut.gearbox.tx_data_half))
+
+        run_simulation(dut, {
+            "eth_tx":      [eth_tx_generator()],
+            "eth_tx_half": [eth_tx_half_generator()],
+        }, clocks={"eth_tx": 10, "eth_tx_half": 20, "eth_rx": 10, "eth_rx_half": 20})
+        self.assertEqual(observed[1:5], [
+            (2 << 10) | 1,
+            (4 << 10) | 3,
+            (6 << 10) | 5,
+            (8 << 10) | 7,
+        ])
+
+    def test_rx_unpacks_half_rate_word_to_two_10b_symbols(self):
+        dut = PCSGearboxDUT()
+        observed = []
+
+        def eth_rx_half_generator():
+            for lo, hi in [(1, 2), (3, 4), (5, 6)]:
+                yield dut.gearbox.rx_data_half.eq((hi << 10) | lo)
+                yield
+
+        def eth_rx_generator():
+            for _ in range(8):
+                yield
+                observed.append((yield dut.gearbox.rx_data))
+
+        run_simulation(dut, {
+            "eth_rx":      [eth_rx_generator()],
+            "eth_rx_half": [eth_rx_half_generator()],
+        }, clocks={"eth_tx": 10, "eth_tx_half": 20, "eth_rx": 10, "eth_rx_half": 20})
+        self.assertEqual(observed[1:7], [2, 1, 4, 3, 6, 5])
 
 
 class TestPCSSGMIITimer(unittest.TestCase):
