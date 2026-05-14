@@ -294,7 +294,7 @@ class LiteEthPTPTX(LiteXModule):
         # Pipeline.
         # ---------
         self.comb += packetizer.source.connect(source)
-        self.comb += source.last_be.eq(1)
+        self.comb += source.last_be.eq(source.last)
 
         # UDP Metadata.
         # -------------

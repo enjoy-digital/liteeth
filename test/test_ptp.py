@@ -11,6 +11,7 @@ import unittest
 from migen import *
 from litex.gen import *
 from litex.gen.sim import *
+from litex.soc.interconnect import stream
 
 from liteeth.common import *
 
@@ -622,6 +623,7 @@ class TestPTPTX(unittest.TestCase):
 
         captured = []
         results  = {}
+        last_bes = []
 
         def gen(dut):
             yield dut.tx.msg_type.eq(msg_type)
@@ -645,11 +647,14 @@ class TestPTPTX(unittest.TestCase):
                 if valid:
                     data = (yield dut.tx.source.data)
                     last = (yield dut.tx.source.last)
+                    last_be = (yield dut.tx.source.last_be)
                     captured.append(data)
+                    last_bes.append(last_be)
                     if last:
                         break
 
             results["launch"] = (yield dut.tx.launch)
+            results["last_bes"] = last_bes
 
         run_simulation(dut, gen(dut))
 
@@ -688,6 +693,57 @@ class TestPTPTX(unittest.TestCase):
         for i in range(10):
             spid = (spid << 8) | captured[20 + i]
         self.assertEqual(spid, SLAVE_CLOCK_ID)
+
+    def test_tx_last_be_only_marks_final_byte(self):
+        """TX should not assert last_be on non-final 8-bit beats."""
+        captured, results = self._capture_tx(PTP_MSG_DELAY_REQ)
+
+        self.assertEqual(len(captured), 44)
+        self.assertEqual(results["last_bes"][:-1], [0] * 43)
+        self.assertEqual(results["last_bes"][-1], 1)
+
+    def test_tx_last_be_after_8_to_32_conversion(self):
+        """TX last_be should remain one-hot after the UDP 8-to-32 converter."""
+        dut_cls = type("DUT", (LiteXModule,), {})
+        dut = dut_cls()
+        dut.tsu = LiteEthTSU(clk_freq=SYS_CLK_FREQ)
+        dut.tx  = LiteEthPTPTX(dut.tsu)
+        dut.converter = stream.StrideConverter(
+            eth_udp_user_description(8),
+            eth_udp_user_description(32),
+        )
+        dut.submodules += [dut.tsu, dut.tx, dut.converter]
+        dut.comb += dut.tx.source.connect(dut.converter.sink)
+
+        captured_last_bes = []
+
+        def gen(dut):
+            yield dut.tx.msg_type.eq(PTP_MSG_DELAY_REQ)
+            yield dut.tx.seq_id.eq(99)
+            yield dut.tx.domain.eq(0)
+            yield dut.tx.clock_id.eq(SLAVE_CLOCK_ID)
+            yield dut.tx.ip_address.eq(MASTER_IP)
+            yield dut.tx.src_port.eq(PTP_EVENT_PORT)
+            yield dut.tx.dst_port.eq(PTP_EVENT_PORT)
+            yield
+
+            yield dut.tx.start.eq(1)
+            yield
+            yield dut.tx.start.eq(0)
+
+            for _ in range(200):
+                yield dut.converter.source.ready.eq(1)
+                yield
+                if (yield dut.converter.source.valid):
+                    captured_last_bes.append((yield dut.converter.source.last_be))
+                    if (yield dut.converter.source.last):
+                        break
+
+        run_simulation(dut, gen(dut))
+
+        self.assertEqual(len(captured_last_bes), 11)
+        self.assertEqual(captured_last_bes[:-1], [0] * 10)
+        self.assertEqual(captured_last_bes[-1], 0b1000)
 
 # Test PTP Top-Level -------------------------------------------------------------------------------
 
