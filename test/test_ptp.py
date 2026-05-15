@@ -117,12 +117,12 @@ def _send_udp_packet(port, data_bytes, ip_address=MASTER_IP, src_port=319, dst_p
     yield port.source.valid.eq(0)
     yield
 
-def _make_ptp_dut(timeout=0.001, monitor_debug=None, **kwargs):
+def _make_ptp_dut(timeout=0.001, **kwargs):
     """Create a top-level PTP DUT with UDP ports."""
     event_port   = UDPPort()
     general_port = UDPPort()
     dut = LiteEthPTP(event_port, general_port, SYS_CLK_FREQ,
-                     timeout=timeout, monitor_debug=monitor_debug, **kwargs)
+                     timeout=timeout, **kwargs)
     return dut, event_port, general_port
 
 def _run_e2e_exchange(event_port, general_port, dut, seq, t1_sec, t1_ns, t4_sec, t4_ns,
@@ -786,8 +786,6 @@ class TestPTPTop(unittest.TestCase):
                     results["dst_port"]   = (yield event_port.sink.dst_port)
                     results["msg_type"]   = (yield event_port.sink.data) & 0x0f
                 yield
-            results["tx_launch_count"] = (yield dut.tx_launch_count)
-            results["tx_complete_count"] = (yield dut.tx_complete_count)
 
         run_simulation(dut, gen(dut))
         self.assertEqual(results.get("seen"), 1)
@@ -800,8 +798,6 @@ class TestPTPTop(unittest.TestCase):
         self.assertEqual(results["msg_type"],   PTP_MSG_DELAY_REQ)
         self.assertEqual(results["dst_port"],   PTP_EVENT_PORT)
         self.assertEqual(results["ip_address"], PTP_PRIMARY_MCAST_IP)
-        self.assertGreater(results["tx_launch_count"], 0)
-        self.assertGreater(results["tx_complete_count"], 0)
 
     def test_delay_req_can_use_legacy_unicast_destination(self):
         """Designs can opt back into learned-master unicast Delay_Req traffic."""
@@ -840,24 +836,18 @@ class TestPTPTop(unittest.TestCase):
 
             results["locked"]    = (yield dut.locked)
             results["master_ip"] = (yield dut.master_ip)
-            results["tx_complete_count"]   = (yield dut.tx_complete_count)
-            results["rx_delay_resp_count"] = (yield dut.rx_delay_resp_count)
-            results["rx_delay_resp_wait_count"] = (yield dut.rx_delay_resp_wait_count)
 
         run_simulation(dut, gen(dut))
 
         self.assertEqual(results["locked"],    1)
         self.assertEqual(results["master_ip"], MASTER_IP)
-        self.assertGreater(results["tx_complete_count"], 0)
-        self.assertGreater(results["rx_delay_resp_count"], 0)
-        self.assertGreater(results["rx_delay_resp_wait_count"], 0)
 
     def test_timeout_when_no_sync(self):
         """PTP should timeout if no Sync is received."""
         event_port   = UDPPort()
         general_port = UDPPort()
         dut = LiteEthPTP(event_port, general_port, sys_clk_freq=1_000_000,
-                         timeout=0.001, monitor_debug=None)
+                         timeout=0.001)
         results = {}
 
         def gen(dut):
@@ -903,8 +893,8 @@ class TestPTPTop(unittest.TestCase):
 
         self.assertEqual(results["locked"], 0)
 
-    def test_wrong_requester_flagged(self):
-        """Delay_Resp with wrong requestingPortIdentity should increment mismatch counter."""
+    def test_wrong_requester_does_not_lock(self):
+        """Delay_Resp with wrong requestingPortIdentity should be rejected."""
         dut, event_port, general_port = _make_ptp_dut()
         results = {}
         WRONG_CLOCK_ID = 0xDEADBEEF00000001
@@ -926,20 +916,14 @@ class TestPTPTop(unittest.TestCase):
             for _ in range(100):
                 yield
 
-            results["wrong_requester_count"] = (yield dut.wrong_requester_count)
-            results["rx_delay_resp_count"]   = (yield dut.rx_delay_resp_count)
-            results["rx_delay_resp_wait_count"] = (yield dut.rx_delay_resp_wait_count)
-            results["locked"]                = (yield dut.locked)
+            results["locked"] = (yield dut.locked)
 
         run_simulation(dut, gen(dut))
 
-        self.assertGreater(results["wrong_requester_count"], 0)
-        self.assertGreater(results["rx_delay_resp_count"], 0)
-        self.assertGreater(results["rx_delay_resp_wait_count"], 0)
         self.assertEqual(results["locked"], 0)
 
-    def test_delay_resp_sequence_mismatch_counted(self):
-        """Delay_Resp with a stale sequence should be counted for debug."""
+    def test_delay_resp_sequence_mismatch_does_not_lock(self):
+        """Delay_Resp with a stale sequence should be rejected."""
         dut, event_port, general_port = _make_ptp_dut()
         results = {}
 
@@ -959,17 +943,10 @@ class TestPTPTop(unittest.TestCase):
             for _ in range(100):
                 yield
 
-            results["rx_delay_resp_count"] = (yield dut.rx_delay_resp_count)
-            results["rx_delay_resp_wait_count"] = (yield dut.rx_delay_resp_wait_count)
-            results["rx_delay_resp_seq_mismatch_count"] = (
-                yield dut.rx_delay_resp_seq_mismatch_count)
             results["locked"] = (yield dut.locked)
 
         run_simulation(dut, gen(dut))
 
-        self.assertGreater(results["rx_delay_resp_count"], 0)
-        self.assertGreater(results["rx_delay_resp_wait_count"], 0)
-        self.assertGreater(results["rx_delay_resp_seq_mismatch_count"], 0)
         self.assertEqual(results["locked"], 0)
 
     def test_servo_phase_decreases(self):
@@ -1036,8 +1013,8 @@ class TestPTPTop(unittest.TestCase):
 
         self.assertEqual(results["master_ip"], OTHER_MASTER_IP)
 
-    def test_invalid_header_counted(self):
-        """Invalid PTP headers should increment the invalid_header_count."""
+    def test_invalid_header_rejected(self):
+        """Invalid PTP headers should be rejected by the RX parser."""
         dut, event_port, general_port = _make_ptp_dut()
         results = {}
 
@@ -1052,14 +1029,18 @@ class TestPTPTop(unittest.TestCase):
             pkt_data[1] = 0x07  # Bad version.
             yield from _send_udp_packet(event_port, pkt_data, ip_address=ip,
                                         src_port=PTP_EVENT_PORT, dst_port=PTP_EVENT_PORT)
+            results["present"] = 0
             for _ in range(100):
+                if (yield dut.rx_event.present):
+                    results["present"] = 1
                 yield
 
-            results["invalid_header_count"] = (yield dut.invalid_header_count)
+            results["locked"] = (yield dut.locked)
 
         run_simulation(dut, gen(dut))
 
-        self.assertGreater(results["invalid_header_count"], 0)
+        self.assertEqual(results["present"], 0)
+        self.assertEqual(results["locked"], 0)
 
     def test_enable_gate(self):
         """PTP should not process exchanges when enable=0."""

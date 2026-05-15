@@ -8,7 +8,7 @@
 LiteEth PTP (IEEE 1588v2) Slave Core — Layer 3 (UDP/IPv4) only.
 
 Provides a PTP Slave implementation for LiteEth-based systems with TSU, Clock Servo,
-Protocol FSM, and Monitoring. Currently supports Slave mode only (no Master/Boundary
+and Protocol FSM. Currently supports Slave mode only (no Master/Boundary
 Clock) and Layer 3 transport (UDP over IPv4) only (no Layer 2/Ethernet transport).
 
 Features:
@@ -16,7 +16,7 @@ Features:
 - 48-bit seconds / 32-bit nanoseconds TSU with addend-based tick accumulation.
 - Pipelined clock servo with phase correction and frequency trim.
 - Outlier detection and seconds-boundary correction.
-- Snapshot-based monitoring with common and debug CSR variants.
+- Minimal CSRs for lock/master status.
 """
 
 from migen import *
@@ -28,7 +28,7 @@ from litex.gen.genlib.misc import WaitTimer
 
 from litex.soc.interconnect.packet import Header, HeaderField
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
-from litex.soc.interconnect.csr import CSRStatus, CSRStorage
+from litex.soc.interconnect.csr import CSRStatus
 from litex.soc.interconnect import stream
 
 from liteeth.common import *
@@ -1136,11 +1136,6 @@ class LiteEthPTPControl(LiteXModule):
         # Control/Status.
         # ---------------
         self.locked             = Signal() # o
-        self.peer_mismatch      = Signal() # o
-        self.requester_mismatch = Signal() # o
-        self.announce_expired   = Signal() # o
-        self.delay_resp_seen    = Signal() # o
-        self.delay_resp_seq_mismatch = Signal() # o
 
         # Master IP Storage.
         # ------------------
@@ -1208,11 +1203,6 @@ class LiteEthPTPControl(LiteXModule):
             rx_ge.present &
             (rx_ge.msg_type == PTP_MSG_ANNOUNCE)
         )
-        self.sync += self.announce_expired.eq(0)
-        self.comb += [
-            self.delay_resp_seen.eq(0),
-            self.delay_resp_seq_mismatch.eq(0),
-        ]
 
         # FSM -> TX.
         self.comb += [
@@ -1279,11 +1269,6 @@ class LiteEthPTPControl(LiteXModule):
                     )
                 )
             ),
-            If(rx_ev.present &
-               (rx_ev.msg_type == PTP_MSG_SYNC) &
-               master_known & ~event_from_master,
-                self.peer_mismatch.eq(1)
-            ),
         )
 
         # WAIT_FUP: wait for Follow_Up to get t1 (master origin timestamp).
@@ -1313,12 +1298,6 @@ class LiteEthPTPControl(LiteXModule):
                         NextState("SEND_DELAY_REQ")
                     )
                 )
-            ),
-            If(rx_ge.present &
-               (rx_ge.msg_type == PTP_MSG_FOLLOW_UP) &
-               (rx_ge.seq_id  == seq) &
-               ~general_from_master,
-                self.peer_mismatch.eq(1)
             ),
             # Wait for FOLLOW_UP message on General port (matching sequence ID).
             If(rx_ge.present &
@@ -1379,34 +1358,12 @@ class LiteEthPTPControl(LiteXModule):
                     )
                 )
             ),
-            If(rx_ge.present &
-               (rx_ge.msg_type == PTP_MSG_DELAY_RESP) &
-               (rx_ge.seq_id  != seq),
-                self.delay_resp_seen.eq(1),
-                self.delay_resp_seq_mismatch.eq(1)
-            ),
-            If(rx_ge.present &
-               (rx_ge.msg_type == PTP_MSG_DELAY_RESP) &
-               (rx_ge.seq_id  == seq) &
-               ~general_from_master,
-                self.delay_resp_seen.eq(1),
-                self.peer_mismatch.eq(1)
-            ),
-            If(rx_ge.present &
-               (rx_ge.msg_type == PTP_MSG_DELAY_RESP) &
-               (rx_ge.seq_id  == seq) &
-               general_from_master &
-               (rx_ge.requesting_port_id != tx.clock_id),
-                self.delay_resp_seen.eq(1),
-                self.requester_mismatch.eq(1)
-            ),
             # Wait for Delay_Resp on General port (matching sequence ID).
             If(rx_ge.present &
                (rx_ge.msg_type == PTP_MSG_DELAY_RESP) &
                (rx_ge.seq_id  == seq) &
                general_from_master &
                (rx_ge.requesting_port_id == tx.clock_id),
-                self.delay_resp_seen.eq(1),
                 NextValue(t4, rx_ge.timestamp),
                 NextValue(have_t4, 1),
                 NextState("SERVE")
@@ -1452,19 +1409,6 @@ class LiteEthPTPControl(LiteXModule):
                         NextState("SEND_DELAY_REQ")
                     )
                 )
-            ),
-            If(rx_ev.present &
-               (rx_ev.msg_type == PTP_MSG_PDELAY_RESP) &
-               (rx_ev.seq_id  == seq) &
-               ~event_from_master,
-                self.peer_mismatch.eq(1)
-            ),
-            If(rx_ev.present &
-               (rx_ev.msg_type == PTP_MSG_PDELAY_RESP) &
-               (rx_ev.seq_id  == seq) &
-               event_from_master &
-               (rx_ev.requesting_port_id != tx.clock_id),
-                self.requester_mismatch.eq(1)
             ),
             # Wait for Pdelay_Resp on Event port (matching sequence ID).
             If(rx_ev.present &
@@ -1512,12 +1456,6 @@ class LiteEthPTPControl(LiteXModule):
                         NextState("SEND_DELAY_REQ")
                     )
                 )
-            ),
-            If(rx_ge.present &
-               (rx_ge.msg_type == PTP_MSG_PDELAY_RESP_FUP) &
-               (rx_ge.seq_id  == seq) &
-               ~general_from_master,
-                self.peer_mismatch.eq(1)
             ),
             If(rx_ge.present &
                (rx_ge.msg_type == PTP_MSG_PDELAY_RESP_FUP) &
@@ -1643,7 +1581,6 @@ class LiteEthPTPControl(LiteXModule):
                 ).Elif(master_known & (announce_counter != 0),
                     announce_counter.eq(announce_counter - 1),
                     If(announce_counter == 1,
-                        self.announce_expired.eq(1),
                         announce_expired.eq(1)
                     )
                 )
@@ -1661,18 +1598,14 @@ class LiteEthPTP(LiteXModule):
     Integrates TSU, TX/RX, Protocol FSM, and Clock Servo to provide a
     complete PTP slave implementation. Supports E2E and P2P delay mechanisms.
 
-    An optional snapshot-based Monitor (LiteEthPTPMonitor) is added by
-    default via ``add_monitor()``. Pass ``monitor_debug=None`` to disable.
-
     Parameters:
     - event_port    : UDP port for PTP event messages (port 319).
     - general_port  : UDP port for PTP general messages (port 320).
     - sys_clk_freq  : System clock frequency.
     - timeout       : Lock timeout in seconds.
-    - monitor_debug : True=full, False=common-only, None=no monitor.
     """
     def __init__(self, event_port, general_port, sys_clk_freq, timeout=1.0, announce_timeout=None,
-        require_announce=False, monitor_debug=False, unicast_delay_req=False):
+        require_announce=False, unicast_delay_req=False):
         # Control/Status.
         # ---------------
         self.enable                = Signal(reset=1)
@@ -1682,18 +1615,6 @@ class LiteEthPTP(LiteXModule):
         self.unicast_delay_req     = Signal(reset=1 if unicast_delay_req else 0)
         self.require_announce      = Signal(reset=1 if require_announce else 0)
         self.master_ip             = Signal(32)
-        self.last_rx_msg_type      = Signal(4)
-        self.last_rx_seq_id        = Signal(16)
-        self.invalid_header_count  = Signal(32)
-        self.wrong_peer_count      = Signal(32)
-        self.wrong_requester_count = Signal(32)
-        self.rx_timeout_count      = Signal(32)
-        self.announce_expiry_count = Signal(32)
-        self.tx_launch_count       = Signal(32)
-        self.tx_complete_count     = Signal(32)
-        self.rx_delay_resp_count   = Signal(32)
-        self.rx_delay_resp_wait_count = Signal(32)
-        self.rx_delay_resp_seq_mismatch_count = Signal(32)
 
         # Parameters.
         # -----------
@@ -1764,83 +1685,14 @@ class LiteEthPTP(LiteXModule):
             self.master_ip.eq(control.master_ip),
         ]
 
-        self.sync += [
-            If(rx_ev.present,
-                self.last_rx_msg_type.eq(rx_ev.msg_type),
-                self.last_rx_seq_id.eq(rx_ev.seq_id)
-            ).Elif(rx_ge.present,
-                self.last_rx_msg_type.eq(rx_ge.msg_type),
-                self.last_rx_seq_id.eq(rx_ge.seq_id)
-            ),
-            If(rx_ev.invalid_header | rx_ge.invalid_header,
-                self.invalid_header_count.eq(self.invalid_header_count + 1)
-            ),
-            If(control.peer_mismatch,
-                self.wrong_peer_count.eq(self.wrong_peer_count + 1)
-            ),
-            If(control.requester_mismatch,
-                self.wrong_requester_count.eq(self.wrong_requester_count + 1)
-            ),
-            If(rx_ev.timeout_error | rx_ge.timeout_error,
-                self.rx_timeout_count.eq(self.rx_timeout_count + 1)
-            ),
-            If(control.announce_expired,
-                self.announce_expiry_count.eq(self.announce_expiry_count + 1)
-            ),
-            If(tx.launch,
-                self.tx_launch_count.eq(self.tx_launch_count + 1)
-            ),
-            If(tx.source.valid & tx.source.ready & tx.source.last,
-                self.tx_complete_count.eq(self.tx_complete_count + 1)
-            ),
-            If(rx_ge.present & (rx_ge.msg_type == PTP_MSG_DELAY_RESP),
-                self.rx_delay_resp_count.eq(self.rx_delay_resp_count + 1)
-            ),
-            If(control.delay_resp_seen,
-                self.rx_delay_resp_wait_count.eq(self.rx_delay_resp_wait_count + 1)
-            ),
-            If(control.delay_resp_seq_mismatch,
-                self.rx_delay_resp_seq_mismatch_count.eq(self.rx_delay_resp_seq_mismatch_count + 1)
-            )
-        ]
-
         # CSRs.
         # -----
         self._locked                = CSRStatus(description="PTP lock status.")
         self._master_ip             = CSRStatus(32, description="Master IPv4.")
-        self._last_rx_msg_type      = CSRStatus( 4, description="Last RX msg type.")
-        self._last_rx_seq_id        = CSRStatus(16, description="Last RX seq id.")
-        self._invalid_header_count  = CSRStatus(32, description="Invalid header count.")
-        self._wrong_peer_count      = CSRStatus(32, description="Wrong peer count.")
-        self._wrong_requester_count = CSRStatus(32, description="Wrong requester count.")
-        self._rx_timeout_count      = CSRStatus(32, description="RX timeout count.")
-        self._announce_expiry_count = CSRStatus(32, description="Announce expiry count.")
-        self._tx_launch_count       = CSRStatus(32, description="PTP request TX launch count.")
-        self._tx_complete_count     = CSRStatus(32, description="PTP request TX packet completion count.")
-        self._rx_delay_resp_count   = CSRStatus(32, description="Accepted PTP Delay_Resp RX count.")
-        self._rx_delay_resp_wait_count = CSRStatus(32, description="PTP Delay_Resp RX count while waiting for response.")
-        self._rx_delay_resp_seq_mismatch_count = CSRStatus(32, description="PTP Delay_Resp sequence mismatch count.")
         self.comb += [
             self._locked.status.eq(self.locked),
             self._master_ip.status.eq(self.master_ip),
-            self._last_rx_msg_type.status.eq(self.last_rx_msg_type),
-            self._last_rx_seq_id.status.eq(self.last_rx_seq_id),
-            self._invalid_header_count.status.eq(self.invalid_header_count),
-            self._wrong_peer_count.status.eq(self.wrong_peer_count),
-            self._wrong_requester_count.status.eq(self.wrong_requester_count),
-            self._rx_timeout_count.status.eq(self.rx_timeout_count),
-            self._announce_expiry_count.status.eq(self.announce_expiry_count),
-            self._tx_launch_count.status.eq(self.tx_launch_count),
-            self._tx_complete_count.status.eq(self.tx_complete_count),
-            self._rx_delay_resp_count.status.eq(self.rx_delay_resp_count),
-            self._rx_delay_resp_wait_count.status.eq(self.rx_delay_resp_wait_count),
-            self._rx_delay_resp_seq_mismatch_count.status.eq(self.rx_delay_resp_seq_mismatch_count),
         ]
-
-        # Monitor (optional, enabled by default).
-        # ---------------------------------------
-        if monitor_debug is not None:
-            self.add_monitor(debug=monitor_debug)
 
         # 6. Timeout Timer.
         self.timeout_timer = timeout_timer = WaitTimer(int(timeout*sys_clk_freq))
@@ -1852,251 +1704,3 @@ class LiteEthPTP(LiteXModule):
             ),
             self.timeout.eq(timeout_timer.done),
         ]
-
-    def add_monitor(self, debug=True):
-        """Add snapshot-based monitoring CSRs (common + optional debug)."""
-        self.monitor = LiteEthPTPMonitor(self.tsu, self.servo, self, debug=debug)
-
-
-# LiteEthPTPMonitor --------------------------------------------------------------------------------
-
-class LiteEthPTPMonitor(LiteXModule):
-    """
-    PTP Snapshot Monitor.
-
-    Provides coherent CSR snapshots of PTP state for Etherbone reads.
-    Common mode has essential status; debug mode adds full timestamp/servo diagnostics.
-
-    Parameters:
-    - tsu   : LiteEthTSU instance.
-    - servo : LiteEthPTPClockServo instance.
-    - ptp   : LiteEthPTP instance.
-    - debug : Enable extended debug CSRs.
-    """
-    def __init__(self, tsu, servo, ptp, debug=True):
-        addend_frac_bits = len(tsu.addend_frac)
-
-        # Serve-time Latches.
-        last_t1               = Signal(80)
-        last_t2               = Signal(80)
-        last_t3               = Signal(80)
-        last_t4               = Signal(80)
-        last_phase            = Signal((64, True))
-        last_delay            = Signal((64, True))
-        last_sample_valid     = Signal()
-        serve_count           = Signal(32)
-        step_count            = Signal(32)
-        reject_count          = Signal(32)
-        serve_tsu_seconds     = Signal(48)
-        serve_tsu_nanoseconds = Signal(32)
-        serve_outlier         = Signal()
-        serve_sec_adjust      = Signal()
-        serve_coarse          = Signal()
-        serve_valid           = Signal()
-        serve_offset          = Signal((64, True))
-        serve_addend_next     = Signal(len(servo._addend_next))
-        serve_freq_step       = Signal((32, True))
-
-        self.sync += [
-            If(servo.serve_done,
-                serve_count.eq(serve_count + 1),
-                serve_tsu_seconds.eq(tsu.seconds),
-                serve_tsu_nanoseconds.eq(tsu.nanoseconds),
-                serve_outlier.eq(servo._exchange_outlier),
-                serve_sec_adjust.eq(servo._sec_adjust_needed),
-                serve_coarse.eq(servo._coarse_step_needed),
-                serve_valid.eq(servo.sample_valid),
-                serve_offset.eq(tsu.offset),
-                serve_addend_next.eq(servo._addend_next),
-                serve_freq_step.eq(servo._freq_step[:32]),
-                If(servo.sample_valid,
-                    last_t1.eq(servo.t1),
-                    last_t2.eq(servo.t2),
-                    last_t3.eq(servo.t3),
-                    last_t4.eq(servo.t4),
-                    last_phase.eq(servo.phase_error),
-                    last_delay.eq(servo.mean_path_delay),
-                    last_sample_valid.eq(servo.sample_valid),
-                ),
-                If(~servo.sample_valid,
-                    reject_count.eq(reject_count + 1)
-                )
-            ),
-            If(tsu.step,
-                step_count.eq(step_count + 1)
-            ),
-        ]
-
-        # Snapshot trigger.
-        # -----------------
-        self._snapshot = CSRStorage(description="Write to latch a coherent PTP monitor snapshot.")
-
-        # Common CSRs (always present).
-        # -----------------------------
-        self._locked                = CSRStatus( 1, description="Locked flag.")
-        self._master_ip             = CSRStatus(32, description="Master IPv4.")
-        self._tsu_seconds           = CSRStatus(48, description="TSU seconds.")
-        self._tsu_nanoseconds       = CSRStatus(32, description="TSU nanoseconds.")
-        self._addend                = CSRStatus(32, description="TSU addend integer.")
-        self._addend_frac           = CSRStatus(addend_frac_bits, description="TSU addend frac.")
-        self._phase                 = CSRStatus(64, description="Phase error.")
-        self._delay                 = CSRStatus(64, description="Path delay.")
-        self._serve_count           = CSRStatus(32, description="Servo serve count.")
-        self._step_count            = CSRStatus(32, description="Coarse-step count.")
-        self._reject_count          = CSRStatus(32, description="Outlier reject count.")
-        self._last_sample_valid     = CSRStatus( 1, description="Last exchange validity.")
-        self._serve_tsu_seconds     = CSRStatus(48, description="Serve TSU seconds.")
-        self._serve_tsu_nanoseconds = CSRStatus(32, description="Serve TSU nanoseconds.")
-        self._serve_flags           = CSRStatus( 8, description="Serve flags: V/O/S/C.")
-
-        # Snapshot Registers (common).
-        # ----------------------------
-        m = Record([
-            ("locked",                1),
-            ("master_ip",             32),
-            ("tsu_seconds",           48),
-            ("tsu_nanoseconds",       32),
-            ("addend",                32),
-            ("addend_frac",           addend_frac_bits),
-            ("phase",                 64),
-            ("delay",                 64),
-            ("serve_count",           32),
-            ("step_count",            32),
-            ("reject_count",          32),
-            ("last_sample_valid",      1),
-            ("serve_tsu_seconds",     48),
-            ("serve_tsu_nanoseconds", 32),
-            ("serve_flags",            8),
-        ])
-
-        self.sync += If(self._snapshot.re,
-            m.locked.eq(ptp.locked),
-            m.master_ip.eq(ptp.master_ip),
-            m.tsu_seconds.eq(tsu.seconds),
-            m.tsu_nanoseconds.eq(tsu.nanoseconds),
-            m.addend.eq(tsu.addend),
-            m.addend_frac.eq(tsu.addend_frac),
-            m.phase.eq(last_phase),
-            m.delay.eq(last_delay),
-            m.serve_count.eq(serve_count),
-            m.step_count.eq(step_count),
-            m.reject_count.eq(reject_count),
-            m.last_sample_valid.eq(last_sample_valid),
-            m.serve_tsu_seconds.eq(serve_tsu_seconds),
-            m.serve_tsu_nanoseconds.eq(serve_tsu_nanoseconds),
-            m.serve_flags.eq(Cat(
-                serve_valid, serve_outlier, serve_sec_adjust, serve_coarse
-            )),
-        )
-
-        self.comb += [
-            self._locked.status.eq(m.locked),
-            self._master_ip.status.eq(m.master_ip),
-            self._tsu_seconds.status.eq(m.tsu_seconds),
-            self._tsu_nanoseconds.status.eq(m.tsu_nanoseconds),
-            self._addend.status.eq(m.addend),
-            self._addend_frac.status.eq(m.addend_frac),
-            self._phase.status.eq(m.phase),
-            self._delay.status.eq(m.delay),
-            self._serve_count.status.eq(m.serve_count),
-            self._step_count.status.eq(m.step_count),
-            self._reject_count.status.eq(m.reject_count),
-            self._last_sample_valid.status.eq(m.last_sample_valid),
-            self._serve_tsu_seconds.status.eq(m.serve_tsu_seconds),
-            self._serve_tsu_nanoseconds.status.eq(m.serve_tsu_nanoseconds),
-            self._serve_flags.status.eq(m.serve_flags),
-        ]
-
-        # Debug CSRs (only when debug=True).
-        # ---------------------------------
-        if debug:
-            self._shadow_addend     = CSRStatus(32, description="Shadow addend.")
-            self._shadow_frac       = CSRStatus(addend_frac_bits, description="Shadow frac.")
-            self._offset            = CSRStatus(64, description="Offset.")
-            self._t1                = CSRStatus(80, description="Last t1.")
-            self._t2                = CSRStatus(80, description="Last t2.")
-            self._t3                = CSRStatus(80, description="Last t3.")
-            self._t4                = CSRStatus(80, description="Last t4.")
-            self._live_sample_valid = CSRStatus( 1, description="Live validity.")
-            self._live_t1           = CSRStatus(80, description="Live t1.")
-            self._live_t2           = CSRStatus(80, description="Live t2.")
-            self._live_t3           = CSRStatus(80, description="Live t3.")
-            self._live_t4           = CSRStatus(80, description="Live t4.")
-            self._live_dt21         = CSRStatus(64, description="Live dt21.")
-            self._live_dt43         = CSRStatus(64, description="Live dt43.")
-            self._live_phase        = CSRStatus(64, description="Live phase.")
-            self._live_delay        = CSRStatus(64, description="Live delay.")
-            self._serve_offset      = CSRStatus(64, description="Serve offset.")
-            self._serve_addend_next = CSRStatus(
-                len(servo._addend_next), description="Serve addend_next.")
-            self._serve_freq_step   = CSRStatus(32, description="Serve freq_step.")
-
-            # Debug Snapshot Registers.
-            # -------------------------
-            d = Record([
-                ("shadow_addend",     32),
-                ("shadow_frac",       addend_frac_bits),
-                ("offset",            64),
-                ("t1",                80),
-                ("t2",                80),
-                ("t3",                80),
-                ("t4",                80),
-                ("live_valid",         1),
-                ("live_t1",           80),
-                ("live_t2",           80),
-                ("live_t3",           80),
-                ("live_t4",           80),
-                ("live_dt21",         64),
-                ("live_dt43",         64),
-                ("live_phase",        64),
-                ("live_delay",        64),
-                ("serve_offset",      64),
-                ("serve_addend_next", len(servo._addend_next)),
-                ("serve_freq_step",   32),
-            ])
-
-            self.sync += If(self._snapshot.re,
-                d.shadow_addend.eq(
-                    servo._shadow_addend[addend_frac_bits:addend_frac_bits + len(tsu.addend)]
-                ),
-                d.shadow_frac.eq(servo._shadow_addend[:addend_frac_bits]),
-                d.offset.eq(tsu.offset[0:64]),
-                d.t1.eq(last_t1),
-                d.t2.eq(last_t2),
-                d.t3.eq(last_t3),
-                d.t4.eq(last_t4),
-                d.live_valid.eq(servo.sample_valid),
-                d.live_t1.eq(servo.t1),
-                d.live_t2.eq(servo.t2),
-                d.live_t3.eq(servo.t3),
-                d.live_t4.eq(servo.t4),
-                d.live_dt21.eq(servo.dt21),
-                d.live_dt43.eq(servo.dt43),
-                d.live_phase.eq(servo.phase_error),
-                d.live_delay.eq(servo.mean_path_delay),
-                d.serve_offset.eq(serve_offset),
-                d.serve_addend_next.eq(serve_addend_next),
-                d.serve_freq_step.eq(serve_freq_step),
-            )
-
-            self.comb += [
-                self._shadow_addend.status.eq(d.shadow_addend),
-                self._shadow_frac.status.eq(d.shadow_frac),
-                self._offset.status.eq(d.offset),
-                self._t1.status.eq(d.t1),
-                self._t2.status.eq(d.t2),
-                self._t3.status.eq(d.t3),
-                self._t4.status.eq(d.t4),
-                self._live_sample_valid.status.eq(d.live_valid),
-                self._live_t1.status.eq(d.live_t1),
-                self._live_t2.status.eq(d.live_t2),
-                self._live_t3.status.eq(d.live_t3),
-                self._live_t4.status.eq(d.live_t4),
-                self._live_dt21.status.eq(d.live_dt21),
-                self._live_dt43.status.eq(d.live_dt43),
-                self._live_phase.status.eq(d.live_phase),
-                self._live_delay.status.eq(d.live_delay),
-                self._serve_offset.status.eq(d.serve_offset),
-                self._serve_addend_next.status.eq(d.serve_addend_next),
-                self._serve_freq_step.status.eq(d.serve_freq_step),
-            ]
