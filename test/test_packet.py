@@ -12,7 +12,7 @@ from migen import *
 from litex.soc.interconnect.stream import *
 from liteeth.packet import *
 
-from .test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets, mask_last_be
+from test.test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets, mask_last_be
 
 # Test Packet --------------------------------------------------------------------------------------
 

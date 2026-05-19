@@ -14,7 +14,7 @@ from migen import *
 from litex.soc.interconnect.stream import *
 from liteeth.phy.xgmii import LiteEthPHYXGMII, LiteEthPHYXGMIIRX
 
-from .test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets
+from test.test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets
 
 # Helper -------------------------------------------------------------------------------------------
 
