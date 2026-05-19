@@ -3,16 +3,16 @@
 #
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2019-2024 Florent Kermarrec <florent@enjoy-digital.fr>
-# Copyright (c) 2024 Gustavo Bastos <gustavocerq7gmail.com> 
+# Copyright (c) 2024 Gustavo Bastos <gustavocerq7gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
-from litex.soc.cores.clock import S7MMCM
-
 from litex.gen import *
+
+from litex.soc.cores.clock import S7MMCM
 
 from liteiclink.serdes.gth_7series import GTHChannelPLL, GTHTXInit, GTHRXInit
 
@@ -70,11 +70,11 @@ class V7_1000BASEX(LiteXModule):
         rx_reset      = Signal()
         rx_data       = Signal(20)
         rx_reset_done = Signal()
-        
+
         # GTH transceiver
         tx_mmcm_locked = Signal()
         tx_mmcm_reset  = Signal(reset=1)
-        
+
         rx_mmcm_locked    = Signal()
         rx_mmcm_reset     = Signal(reset=1)
 
@@ -700,9 +700,9 @@ class V7_1000BASEX(LiteXModule):
             o_TXQPISENN        = Open(),
             o_TXQPISENP        = Open(),
         )
- 
+
         self.specials += Instance("GTHE2_CHANNEL", **gth_params)
-        
+
         # Get 125MHz clocks back - the GTH is outputting 62.5MHz.
         txoutclk_rebuffer = Signal()
         self.specials += Instance("BUFH",
@@ -714,7 +714,7 @@ class V7_1000BASEX(LiteXModule):
             i_I = self.rxoutclk,
             o_O = rxoutclk_rebuffer
         )
-      
+
         # TX MMCM.
         self.tx_mmcm = tx_mmcm = S7MMCM()
         tx_mmcm.register_clkin(txoutclk_rebuffer,  self.tx_clk_freq/2)
@@ -785,7 +785,7 @@ class V7_1000BASEX(LiteXModule):
         ]
 
     def add_csr(self):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
         self.comb += self.reset.eq(self._reset.storage)
 
 # V7_2500BASEX PHY ---------------------------------------------------------------------------------

@@ -108,7 +108,7 @@ class TestPacket(unittest.TestCase):
         # When we don't have a last_be signal, the Packetizer will simply throw
         # away the partial bus word. The Depacketizer will then fill up these
         # values with garbage again. Thus we also have to remove the proper
-        # amount of bytes from the sent packets so the comparson will work.
+        # amount of bytes from the sent packets so the comparison will work.
         if not with_last_be and dw != 8:
             # Modulo operation which returns the divisor instead of zero.
             def upmod(a, b):

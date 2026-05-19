@@ -4,18 +4,29 @@
 # Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import sys
+import shutil
 import unittest
-import os
+import subprocess
+from pathlib import Path
 
 # Helper -------------------------------------------------------------------------------------------
 
+_repo_root    = Path(__file__).resolve().parents[1]
+_examples_dir = _repo_root / "examples"
+_build_dir    = _examples_dir / "build"
+
 def build_config(name):
-    errors = 0
-    os.system("rm -rf examples/build")
-    os.system("cd examples && python3 ../liteeth/gen.py {}.yml".format(name))
-    errors += not os.path.isfile("examples/build/gateware/liteeth_core.v")
-    os.system("rm -rf examples/build")
-    return errors
+    shutil.rmtree(_build_dir, ignore_errors=True)
+    try:
+        subprocess.run(
+            [sys.executable, str(_repo_root / "liteeth" / "gen.py"), f"{name}.yml"],
+            cwd   = _examples_dir,
+            check = True,
+        )
+        return int(not (_build_dir / "gateware" / "liteeth_core.v").is_file())
+    finally:
+        shutil.rmtree(_build_dir, ignore_errors=True)
 
 # Test Examples ------------------------------------------------------------------------------------
 

@@ -67,20 +67,20 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 
         if with_inband_status:
             self.inband_status = CSRStatus(fields=[
-                CSRField("link_status", size=1, values=[
+                CSRField("link_status", size=1, description="Link status.", values=[
                     ("``0b0``", "Link down."),
                     ("``0b1``", "Link up."),
                 ]),
-                CSRField("clock_speed", size=2, values=[
+                CSRField("clock_speed", size=2, description="Clock speed.", values=[
                     ("``0b00``", "2.5MHz   (10Mbps)."),
                     ("``0b01``", "25MHz   (100MBps)."),
                     ("``0b10``", "125MHz (1000MBps)."),
                 ]),
-                CSRField("duplex_status", size=1, values=[
+                CSRField("duplex_status", size=1, description="Duplex status.", values=[
                     ("``0b0``", "Half-duplex."),
                     ("``0b1``", "Full-duplex."),
                 ]),
-            ])
+            ], description="RGMII in-band status.")
 
         # # #
 
@@ -149,7 +149,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 
 class LiteEthPHYRGMIICRG(LiteXModule):
     def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9, tx_clk=None):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
 
         # # #
 

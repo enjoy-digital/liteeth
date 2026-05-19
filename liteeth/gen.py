@@ -666,7 +666,8 @@ def main():
     parser.add_argument("config", help="YAML config file")
     parser.add_argument("--name", default="liteeth_core", help="Standalone core/module name")
     args = parser.parse_args()
-    core_config = yaml.load(open(args.config).read(), Loader=yaml.Loader)
+    with open(args.config, "r", encoding="utf-8") as f:
+        core_config = yaml.load(f, Loader=yaml.Loader)
 
     # Convert YAML elements to Python/LiteX --------------------------------------------------------
     for k, v in core_config.items():

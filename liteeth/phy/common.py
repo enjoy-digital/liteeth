@@ -4,12 +4,12 @@
 # Copyright (c) 2015-2023 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+from migen.genlib.cdc import MultiReg
+from migen.fhdl.specials import Tristate
+
 from litex.gen import *
 
 from liteeth.common import *
-
-from migen.genlib.cdc import MultiReg
-from migen.fhdl.specials import Tristate
 
 # LiteEth PHY HWReset ------------------------------------------------------------------------------
 
@@ -34,13 +34,13 @@ class LiteEthPHYHWReset(Module):
 class LiteEthPHYMDIO(LiteXModule):
     def __init__(self, pads):
         self._w = CSRStorage(fields=[
-            CSRField("mdc", size=1),
-            CSRField("oe",  size=1),
-            CSRField("w",   size=1)],
+            CSRField("mdc", size=1, description="MDIO clock."),
+            CSRField("oe",  size=1, description="MDIO output enable."),
+            CSRField("w",   size=1, description="MDIO write data.")],
             name="w"
         )
         self._r = CSRStatus(fields=[
-            CSRField("r", size=1)],
+            CSRField("r", size=1, description="MDIO read data.")],
             name="r"
         )
 

@@ -966,7 +966,7 @@ class USP_GTY_1000BASEX(LiteXModule):
 
 
     def add_csr(self):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
         self.comb += self.reset.eq(self._reset.storage)
 
 # USP_GTY_2500BASEX PHY ----------------------------------------------------------------------------

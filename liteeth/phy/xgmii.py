@@ -652,7 +652,7 @@ class LiteEthPHYXGMIIRX(LiteXModule):
 
 class LiteEthPHYXGMIICRG(LiteXModule):
     def __init__(self, clock_pads, model=False):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
         self.cd_eth_rx = ClockDomain()
         self.cd_eth_tx = ClockDomain()
         if model:

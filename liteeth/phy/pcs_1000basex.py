@@ -479,9 +479,9 @@ class PCS(LiteXModule):
         self.status = CSRStatus(fields=[
             CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
             CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
-            CSRField("config_reg", size=16, offset=16, description="config_reg"),
+            CSRField("config_reg", size=16, offset=16, description="Link partner ability register."),
         ])
-        
+
         self.lp_abi_csr = BusSynchronizer(16, "eth_rx", "sys")
 
         self.ev      = EventManager()

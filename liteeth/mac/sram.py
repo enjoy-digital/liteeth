@@ -11,10 +11,10 @@ import math
 
 from litex.gen import *
 
-from liteeth.common import *
-
 from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
+
+from liteeth.common import *
 
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
@@ -31,14 +31,14 @@ class LiteEthMACSRAMWriter(LiteXModule):
         lengthbits = bits_for(depth * dw//8)
 
         # CSRs.
-        self._slot   = CSRStatus(slotbits)
-        self._length = CSRStatus(lengthbits)
-        self._errors = CSRStatus(32)
+        self._slot   = CSRStatus(slotbits,   description="Receive slot.")
+        self._length = CSRStatus(lengthbits, description="Receive packet length in bytes.")
+        self._errors = CSRStatus(32,         description="Receive packet drop count.")
 
         # Optional Timestamp of the incoming packets and expose value to software.
         if timestamp is not None:
             timestampbits   = len(timestamp)
-            self._timestamp = CSRStatus(timestampbits)
+            self._timestamp = CSRStatus(timestampbits, description="Receive packet timestamp.")
 
         # Event Manager.
         self.ev           = EventManager()
@@ -183,16 +183,16 @@ class LiteEthMACSRAMReader(LiteXModule):
 
         # CSRs.
         self._start  = CSR()
-        self._ready  = CSRStatus()
-        self._level  = CSRStatus(int(math.log2(nslots)) + 1)
-        self._slot   = CSRStorage(slotbits,   reset_less=True)
-        self._length = CSRStorage(lengthbits, reset_less=True)
+        self._ready  = CSRStatus(description="Transmit command FIFO ready.")
+        self._level  = CSRStatus(int(math.log2(nslots)) + 1, description="Transmit command FIFO level.")
+        self._slot   = CSRStorage(slotbits,   reset_less=True, description="Transmit slot.")
+        self._length = CSRStorage(lengthbits, reset_less=True, description="Transmit packet length in bytes.")
 
         # Optional Timestamp of the outgoing packets and expose value to software.
         if timestamp is not None:
             timestampbits        = len(timestamp)
-            self._timestamp_slot = CSRStatus(slotbits)
-            self._timestamp      = CSRStatus(timestampbits)
+            self._timestamp_slot = CSRStatus(slotbits,      description="Transmit timestamp slot.")
+            self._timestamp      = CSRStatus(timestampbits, description="Transmit packet timestamp.")
 
         # Event Manager.
         self.ev      = EventManager()

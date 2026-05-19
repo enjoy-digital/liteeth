@@ -14,7 +14,7 @@ from liteeth.common import *
 
 class LiteEthPHYModelCRG(LiteXModule):
     def __init__(self):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
 
         # # #
 

@@ -110,7 +110,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 
 class LiteEthPHYRGMIICRG(LiteXModule):
     def __init__(self, platform, clock_pads, with_hw_init_reset, hw_reset_cycles=256, n=0):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
 
         # # #
 

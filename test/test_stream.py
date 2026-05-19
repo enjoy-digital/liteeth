@@ -5,7 +5,6 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import unittest
-import unittest
 import random
 import itertools
 import sys

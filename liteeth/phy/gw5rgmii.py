@@ -142,7 +142,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 
 class LiteEthPHYRGMIICRG(LiteXModule):
     def __init__(self, clock_pads, pads, with_hw_init_reset, tx_delay=2e-9, tx_clk=None):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
 
         # # #
 
@@ -160,7 +160,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         tx_delay_taps = int(tx_delay/12.5e-12) # 12.5ps per tap
         assert tx_delay_taps < 256
 
-        self._txdelay_taps = CSRStorage(8, reset=tx_delay_taps)
+        self._txdelay_taps = CSRStorage(8, reset=tx_delay_taps, description="TX delay taps.")
         eth_tx_clk_o = Signal()
         self.specials += [
             DDROutput(

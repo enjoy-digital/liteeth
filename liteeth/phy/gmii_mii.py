@@ -102,7 +102,7 @@ class LiteEthPHYGMIIMIIRX(LiteXModule):
 class LiteEthGMIIMIIModeDetection(LiteXModule):
     def __init__(self, clk_freq):
         self.mode  = Signal()
-        self._mode = CSRStatus()
+        self._mode = CSRStatus(description="Detected MII mode.")
 
         # # #
 

@@ -501,7 +501,7 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_TX_DRIVE_MODE                = "DIRECT",
             p_TX_EIDLE_ASSERT_DELAY        = 0b100,
             p_TX_EIDLE_DEASSERT_DELAY      = 0b011,
-			p_TX_FABINT_USRCLK_FLOP        = 0b0,
+            p_TX_FABINT_USRCLK_FLOP        = 0b0,
             p_TX_FIFO_BYP_EN               = 0,
             p_TX_IDLE_DATA_ZERO            = 0b0,
             p_TX_INT_DATAWIDTH             = 2,

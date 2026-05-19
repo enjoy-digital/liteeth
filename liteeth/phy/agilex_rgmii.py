@@ -12,10 +12,10 @@ from litex.gen import *
 
 from litex.build.io import ClkInput, ClkOutput, DDROutput, DDRInput
 
+from litex.soc.cores.clock import Agilex3PLL, Agilex5PLL
+
 from liteeth.common     import *
 from liteeth.phy.common import *
-
-from litex.soc.cores.clock import Agilex3PLL, Agilex5PLL
 
 # Utils --------------------------------------------------------------------------------------------
 
@@ -99,7 +99,8 @@ class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads):
         self.source    = source = stream.Endpoint(eth_phy_description(8))
 
-        self.rx_ctl = CSRStatus() # Unused but required to avoid fitter fails with unused tennm_ph2_ddio_in outputs
+        # Unused but required to avoid fitter fails with unused tennm_ph2_ddio_in outputs.
+        self.rx_ctl = CSRStatus(description="RX control status.")
 
         # # #
 
@@ -149,7 +150,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         tx_delay           = 2e-9,
         hw_reset_cycles    = 256
         ):
-        self._reset = CSRStorage()
+        self._reset = CSRStorage(description="PHY reset.")
 
         # # #
 
