@@ -105,7 +105,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         # # #
 
         rx_ctl_ibuf  = Signal()
-        rx_ctl       = Signal(2)
+        rx_ctl       = Signal()
 
         rx_data_ibuf = Signal(4)
         rx_data      = Signal(8)
@@ -177,7 +177,7 @@ class LiteEthPHYRGMIICRG(LiteXModule):
 
         self.tx_pll = tx_pll = pll_cls(platform, speedgrade=f"-{speedgrade}")
         self.comb += tx_pll.reset.eq(ResetSignal("sys"))
-        tx_pll.register_clkin(ref_tx_clk,            125e6, "tx_pll_in")
+        tx_pll.register_clkin(ref_tx_clk,            125e6)
         tx_pll.create_clkout(self.cd_eth_tx,         125e6, with_reset=False)
         tx_pll.create_clkout(self.cd_eth_tx_delayed, 125e6, phase=tx_phase)
 
