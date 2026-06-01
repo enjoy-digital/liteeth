@@ -18,7 +18,7 @@ from litex_boards.platforms import xilinx_kcu105
 
 from litex.soc.cores.clock import *
 from litex.soc.interconnect.csr import *
-from litex.soc.integration.soc_core import *
+from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
 from liteeth.phy.ku_1000basex import KU_1000BASEX
