@@ -208,7 +208,7 @@ class LiteEthMACSRAMReader(LiteXModule):
         cmd_fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
         self.submodules += cmd_fifo
         self.comb += [
-            cmd_fifo.sink.valid.eq(self._start.re),
+            cmd_fifo.sink.valid.eq(self._start.wr_stb),
             cmd_fifo.sink.slot.eq(self._slot.storage),
             cmd_fifo.sink.length.eq(self._length.storage),
             self._ready.status.eq(cmd_fifo.sink.ready),

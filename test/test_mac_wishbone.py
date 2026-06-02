@@ -64,9 +64,9 @@ class SRAMReaderDriver:
     def start(self, slot, length):
         yield self.obj._slot.storage.eq(slot)
         yield self.obj._length.storage.eq(length)
-        yield self.obj._start.re.eq(1)
+        yield self.obj._start.wr_stb.eq(1)
         yield
-        yield self.obj._start.re.eq(0)
+        yield self.obj._start.wr_stb.eq(0)
         yield
 
     def wait_done(self):
@@ -74,11 +74,11 @@ class SRAMReaderDriver:
             yield
 
     def clear_done(self):
-        yield self.obj.ev.pending.re.eq(1)
-        yield self.obj.ev.pending.r.eq(1)
+        yield self.obj.ev.pending.wr_stb.eq(1)
+        yield self.obj.ev.pending.wr_data.eq(1)
         yield
-        yield self.obj.ev.pending.re.eq(0)
-        yield self.obj.ev.pending.r.eq(0)
+        yield self.obj.ev.pending.wr_stb.eq(0)
+        yield self.obj.ev.pending.wr_data.eq(0)
         yield
 
 # SRAM Writer Driver -------------------------------------------------------------------------------
@@ -92,11 +92,11 @@ class SRAMWriterDriver:
             yield
 
     def clear_available(self):
-        yield self.obj.ev.pending.re.eq(1)
-        yield self.obj.ev.pending.r.eq(1)
+        yield self.obj.ev.pending.wr_stb.eq(1)
+        yield self.obj.ev.pending.wr_data.eq(1)
         yield
-        yield self.obj.ev.pending.re.eq(0)
-        yield self.obj.ev.pending.r.eq(0)
+        yield self.obj.ev.pending.wr_stb.eq(0)
+        yield self.obj.ev.pending.wr_data.eq(0)
         yield
 
 # DUT ----------------------------------------------------------------------------------------------
