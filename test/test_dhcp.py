@@ -31,6 +31,15 @@ def merge_word(data):
         value |= byte << (8*i)
     return value
 
+def words_from_bytes(data):
+    words = []
+    for offset in range(0, len(data), 4):
+        word_data = data[offset:offset + 4]
+        while len(word_data) < 4:
+            word_data.append(0)
+        words.append(merge_word(word_data))
+    return words
+
 def split_be(value, nbytes):
     return [(value >> (8*(nbytes - 1 - i))) & 0xff for i in range(nbytes)]
 
@@ -199,12 +208,7 @@ class TestDHCPRX(unittest.TestCase):
         dut    = RXDUT(last_be_for_length(length))
         result = {"present": False}
 
-        words = []
-        for offset in range(0, len(packet), 4):
-            word_data = packet[offset:offset + 4]
-            while len(word_data) < 4:
-                word_data.append(0)
-            words.append(merge_word(word_data))
+        words = words_from_bytes(packet)
 
         def generator():
             yield dut.rx.mac_address.eq(mac_address)
@@ -282,6 +286,108 @@ class TestDHCPRX(unittest.TestCase):
 # Test DHCP Core -----------------------------------------------------------------------------------
 
 class TestDHCPCore(unittest.TestCase):
+    def test_handshake_with_simulated_server(self):
+        class CoreDUT(LiteXModule):
+            def __init__(self):
+                self.streamer        = PacketStreamer(eth_udp_user_description(32), last_be=0b1000)
+                self.udp_port        = udp_port = type("UDPPort", (), {})()
+                self.udp_port.sink   = stream.Endpoint(eth_udp_user_description(32))
+                self.udp_port.source = stream.Endpoint(eth_udp_user_description(32))
+
+                self.dhcp = LiteEthDHCP(udp_port, sys_clk_freq=100000, timeout=1)
+                self.comb += self.streamer.source.connect(udp_port.source)
+
+        dut     = CoreDUT()
+        results = {
+            "discover_seen": False,
+            "request_seen":  False,
+            "ack_sent":      False,
+            "done":          False,
+            "timeout":       False,
+            "ip_address":    0,
+        }
+
+        def make_server_response(message_type, xid):
+            return build_dhcp_response(
+                message_type = message_type,
+                siaddr       = 0,
+                xid          = xid,
+                options      = [
+                    DHCP_OPTTYP_SRV_IP_ADDRESS, 0x04, *split_be(server_ip_address, 4),
+                    DHCP_OPTTYP_MESSAGE_TYPE, 0x01, message_type,
+                    DHCP_OPTTYP_END,
+                ],
+            )
+
+        def send_server_packet(packet):
+            yield dut.streamer.source.src_port.eq(DHCP_SERVER_PORT)
+            yield dut.streamer.source.dst_port.eq(DHCP_CLIENT_PORT)
+            yield dut.streamer.source.length.eq(len(packet))
+            yield dut.streamer.source.ip_address.eq(convert_ip("255.255.255.255"))
+            dut.streamer.send(Packet(words_from_bytes(packet)))
+
+        def generator():
+            yield dut.dhcp.mac_address.eq(mac_address)
+            yield dut.udp_port.sink.ready.eq(1)
+            yield dut.dhcp.start.eq(1)
+            yield
+            yield dut.dhcp.start.eq(0)
+
+            tx_packet = []
+            tx_params = {}
+            tx_count  = 0
+
+            for _ in range(2048):
+                if (yield dut.udp_port.sink.valid):
+                    if not tx_packet:
+                        tx_params["length"] = (yield dut.udp_port.sink.length)
+                    tx_packet.extend(split_word((yield dut.udp_port.sink.data)))
+                    if (yield dut.udp_port.sink.last):
+                        tx_count += 1
+                        packet  = tx_packet[:tx_params["length"]]
+                        options = parse_options(packet[240:])
+                        xid     = merge_word(packet[4:8])
+
+                        if tx_count == 1:
+                            self.assertEqual(options[DHCP_OPTTYP_MESSAGE_TYPE],
+                                [DHCP_OPTVAL_MESSAGE_TYPE_DISCOVER])
+                            results["discover_seen"] = True
+                            yield from send_server_packet(
+                                make_server_response(DHCP_OPTVAL_MESSAGE_TYPE_OFFER, xid))
+
+                        elif tx_count == 2:
+                            self.assertEqual(options[DHCP_OPTTYP_MESSAGE_TYPE],
+                                [DHCP_OPTVAL_MESSAGE_TYPE_REQUEST])
+                            self.assertEqual(
+                                merge_be(options[DHCP_OPTTYP_REQ_IP_ADDRESS]),
+                                offered_ip_address)
+                            self.assertEqual(
+                                merge_be(options[DHCP_OPTTYP_SRV_IP_ADDRESS]),
+                                server_ip_address)
+                            results["request_seen"] = True
+                            yield from send_server_packet(
+                                make_server_response(DHCP_OPTVAL_MESSAGE_TYPE_ACK, xid))
+                            results["ack_sent"] = True
+
+                        tx_packet = []
+                        tx_params = {}
+
+                results["timeout"] = bool((yield dut.dhcp.timeout))
+                if results["ack_sent"] and (yield dut.dhcp.done):
+                    results["done"]       = True
+                    results["ip_address"] = (yield dut.dhcp.ip_address)
+                    break
+                yield
+
+        run_simulation(dut, [generator(), dut.streamer.generator()])
+
+        self.assertTrue(results["discover_seen"])
+        self.assertTrue(results["request_seen"])
+        self.assertTrue(results["ack_sent"])
+        self.assertTrue(results["done"])
+        self.assertFalse(results["timeout"])
+        self.assertEqual(results["ip_address"], offered_ip_address)
+
     def test_ignores_rx_errors_while_waiting_for_offer(self):
         bad_packet = build_dhcp_response(
             xid     = 2,
@@ -290,12 +396,7 @@ class TestDHCPCore(unittest.TestCase):
                 DHCP_OPTTYP_END, 0x00, 0x00, 0x00, 0x00,
             ],
         )
-        bad_words = []
-        for offset in range(0, len(bad_packet), 4):
-            word_data = bad_packet[offset:offset + 4]
-            while len(word_data) < 4:
-                word_data.append(0)
-            bad_words.append(merge_word(word_data))
+        bad_words = words_from_bytes(bad_packet)
 
         class CoreDUT(LiteXModule):
             def __init__(self):
