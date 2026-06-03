@@ -52,8 +52,9 @@ DHCP_OPTTYP_SRV_IP_ADDRESS        = 54
 DHCP_OPTTYP_LEASE_TIME            = 51
 DHCP_OPTTYP_CLIENT_IDENTIFIER     = 61
 DHCP_OPTTYP_PARAM_REQUEST_LIST    = 55
-DHCP_OPTVAL_PARAM_SUBNET_MASK     = 3
-DHCP_OPTVAL_PARAM_ROUTER          = 1
+DHCP_OPTVAL_PARAM_SUBNET_MASK     = 1
+DHCP_OPTVAL_PARAM_ROUTER          = 3
+DHCP_OPTTYP_PAD                   = 0
 DHCP_OPTTYP_END                   = 255
 
 # DHCP TX ------------------------------------------------------------------------------------------
@@ -69,7 +70,7 @@ class LiteEthDHCPTX(LiteXModule):
         self.transaction_id     = Signal(32) # i
         self.mac_address        = Signal(48) # i
         self.server_ip_address  = Signal(32) # o (Only for Request).
-        self.offered_ip_address = Signal(48) # o (Only for Request).
+        self.offered_ip_address = Signal(32) # o (Only for Request).
 
         # # #
 
@@ -123,7 +124,8 @@ class LiteEthDHCPTX(LiteXModule):
         fsm.act("SECONDS-FLAGS",
             udp_port.sink.valid.eq(1),
             udp_port.sink.data[ 0:16].eq(0x0000), # Seconds Elapsed: 0
-            udp_port.sink.data[16:24].eq(0x8000), # Flags: Broadcast (0x8000)
+            udp_port.sink.data[16:24].eq(0x80),   # Flags: Broadcast (0x8000)
+            udp_port.sink.data[24:32].eq(0x00),
             If(udp_port.sink.ready,
                 NextState("CLIENT-IP-ADDRESS")
             )
@@ -316,15 +318,68 @@ class LiteEthDHCPRX(LiteXModule):
         self.transaction_id     = Signal(32) # i
         self.mac_address        = Signal(48) # i
         self.server_ip_address  = Signal(32) # o
-        self.offered_ip_address = Signal(48) # o
+        self.offered_ip_address = Signal(32) # o
 
-        # TODO: Parse DHCP Options.
+        # TODO: Parse more DHCP Options.
         # self.gateway_ip_address = Signal(32)
         # self.subnet_mask        = Signal(32)
         # self.router             = Signal(32)
         # self.lease_time         = Signal(32)
 
         # # #
+
+        # Signals.
+        # --------
+
+        padding_len        = (8 + DHCP_SERVER_NAME_LENGTH + DHCP_BOOT_FILE_NAME_LENGTH) // 4
+        count              = Signal(max=padding_len)
+        option_word        = Signal(32)
+        option_last        = Signal()
+        option_byte_index  = Signal(2)
+        option_byte        = Signal(8)
+        option_code        = Signal(8)
+        option_length      = Signal(8)
+        option_count       = Signal(8)
+        option_value_index = Signal(8)
+        message_type_seen  = Signal()
+
+        self.comb += Case(option_byte_index, {
+            0 : option_byte.eq(option_word[ 0: 8]),
+            1 : option_byte.eq(option_word[ 8:16]),
+            2 : option_byte.eq(option_word[16:24]),
+            3 : option_byte.eq(option_word[24:32]),
+        })
+
+        def advance_option_byte(next_state, packet_end=None):
+            if packet_end is None:
+                packet_end = [NextState("ERROR")]
+            load_state = {
+                "OPTION-CODE"   : "OPTIONS-WORD",
+                "OPTION-LENGTH" : "OPTIONS-WORD-LENGTH",
+                "OPTION-VALUE"  : "OPTIONS-WORD-VALUE",
+            }[next_state]
+            return If(option_byte_index == 3,
+                If(option_last,
+                    *packet_end
+                ).Else(
+                    NextValue(option_byte_index, 0),
+                    NextState(load_state)
+                )
+            ).Else(
+                NextValue(option_byte_index, option_byte_index + 1),
+                NextState(next_state)
+            )
+
+        def finish_option_value():
+            return If(option_count == 1,
+                NextValue(option_count, 0),
+                NextValue(option_value_index, 0),
+                advance_option_byte("OPTION-CODE")
+            ).Else(
+                NextValue(option_count, option_count - 1),
+                NextValue(option_value_index, option_value_index + 1),
+                advance_option_byte("OPTION-VALUE")
+            )
 
         # Common FSM.
         # -----------
@@ -335,8 +390,9 @@ class LiteEthDHCPRX(LiteXModule):
                 If((udp_port.source.dst_port == DHCP_CLIENT_PORT) &
                    (udp_port.source.src_port == DHCP_SERVER_PORT) &
                    # Fixed header + magic_cookie + message_type.
-                   (udp_port.source.length > DHCP_FIXED_HEADER_LENGTH + 4 + 4),
+                   (udp_port.source.length >= DHCP_FIXED_HEADER_LENGTH + 4 + 4),
                     udp_port.source.ready.eq(0),
+                    NextValue(message_type_seen, 0),
                     NextState("HEADER")
                 ).Else(
                     NextState("DROP")
@@ -419,9 +475,25 @@ class LiteEthDHCPRX(LiteXModule):
             If(udp_port.source.valid,
                 If((udp_port.source.data[ 0: 8] == self.mac_address[ 8:16]) &
                    (udp_port.source.data[ 8:16] == self.mac_address[ 0: 8]),
-                    NextState("MAGIC-COOKIE"),
+                    NextValue(count, padding_len - 1),
+                    NextState("PADDING"),
                 ).Else(
                     NextState("DROP")
+                )
+            )
+        )
+        # Padding, includes:
+        #  - Client MAC padding.
+        #  - Server name (Unused).
+        #  - BOOT-FILE-NAME (Unused).
+        fsm.act("PADDING",
+            udp_port.source.ready.eq(1),
+            If(udp_port.source.valid,
+                NextValue(count, count - 1),
+                If(udp_port.source.last,
+                    NextState("ERROR")
+                ).Elif(count == 0,
+                    NextState("MAGIC-COOKIE")
                 )
             )
         )
@@ -432,28 +504,99 @@ class LiteEthDHCPRX(LiteXModule):
                    (udp_port.source.data[ 8:16] == 0x82) &
                    (udp_port.source.data[16:24] == 0x53) &
                    (udp_port.source.data[24:32] == 0x63),
-                   NextState("MESSAGE-TYPE")
-                )
-            )
-        )
-        fsm.act("MESSAGE-TYPE",
-            udp_port.source.ready.eq(1),
-            If(udp_port.source.valid,
-                # DHCP Message Type.
-                If((udp_port.source.data[ 0: 8] == 53) &
-                   (udp_port.source.data[ 8:16] ==  1),
-                    # DHCP Offer.
-                    If(udp_port.source.data[16:24] == 2,
-                        NextValue(self.type, DHCP_RX_OFFER),
-                        NextState("END")
-                    # DHCP Ack.
-                    ).Elif(udp_port.source.data[16:24] == 5,
-                        NextValue(self.type, DHCP_RX_ACK),
-                        NextState("END")
+                    NextState("OPTIONS-WORD")
+                ).Else(
+                    If(udp_port.source.last,
+                        NextState("ERROR")
                     ).Else(
                         NextState("DROP")
                     )
                 )
+            )
+        )
+        fsm.act("OPTIONS-WORD",
+            udp_port.source.ready.eq(1),
+            If(udp_port.source.valid,
+                NextValue(option_word, udp_port.source.data),
+                NextValue(option_last, udp_port.source.last),
+                NextValue(option_byte_index, 0),
+                NextState("OPTION-CODE")
+            )
+        )
+        fsm.act("OPTIONS-WORD-LENGTH",
+            udp_port.source.ready.eq(1),
+            If(udp_port.source.valid,
+                NextValue(option_word, udp_port.source.data),
+                NextValue(option_last, udp_port.source.last),
+                NextValue(option_byte_index, 0),
+                NextState("OPTION-LENGTH")
+            )
+        )
+        fsm.act("OPTIONS-WORD-VALUE",
+            udp_port.source.ready.eq(1),
+            If(udp_port.source.valid,
+                NextValue(option_word, udp_port.source.data),
+                NextValue(option_last, udp_port.source.last),
+                NextValue(option_byte_index, 0),
+                NextState("OPTION-VALUE")
+            )
+        )
+        fsm.act("OPTION-CODE",
+            If(option_byte == DHCP_OPTTYP_PAD,
+                advance_option_byte("OPTION-CODE",
+                    packet_end=[If(message_type_seen, NextState("PRESENT")).Else(NextState("ERROR"))])
+            ).Elif(option_byte == DHCP_OPTTYP_END,
+                If(message_type_seen,
+                    If(option_last,
+                        NextState("PRESENT")
+                    ).Else(
+                        NextState("END")
+                    )
+                ).Else(
+                    NextState("ERROR")
+                )
+            ).Else(
+                NextValue(option_code, option_byte),
+                advance_option_byte("OPTION-LENGTH")
+            )
+        )
+        fsm.act("OPTION-LENGTH",
+            If((option_code == DHCP_OPTTYP_MESSAGE_TYPE) & (option_byte != 0x01),
+                NextState("ERROR")
+            ).Else(
+                NextValue(option_length, option_byte),
+                NextValue(option_count, option_byte),
+                NextValue(option_value_index, 0),
+                If(option_byte == 0,
+                    advance_option_byte("OPTION-CODE")
+                ).Else(
+                    advance_option_byte("OPTION-VALUE")
+                )
+            )
+        )
+        fsm.act("OPTION-VALUE",
+            If(option_code == DHCP_OPTTYP_MESSAGE_TYPE,
+                If(option_byte == DHCP_OPTVAL_MESSAGE_TYPE_OFFER,
+                    NextValue(self.type, DHCP_RX_OFFER),
+                    NextValue(message_type_seen, 1),
+                    finish_option_value()
+                ).Elif(option_byte == DHCP_OPTVAL_MESSAGE_TYPE_ACK,
+                    NextValue(self.type, DHCP_RX_ACK),
+                    NextValue(message_type_seen, 1),
+                    finish_option_value()
+                ).Else(
+                    NextState("ERROR")
+                )
+            ).Else(
+                If((option_code == DHCP_OPTTYP_SRV_IP_ADDRESS) & (option_length == 4),
+                    Case(option_value_index, {
+                        0 : NextValue(self.server_ip_address[24:32], option_byte),
+                        1 : NextValue(self.server_ip_address[16:24], option_byte),
+                        2 : NextValue(self.server_ip_address[ 8:16], option_byte),
+                        3 : NextValue(self.server_ip_address[ 0: 8], option_byte),
+                    })
+                ),
+                finish_option_value()
             )
         )
         fsm.act("END",
@@ -462,11 +605,14 @@ class LiteEthDHCPRX(LiteXModule):
                 NextState("PRESENT")
             )
         )
+        fsm.act("ERROR",
+            NextValue(self.error, 1),
+            NextState("PRESENT")
+        )
         fsm.act("DROP",
             udp_port.source.ready.eq(1),
             If(udp_port.source.valid & udp_port.source.last,
-                NextValue(self.error, 1),
-                NextState("PRESENT")
+                NextState("ERROR")
             )
         )
         fsm.act("PRESENT",
@@ -490,7 +636,7 @@ class LiteEthDHCP(LiteXModule):
 
         # Parameters
         self.mac_address = Signal(48) # i
-        self.ip_address  = Signal(48) # o
+        self.ip_address  = Signal(32) # o
 
         # # #
 
@@ -541,7 +687,7 @@ class LiteEthDHCP(LiteXModule):
         )
         fsm.act("RECEIVE-OFFER",
             rx.ack.eq(1),
-            If(rx.present & (rx.type == DHCP_RX_OFFER),
+            If(rx.present & ~rx.error & (rx.type == DHCP_RX_OFFER),
                 NextValue(offered_ip_address, rx.offered_ip_address),
                 NextValue(server_ip_address,  rx.server_ip_address),
                 NextState("SEND-REQUEST")
@@ -558,7 +704,7 @@ class LiteEthDHCP(LiteXModule):
         )
         fsm.act("RECEIVE-ACK",
             rx.ack.eq(1),
-            If(rx.present & (rx.type == DHCP_RX_ACK),
+            If(rx.present & ~rx.error & (rx.type == DHCP_RX_ACK),
                 NextValue(self.ip_address, offered_ip_address),
                 NextState("IDLE")
             )
