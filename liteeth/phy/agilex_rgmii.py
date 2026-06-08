@@ -37,23 +37,28 @@ def io_obuf(i, o):
         )
     ]
 
-def io_ibuf(i, o):
+def ddio_in(clk, i, o1, o2):
     return [
-        Instance("tennm_ph2_io_ibuf",
-            p_bus_hold        = "BUS_HOLD_OFF",
-            p_buffer_usage    = "REGULAR",
-            p_equalization    = "EQUALIZATION_OFF",
-            p_io_standard     = "IO_STANDARD_IOSTD_OFF",
-            p_rzq_id          = "RZQ_ID_RZQ0",
-            p_schmitt_trigger = "SCHMITT_TRIGGER_OFF",
-            p_termination     = "TERMINATION_RT_OFF",
-            p_toggle_speed    = "TOGGLE_SPEED_SLOW",
-            p_usage_mode      = "USAGE_MODE_GPIO",
-            p_vref            = "VREF_OFF",
-            p_weak_pull_down  = "WEAK_PULL_DOWN_OFF",
-            p_weak_pull_up    = "WEAK_PULL_UP_OFF",
-            i_i               = i,
-            o_o               = o,
+        Instance("tennm_ph2_ddio_in",
+            p_mode      = "MODE_DDR_W_DLY",
+            p_sclr_ena  = "SCLR_ENA_NONE",
+            p_asclr_ena = "ASCLR_ENA_NONE",
+            i_ena       = Constant(1, 1),
+            i_areset    = Constant(1, 1),
+            i_sreset    = Constant(0, 1),
+            i_datain    = i,
+            o_regoutlo  = o1,
+            o_regouthi  = o2,
+            i_clk       = clk,
+        )
+    ]
+
+def pipe_in(clk, i, o):
+    return [
+        Instance("tennm_p2c_pipe_reg",
+            i_d   = i,
+            i_clk = clk,
+            o_q   = o,
         )
     ]
 
@@ -79,8 +84,6 @@ class LiteEthPHYRGMIITX(LiteXModule):
         ]
 
         for i in range(4):
-            data_d = Signal()
-            self.sync += data_d.eq(sink.data[i + 4])
             self.specials += [
                 DDROutput(
                     clk = ClockSignal("eth_tx"),
@@ -99,37 +102,71 @@ class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads):
         self.source    = source = stream.Endpoint(eth_phy_description(8))
 
-        # Unused but required to avoid fitter fails with unused tennm_ph2_ddio_in outputs.
-        self.rx_ctl = CSRStatus(description="RX control status.")
-
         # # #
 
-        rx_ctl_ibuf  = Signal()
-        rx_ctl       = Signal()
+        rx_ctl_pipe = Signal(2)
+        rx_ctl_raw  = Signal(2)
+        rx_ctl      = Signal()
 
-        rx_data_ibuf = Signal(4)
-        rx_data      = Signal(8)
+        rx_data_raw = Signal(8)
+        rx_data     = Signal(8)
 
         self.specials += [
-            io_ibuf(pads.rx_ctl, rx_ctl_ibuf),
-            DDRInput(
-                clk = ClockSignal("eth_rx"),
-                i   = rx_ctl_ibuf,
-                o1  = rx_ctl,
-                o2  = self.rx_ctl.status,
-            ),
+            ddio_in(ClockSignal("eth_rx"), pads.rx_ctl,    rx_ctl_pipe[0], rx_ctl_pipe[1]),
+            pipe_in(ClockSignal("eth_rx"), rx_ctl_pipe[0], rx_ctl_raw[0]),
+            pipe_in(ClockSignal("eth_rx"), rx_ctl_pipe[1], rx_ctl_raw[1]),
         ]
 
         for i in range(4):
+            rx_data_pipe = Signal(2)
             self.specials += [
-                io_ibuf(pads.rx_data[i], rx_data_ibuf[i]),
-                DDRInput(
-                    clk = ClockSignal("eth_rx"),
-                    i   = rx_data_ibuf[i],
-                    o1  = rx_data[i],
-                    o2  = rx_data[i+4],
-                ),
+                ddio_in(ClockSignal("eth_rx"), pads.rx_data[i], rx_data_pipe[0], rx_data_pipe[1]),
+                pipe_in(ClockSignal("eth_rx"), rx_data_pipe[0], rx_data_raw[i]),
+                pipe_in(ClockSignal("eth_rx"), rx_data_pipe[1], rx_data_raw[i+4]),
             ]
+
+        rx_ctl_raw_d  = Signal(2)
+        rx_data_raw_d = Signal(8)
+        rx_align      = Signal()
+        rx_active     = Signal()
+        self.sync += [
+            rx_ctl_raw_d.eq(rx_ctl_raw),
+            rx_data_raw_d.eq(rx_data_raw)
+        ]
+
+        start_aligned   = Signal()
+        start_unaligned = Signal()
+        self.comb += [
+            start_aligned.eq(~rx_active &  rx_ctl_raw[0] &  rx_ctl_raw[1]),
+            start_unaligned.eq(~rx_active &  rx_ctl_raw[0] & ~rx_ctl_raw[1]),
+        ]
+
+        self.comb += [
+            rx_data.eq(rx_data_raw),
+            rx_ctl.eq(rx_ctl_raw[0]),
+            If(rx_align,
+                rx_data.eq(Cat(rx_data_raw_d[4:8], rx_data_raw[0:4])),
+                rx_ctl.eq(rx_ctl_raw_d[1]),
+            ),
+            If(start_aligned,
+                rx_data.eq(rx_data_raw),
+                rx_ctl.eq(rx_ctl_raw[0]),
+            ),
+            If(start_unaligned,
+                rx_ctl.eq(0),
+            ),
+        ]
+
+        self.sync += [
+            rx_active.eq(rx_ctl),
+            If(~rx_active,
+                If(start_aligned,
+                    rx_align.eq(0),
+                ).Elif(start_unaligned,
+                    rx_align.eq(1),
+                )
+            ),
+        ]
 
         rx_ctl_d = Signal()
         self.sync += rx_ctl_d.eq(rx_ctl)
@@ -147,6 +184,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
 class LiteEthPHYRGMIICRG(LiteXModule):
     def __init__(self, platform, clock_pads, pads, ref_tx_clk,
         with_hw_init_reset = True,
+        with_phy_reset     = True,
         tx_delay           = 2e-9,
         hw_reset_cycles    = 256
         ):
@@ -200,7 +238,11 @@ class LiteEthPHYRGMIICRG(LiteXModule):
         else:
             self.comb += reset.eq(self._reset.storage)
         if hasattr(pads, "rst_n"):
-            self.comb += pads.rst_n.eq(~reset)
+            if with_phy_reset:
+                self.comb += pads.rst_n.eq(~reset)
+            else:
+                self.comb += pads.rst_n.eq(1)
+
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
@@ -213,12 +255,14 @@ class LiteEthPHYRGMII(LiteXModule):
 
     def __init__(self, platform, clock_pads, pads, ref_tx_clk,
         with_hw_init_reset = True,
+        with_phy_reset     = True,
         tx_delay           = 2e-9,
         rx_delay           = 2e-9,
         hw_reset_cycles    = 256
         ):
         self.crg      = LiteEthPHYRGMIICRG(platform, clock_pads, pads, ref_tx_clk,
             with_hw_init_reset = with_hw_init_reset,
+            with_phy_reset     = with_phy_reset,
             tx_delay           = tx_delay,
             hw_reset_cycles    = hw_reset_cycles,
         )
