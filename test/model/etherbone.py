@@ -6,7 +6,7 @@
 
 import math
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 from litex.tools.remote.etherbone import *
 
 from liteeth.common import *

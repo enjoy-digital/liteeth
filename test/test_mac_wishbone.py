@@ -10,7 +10,7 @@ import unittest
 from migen import *
 
 from litex.soc.interconnect import wishbone
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 from litex.gen.common import log2_int
 

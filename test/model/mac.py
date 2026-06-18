@@ -7,7 +7,7 @@
 import math
 import binascii
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 from liteeth.common import *
 

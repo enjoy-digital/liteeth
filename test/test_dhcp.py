@@ -8,7 +8,7 @@ import unittest
 
 from litex.gen.sim import *
 from litex.soc.interconnect import stream
-from litex.soc.interconnect.stream_sim import Packet, PacketStreamer
+from test.stream_helpers import Packet, PacketStreamer
 
 from liteeth.common import *
 from liteeth.core.dhcp import *

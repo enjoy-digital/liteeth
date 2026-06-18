@@ -4,7 +4,7 @@
 # Copyright (c) 2015-2019 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 from liteeth.common import *
 

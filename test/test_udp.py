@@ -9,7 +9,7 @@ import unittest
 from migen import *
 
 from litex.soc.interconnect import wishbone
-from litex.soc.interconnect.stream_sim import *
+from test.stream_helpers import *
 
 from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
