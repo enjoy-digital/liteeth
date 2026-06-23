@@ -80,6 +80,7 @@ ipv4_header_fields = {
     "version":        HeaderField(0,  4,  4),
     "total_length":   HeaderField(2,  0, 16),
     "identification": HeaderField(4,  0, 16),
+    "dont_fragment":  HeaderField(6,  6,  1),
     "ttl":            HeaderField(8,  0,  8),
     "protocol":       HeaderField(9,  0,  8),
     "checksum":       HeaderField(10, 0, 16),
