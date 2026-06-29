@@ -15,13 +15,13 @@ from litex.soc.interconnect.csr import *
 from litex.soc.interconnect.csr_eventmanager import *
 
 from liteeth.common import *
+from liteeth.mac.packet import LiteEthMACPacketWriter, LiteEthMACPacketReader
 
 # MAC SRAM Writer ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMWriter(LiteXModule):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None, eth_mtu=eth_mtu_default):
         # Endpoint / Signals.
-        self.sink      = sink = stream.Endpoint(eth_phy_description(dw))
         self.crc_error = Signal()
 
         # Parameters Check / Compute.
@@ -47,27 +47,13 @@ class LiteEthMACSRAMWriter(LiteXModule):
 
         # # #
 
-        write   = Signal()
-        errors  = self._errors.status
+        # Packet frontend.
+        self.packet = packet = LiteEthMACPacketWriter(dw, depth, eth_mtu=eth_mtu, timestamp=timestamp)
+        self.sink = packet.sink
+        self.comb += packet.source.ready.eq(1),
 
-        slot       = Signal(slotbits)
-        length     = Signal(lengthbits)
-        length_inc = Signal(4)
-
-        # Sink is already ready: packets are dropped when no slot is available.
-        sink.ready.reset = 1
-
-        # Decode Length increment from from last_be.
-        self.comb += Case(sink.last_be, {
-            0b00000001 : length_inc.eq(1),
-            0b00000010 : length_inc.eq(2),
-            0b00000100 : length_inc.eq(3),
-            0b00001000 : length_inc.eq(4),
-            0b00010000 : length_inc.eq(5),
-            0b00100000 : length_inc.eq(6),
-            0b01000000 : length_inc.eq(7),
-            "default"  : length_inc.eq(dw//8)
-        })
+        errors = self._errors.status
+        slot   = Signal(slotbits)
 
         # Status FIFO.
         stat_fifo_layout = [("slot", slotbits), ("length", lengthbits)]
@@ -75,76 +61,29 @@ class LiteEthMACSRAMWriter(LiteXModule):
             stat_fifo_layout += [("timestamp", timestampbits)]
         self.stat_fifo = stat_fifo = stream.SyncFIFO(stat_fifo_layout, nslots)
 
-        # FSM.
-        self.fsm = fsm = FSM(reset_state="WRITE")
-        fsm.act("WRITE",
-            If(sink.valid,
-                If(stat_fifo.sink.ready,
-                    write.eq(1),
-                    NextValue(length, length + length_inc),
-                    If(length >= self.eth_mtu,
-                         NextState("DISCARD-REMAINING")
-                    ),
-                    If(sink.last,
-                        If((sink.error & sink.last_be) != 0,
-                            NextState("DISCARD")
-                        ).Else(
-                            NextState("TERMINATE")
-                        )
-                    )
-                ).Else(
-                    NextValue(errors, errors + 1),
-                    NextState("DISCARD-ALL")
-                )
-            )
-        )
-        fsm.act("DISCARD-REMAINING",
-            If(sink.valid & sink.last,
-                If((sink.error & sink.last_be) != 0,
-                    NextState("DISCARD")
-                ).Else(
-                    NextState("TERMINATE")
-                )
-            )
-        )
-        fsm.act("DISCARD-ALL",
-            If(sink.valid & sink.last,
-                If((sink.last_be) != 0,
-                    NextState("DISCARD")
-                ).Else(
-                    NextValue(length, 0),
-                    NextState("WRITE")
-                )
-            )
-        )
-        fsm.act("DISCARD",
-            NextValue(length, 0),
-            NextState("WRITE")
-        )
-        fsm.act("TERMINATE",
-            stat_fifo.sink.valid.eq(1),
-            stat_fifo.sink.slot.eq(slot),
-            stat_fifo.sink.length.eq(length),
-            NextValue(length, 0),
-            NextValue(slot, slot + 1),
-            NextState("WRITE")
-        )
-
         self.comb += [
+            packet.enable.eq(stat_fifo.sink.ready),
+            stat_fifo.sink.valid.eq(packet.done),
+            stat_fifo.sink.slot.eq(slot),
+            stat_fifo.sink.length.eq(packet.length),
             stat_fifo.source.ready.eq(self.ev.available.clear),
             self.ev.available.trigger.eq(stat_fifo.source.valid),
             self._slot.status.eq(stat_fifo.source.slot),
             self._length.status.eq(stat_fifo.source.length),
         ]
         if timestamp is not None:
-            # Latch Timestamp on start of packet.
-            self.sync += If(length == 0, stat_fifo.sink.timestamp.eq(timestamp))
             self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
+            self.comb += stat_fifo.sink.timestamp.eq(packet.timestamp)
+
+        self.sync += [
+            If(packet.drop, errors.eq(errors + 1)),
+            If(packet.done & stat_fifo.sink.ready, slot.eq(slot + 1)),
+        ]
 
         # Memory.
         wr_slot = slot
-        wr_addr = length[int(math.log2(dw//8)):]
-        wr_data = Signal(len(sink.data))
+        wr_addr = packet.offset[int(math.log2(dw//8)):]
+        wr_data = Signal(len(packet.source.data))
 
         # Create a Memory per Slot.
         mems  = [None] * nslots
@@ -156,7 +95,7 @@ class LiteEthMACSRAMWriter(LiteXModule):
         self.mems = mems
 
         # Endianness Handling.
-        self.comb += wr_data.eq({"big": reverse_bytes(sink.data), "little": sink.data}[endianness])
+        self.comb += wr_data.eq({"big": reverse_bytes(packet.source.data), "little": packet.source.data}[endianness])
 
         # Connect Memory ports.
         cases = {}
@@ -167,15 +106,12 @@ class LiteEthMACSRAMWriter(LiteXModule):
             ]
             cases[n] = [port.we.eq(1)]
 
-        self.comb += If(sink.valid & write, Case(wr_slot, cases))
+        self.comb += If(packet.source.valid & packet.source.ready, Case(wr_slot, cases))
 
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(LiteXModule):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
-        # Endpoint / Signals.
-        self.source = source = stream.Endpoint(eth_phy_description(dw))
-
         # Parameters Check / Compute.
         assert dw in [8, 16, 32, 64]
         slotbits   = max(int(math.log2(nslots)), 1)
@@ -201,8 +137,9 @@ class LiteEthMACSRAMReader(LiteXModule):
 
         # # #
 
-        read   = Signal()
-        length = Signal(lengthbits)
+        # Packet frontend.
+        self.packet = packet = LiteEthMACPacketReader(dw, depth, timestamp=timestamp)
+        self.source = source = packet.source
 
         # Command FIFO.
         cmd_fifo = stream.SyncFIFO([("slot", slotbits), ("length", lengthbits)], nslots)
@@ -224,60 +161,48 @@ class LiteEthMACSRAMReader(LiteXModule):
             self.comb += self._timestamp_slot.status.eq(stat_fifo.source.slot)
             self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
 
-        # Encode Length to last_be.
-        length_lsb = cmd_fifo.source.length[:int(math.log2(dw/8))] if (dw != 8) else 0
-        self.comb += If(source.last,
-            Case(length_lsb, {
-                1         : source.last_be.eq(0b00000001),
-                2         : source.last_be.eq(0b00000010),
-                3         : source.last_be.eq(0b00000100),
-                4         : source.last_be.eq(0b00001000),
-                5         : source.last_be.eq(0b00010000),
-                6         : source.last_be.eq(0b00100000),
-                7         : source.last_be.eq(0b01000000),
-                "default" : source.last_be.eq(2**(dw//8 - 1)),
-            })
-        )
+        self.comb += packet.length.eq(cmd_fifo.source.length)
+
+        # Memory.
+        read      = Signal()
+        rd_slot   = cmd_fifo.source.slot
+        rd_offset = Signal(lengthbits)
+        rd_data   = Signal(len(source.data))
+
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(cmd_fifo.source.valid,
+            If(cmd_fifo.source.valid & packet.idle,
+                packet.enable.eq(1),
                 read.eq(1),
-                NextValue(length, dw//8),
+                NextValue(rd_offset, dw//8),
                 NextState("READ")
             )
         )
         fsm.act("READ",
-            source.valid.eq(1),
-            source.last.eq(length >= cmd_fifo.source.length),
-            If(source.ready,
+            packet.sink.valid.eq(1),
+            packet.sink.last.eq(rd_offset >= cmd_fifo.source.length),
+            If(packet.done,
+                NextState("TERMINATE")
+            ).Elif(packet.sink.ready & ~packet.sink.last,
                 read.eq(1),
-                NextValue(length, length + dw//8),
-                If(source.last,
-                    NextState("TERMINATE")
-                )
+                NextValue(rd_offset, rd_offset + dw//8),
             )
         )
         fsm.act("TERMINATE",
-            NextValue(length, 0),
+            NextValue(rd_offset, 0),
             self.ev.done.trigger.eq(1),
             cmd_fifo.source.ready.eq(1),
             NextState("IDLE")
         )
 
         if timestamp is not None:
-            # Latch Timestamp on start of outgoing packet.
-            self.sync += If(length == 0, stat_fifo.sink.timestamp.eq(timestamp))
-            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("END"))
+            self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("TERMINATE"))
+            self.comb += stat_fifo.sink.timestamp.eq(packet.timestamp)
             self.comb += stat_fifo.sink.slot.eq(cmd_fifo.source.slot)
             # Trigger event when Status FIFO has contents (Override FSM assignment).
             self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid)
-
-        # Memory.
-        rd_slot = cmd_fifo.source.slot
-        rd_addr = Signal(lengthbits)
-        rd_data = Signal(len(source.data))
 
         # Create a Memory per Slot.
         mems    = [None]*nslots
@@ -293,14 +218,14 @@ class LiteEthMACSRAMReader(LiteXModule):
         for n, port in enumerate(ports):
             self.comb += [
                 port.re.eq(read),
-                port.adr.eq(length[int(math.log2(dw//8)):]),
+                port.adr.eq(rd_offset[int(math.log2(dw//8)):])
             ]
             cases[n] = [rd_data.eq(port.dat_r)]
 
         self.comb += Case(rd_slot, cases)
 
         # Endianness Handling.
-        self.comb += source.data.eq({"big" : reverse_bytes(rd_data), "little": rd_data}[endianness])
+        self.comb += packet.sink.data.eq({"big" : reverse_bytes(rd_data), "little": rd_data}[endianness])
 
 # MAC SRAM -----------------------------------------------------------------------------------------
 

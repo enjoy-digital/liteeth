@@ -175,6 +175,13 @@ def eth_phy_description(dw):
     ]
     return EndpointDescription(payload_layout)
 
+# Packet
+def eth_packet_description(dw):
+    payload_layout = [
+        ("data", dw),
+    ]
+    return EndpointDescription(payload_layout)
+
 # MAC
 def eth_mac_description(dw):
     payload_layout = mac_header.get_layout() + [
