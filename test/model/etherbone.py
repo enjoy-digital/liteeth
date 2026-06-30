@@ -31,25 +31,30 @@ class Etherbone(Module):
 
         udp.set_etherbone_callback(self.callback)
 
-    def send(self, packet):
-        packet.encode()
+    def send(self, packet, target_ip=0x12345678):
+        if not packet.encoded:
+            packet.encode()
         if self.debug:
             print_etherbone(">>>>>>>>")
             print_etherbone(packet)
-        udp_packet = udp.UDPPacket(packet)
+        udp_packet = udp.UDPPacket(packet.bytes)
         udp_packet.src_port = 0x1234 # FIXME
         udp_packet.dst_port = 0x1234 # FIXME
-        udp_packet.length   = len(packet)
+        udp_packet.length   = len(packet.bytes) + udp_header.length
         udp_packet.checksum = 0
-        self.udp.send(udp_packet)
+        self.udp.send(udp_packet, target_ip=target_ip)
 
-    def receive(self):
+    def receive(self, timeout=None):
         self.rx_packet = EtherbonePacket()
+        cycles = 0
         while not self.rx_packet.done:
+            if timeout is not None and cycles >= timeout:
+                break
+            cycles += 1
             yield
 
     def callback(self, packet):
-        packet = EtherbonePacket(packet)
+        packet = EtherbonePacket(init=bytes(packet))
         packet.decode()
         if self.debug:
             print_etherbone("<<<<<<<<")

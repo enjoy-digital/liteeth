@@ -1,126 +1,159 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2015-2018 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2015-2026 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 import unittest
 
-from migen import *
-
-from litex.soc.interconnect import wishbone
-from test.stream_helpers import *
+from litex.gen import *
+from litex.gen.sim import *
+from litex.soc.interconnect import stream, wishbone
 
 from liteeth.common import *
-from liteeth.core import LiteEthUDPIPCore
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
-from test.model import phy, mac, arp, ip, udp, etherbone
-
-from litex.gen.sim import *
+from test.model import etherbone
+from test.stream_helpers import Packet, PacketLogger, PacketStreamer
 
 # Constants ----------------------------------------------------------------------------------------
 
-ip_address  = 0x12345678
-mac_address = 0x12345678abcd
+ip_address = 0x12345678
+udp_port   = 0x1234
+
+# Helpers ------------------------------------------------------------------------------------------
+
+class UDPPort:
+    def __init__(self, dw):
+        self.sink   = stream.Endpoint(eth_udp_user_description(dw))
+        self.source = stream.Endpoint(eth_udp_user_description(dw))
+
+
+class UDPCrossbar:
+    def __init__(self, dw):
+        self.dw   = dw
+        self.port = UDPPort(dw)
+
+    def get_port(self, udp_port, dw=8, cd="sys", depth=None):
+        assert dw == self.dw
+        return self.port
+
+
+class UDP:
+    def __init__(self, dw):
+        self.crossbar = UDPCrossbar(dw)
+
+
+def encode_packet(packet):
+    if not packet.encoded:
+        packet.encode()
+    return Packet(packet.bytes)
+
+
+def decode_packet(packet):
+    packet = etherbone.EtherbonePacket(init=bytes(packet))
+    packet.decode()
+    return packet
 
 # DUT ----------------------------------------------------------------------------------------------
 
 class DUT(LiteXModule):
-    def __init__(self, eth_mtu=eth_mtu_default):
-        self.phy_model       = phy.PHY(8, debug=False)
-        self.mac_model       = mac.MAC(self.phy_model, debug=False, loopback=False)
-        self.arp_model       = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
-        self.ip_model        = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
-        self.udp_model       = udp.UDP(self.ip_model, ip_address, debug=False, loopback=False)
-        self.etherbone_model = etherbone.Etherbone(self.udp_model, debug=False)
-
-        self.core      = LiteEthUDPIPCore(self.phy_model, mac_address, ip_address, 100000, eth_mtu=eth_mtu)
-        self.etherbone = LiteEthEtherbone(self.core.udp, 0x1234)
+    def __init__(self):
+        self.udp       = UDP(32)
+        self.etherbone = LiteEthEtherbone(self.udp, udp_port, buffer_depth=8)
 
         self.sram         = wishbone.SRAM(1024)
         self.interconnect = wishbone.InterconnectPointToPoint(self.etherbone.wishbone.bus, self.sram.bus)
 
-# Genrator -----------------------------------------------------------------------------------------
-
-def main_generator(dut):
-    test_probe  = True
-    test_writes = True
-    test_reads  = True
-
-    # test probe
-    if test_probe:
-        packet = etherbone.EtherbonePacket()
-        packet.pf = 1
-        dut.etherbone_model.send(packet)
-        yield from dut.etherbone_model.receive()
-        print("probe: " + str(bool(dut.etherbone_model.rx_packet.pr)))
-
-    for i in range(2):
-        # test writes
-        if test_writes:
-            writes_datas = [j for j in range(4)]
-            writes = etherbone.EtherboneWrites(base_addr=0x1000, datas=writes_datas)
-            record = etherbone.EtherboneRecord()
-            record.writes      = writes
-            record.reads       = None
-            record.bca         = 0
-            record.rca         = 0
-            record.rff         = 0
-            record.cyc         = 0
-            record.wca         = 0
-            record.wff         = 0
-            record.byte_enable = 0xf
-            record.wcount      = len(writes_datas)
-            record.rcount      = 0
-
-            packet = etherbone.EtherbonePacket()
-            packet.records = [record]
-            dut.etherbone_model.send(packet)
-            for i in range(256):
-                yield
-
-        # test reads
-        if test_reads:
-            reads_addrs = [0x1000 + 4*j for j in range(4)]
-            reads = etherbone.EtherboneReads(base_ret_addr=0x1000, addrs=reads_addrs)
-            record = etherbone.EtherboneRecord()
-            record.writes      = None
-            record.reads       = reads
-            record.bca         = 0
-            record.rca         = 0
-            record.rff         = 0
-            record.cyc         = 0
-            record.wca         = 0
-            record.wff         = 0
-            record.byte_enable = 0xf
-            record.wcount      = 0
-            record.rcount      = len(reads_addrs)
-
-            packet = etherbone.EtherbonePacket()
-            packet.records = [record]
-            dut.etherbone_model.send(packet)
-            yield from dut.etherbone_model.receive()
-            loopback_writes_datas = []
-            loopback_writes_datas = dut.etherbone_model.rx_packet.records.pop().writes.get_datas()
-
-            # check resultss
-            s, l, e = check(writes_datas, loopback_writes_datas)
-            print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+        self.streamer = PacketStreamer(eth_udp_user_description(32), byte_data=True)
+        self.logger   = PacketLogger(eth_udp_user_description(32), byte_data=True)
+        udp_port_endpoint = self.udp.crossbar.port
+        self.comb += [
+            self.streamer.source.connect(udp_port_endpoint.source),
+            udp_port_endpoint.sink.connect(self.logger.sink),
+        ]
 
 # Test Etherbone -----------------------------------------------------------------------------------
 
 class TestEtherbone(unittest.TestCase):
-    def test_etherbone(self):
+    def send(self, dut, packet):
+        packet = encode_packet(packet)
+        yield dut.streamer.source.src_port.eq(udp_port)
+        yield dut.streamer.source.dst_port.eq(udp_port)
+        yield dut.streamer.source.ip_address.eq(ip_address)
+        yield dut.streamer.source.length.eq(len(packet))
+        yield from dut.streamer.send_blocking(packet)
+
+    def receive(self, dut):
+        yield from dut.logger.receive(timeout=256)
+        self.assertTrue(dut.logger.packet.done)
+        return decode_packet(dut.logger.packet)
+
+    def do_probe(self, dut):
+        packet = etherbone.EtherbonePacket()
+        packet.pf = 1
+        packet.encode()
+        packet.bytes += bytes([0x00]*4)
+        yield from self.send(dut, packet)
+
+        response = yield from self.receive(dut)
+        self.assertEqual(response.pr, 1)
+
+    def do_writes(self, dut, datas):
+        for i in range(len(datas)):
+            yield dut.sram.mem[i].eq(0)
+
+        writes = etherbone.EtherboneWrites(base_addr=0x0000, datas=datas)
+        record = etherbone.EtherboneRecord()
+        record.writes = writes
+
+        packet = etherbone.EtherbonePacket()
+        packet.records = [record]
+        yield from self.send(dut, packet)
+
+        for _ in range(64):
+            values = []
+            for i in range(len(datas)):
+                values.append((yield dut.sram.mem[i]))
+            if values == datas:
+                break
+            yield
+
+        values = []
+        for i in range(len(datas)):
+            values.append((yield dut.sram.mem[i]))
+        self.assertEqual(values, datas)
+
+    def do_reads(self, dut, datas):
+        for i, data in enumerate(datas):
+            yield dut.sram.mem[i].eq(data)
+
+        reads = etherbone.EtherboneReads(
+            base_ret_addr = 0x0000,
+            addrs         = [4*i for i in range(len(datas))])
+        record = etherbone.EtherboneRecord()
+        record.reads = reads
+
+        packet = etherbone.EtherbonePacket()
+        packet.records = [record]
+        yield from self.send(dut, packet)
+
+        response = yield from self.receive(dut)
+        self.assertEqual(len(response.records), 1)
+        self.assertIsNotNone(response.records[0].writes)
+        self.assertEqual(response.records[0].writes.get_datas(), datas)
+
+    def main_generator(self, dut):
+        yield from self.do_probe(dut)
+        yield from self.do_writes(dut, [0x12345678])
+        yield from self.do_writes(dut, [0x0a000000 | i for i in range(4)])
+        yield from self.do_reads(dut, [0x87654321])
+        yield from self.do_reads(dut, [0x0b000000 | i for i in range(4)])
+
+    def test_probe_write_read(self):
         dut = DUT()
-        generators = {
-            "sys"    : [main_generator(dut)],
-            "eth_tx" : [dut.phy_model.phy_sink.generator(), dut.phy_model.generator()],
-            "eth_rx" : [dut.phy_model.phy_source.generator()]
-        }
-        clocks = {
-            "sys":    10,
-            "eth_rx": 10,
-            "eth_tx": 10,
-        }
-        #run_simulation(dut, generators, clocks, vcd_name="sim.vcd") # FIXME: hanging
+        run_simulation(dut, [
+            self.main_generator(dut),
+            dut.streamer.generator(),
+            dut.logger.generator(),
+        ])

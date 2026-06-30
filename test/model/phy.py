@@ -18,13 +18,13 @@ def print_phy(s):
 
 class PHYSource(PacketStreamer):
     def __init__(self, dw):
-        PacketStreamer.__init__(self, eth_phy_description(dw))
+        PacketStreamer.__init__(self, eth_phy_description(dw), byte_data=True)
 
 # PHY Sink -----------------------------------------------------------------------------------------
 
 class PHYSink(PacketLogger):
     def __init__(self, dw):
-        PacketLogger.__init__(self, eth_phy_description(dw))
+        PacketLogger.__init__(self, eth_phy_description(dw), byte_data=True)
 
 # PHY ----------------------------------------------------------------------------------------------
 
