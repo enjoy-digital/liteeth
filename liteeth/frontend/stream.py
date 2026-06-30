@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from litex.gen import *
+from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 
@@ -34,42 +35,45 @@ class LiteEthStream2UDPTX(LiteXModule):
                 source.length.eq(data_width // 8)
             ]
         else:
-            level   = Signal(max=fifo_depth+1)
             counter = Signal(max=fifo_depth+1)
 
             _ip_address = Signal(32)
             _udp_port   = Signal(16)
 
-            self.fifo = fifo = stream.SyncFIFO([("data", data_width)], fifo_depth, buffered=True)
-            self.comb += sink.connect(fifo.sink)
+            packet_last   = Signal()
+            packet_full   = Signal()
+            packet_length = Signal(16)
+            source_active = Signal()
 
-            self.fsm = fsm = ResetInserter()(FSM(reset_state="IDLE"))
-            self.comb += fsm.reset.eq(~self.enable & ~source.valid)
-
-            fsm.act("IDLE",
-                NextValue(counter, 0),
-                NextValue(_ip_address, self.ip_address),
-                NextValue(_udp_port, self.udp_port),
-                # Send FIFO contents when:
-                # - We have a full packet:
-                If(fifo.sink.valid & fifo.sink.ready & fifo.sink.last,
-                    NextValue(level, fifo.level + 1), # +1 for level latency.
-                    NextState("SEND")
+            self.fifo = fifo = PacketFIFO(
+                layout         = stream.EndpointDescription(
+                    payload_layout = [("data", data_width)],
+                    param_layout   = [("length", 16)],
                 ),
-                # - Or when FIFO is full.
-                If(~fifo.sink.ready,
-                    NextValue(level, fifo_depth),
-                    NextState("SEND")
-                ),
+                payload_depth = fifo_depth,
+                param_depth   = fifo_depth,
+                buffered      = True,
             )
-            fsm.act("SEND",
-                source.valid.eq(1),
-                source.last.eq(counter == (level - 1)),
-                source.src_port.eq(_udp_port),
-                source.dst_port.eq(_udp_port),
-                source.ip_address.eq(_ip_address),
-                source.length.eq(level * (data_width//8)),
+
+            if fifo_depth > 0:
+                self.comb += packet_full.eq(counter == (fifo_depth - 1))
+
+            self.comb += [
+                packet_last.eq(sink.last | packet_full),
+                packet_length.eq((counter + 1) * (data_width//8)),
+
+                # Input.
+                sink.ready.eq(fifo.sink.ready),
+                fifo.sink.valid.eq(sink.valid),
+                fifo.sink.last.eq(packet_last),
+                fifo.sink.data.eq(sink.data),
+                fifo.sink.length.eq(packet_length),
+
+                # Output.
+                source.valid.eq(fifo.source.valid & (self.enable | source_active)),
+                fifo.source.ready.eq(source.ready & (self.enable | source_active)),
                 source.data.eq(fifo.source.data),
+                source.last.eq(fifo.source.last),
                 If(source.last,
                     source.last_be.eq({
                         64 : 0b10000000,
@@ -77,14 +81,29 @@ class LiteEthStream2UDPTX(LiteXModule):
                         16 : 0b10,
                         8  : 0b1
                     }[data_width])),
-                If(source.ready,
-                    fifo.source.ready.eq(1),
-                    NextValue(counter, counter + 1),
-                    If(source.last,
-                        NextState("IDLE")
+                source.src_port.eq(Mux(source_active, _udp_port, self.udp_port)),
+                source.dst_port.eq(Mux(source_active, _udp_port, self.udp_port)),
+                source.ip_address.eq(Mux(source_active, _ip_address, self.ip_address)),
+                source.length.eq(fifo.source.length),
+            ]
+
+            self.sync += [
+                If(sink.valid & sink.ready,
+                    If(packet_last,
+                        counter.eq(0)
+                    ).Else(
+                        counter.eq(counter + 1)
                     )
+                ),
+                If(fifo.source.valid & self.enable & ~source_active,
+                    source_active.eq(1),
+                    _ip_address.eq(self.ip_address),
+                    _udp_port.eq(self.udp_port),
+                ),
+                If(source.valid & source.ready & source.last,
+                    source_active.eq(0)
                 )
-            )
+            ]
 
     def add_csr(self):
         self._enable     = CSRStorage(1, description="Enable Module", reset=1)
