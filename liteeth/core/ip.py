@@ -94,7 +94,16 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 
 class LiteEthIPTX(LiteXModule):
-    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=True):
+    def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=True,
+        gateway_ip = None,
+        netmask    = None,
+    ):
+        ip_address = convert_ip(ip_address)
+        assert (gateway_ip is None) == (netmask is None)
+        if gateway_ip is not None:
+            gateway_ip = convert_ip(gateway_ip)
+            netmask    = convert_ip(netmask)
+
         self.sink   = sink   = stream.Endpoint(eth_ipv4_user_description(dw))
         self.source = source = stream.Endpoint(eth_mac_description(dw))
         self.target_unreachable = Signal()
@@ -154,7 +163,14 @@ class LiteEthIPTX(LiteXModule):
                 )
             )
         )
-        self.comb += arp_table.request.ip_address.eq(sink.ip_address)
+        if gateway_ip is not None:
+            self.comb += If((sink.ip_address & netmask) == (ip_address & netmask),
+                arp_table.request.ip_address.eq(sink.ip_address)
+            ).Else(
+                arp_table.request.ip_address.eq(gateway_ip)
+            )
+        else:
+            self.comb += arp_table.request.ip_address.eq(sink.ip_address)
         fsm.act("SEND_MAC_ADDRESS_REQUEST",
             arp_table.request.valid.eq(1),
             If(arp_table.request.valid & arp_table.request.ready,
@@ -264,8 +280,18 @@ class LiteEthIPRX(LiteXModule):
 # IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(LiteXModule):
-    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8):
-        self.tx = tx = LiteEthIPTX(mac_address, ip_address, arp_table, dw=dw)
+    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8,
+        gateway_ip = None,
+        netmask    = None,
+    ):
+        self.tx = tx = LiteEthIPTX(
+            mac_address = mac_address,
+            ip_address  = ip_address,
+            arp_table   = arp_table,
+            dw          = dw,
+            gateway_ip  = gateway_ip,
+            netmask     = netmask,
+        )
         self.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
         self.comb += [

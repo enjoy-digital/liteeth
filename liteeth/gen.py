@@ -603,6 +603,8 @@ class UDPCore(PHYCore):
             ip_address        = ip_address,
             clk_freq          = core_config["clk_freq"],
             dw                = data_width,
+            gateway_ip        = core_config.get("gateway_ip", None),
+            netmask           = core_config.get("netmask", None),
             with_sys_datapath = data_width in [16, 32],
             tx_cdc_depth      = tx_cdc_depth,
             tx_cdc_buffered   = tx_cdc_buffered,

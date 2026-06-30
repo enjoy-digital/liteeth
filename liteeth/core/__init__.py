@@ -31,6 +31,8 @@ class LiteEthIPCore(LiteXModule):
         interface         = "crossbar",
         endianness        = "big",
         eth_mtu           = eth_mtu_default,
+        gateway_ip        = None,
+        netmask           = None,
     ):
         # Parameters.
         # -----------
@@ -73,6 +75,8 @@ class LiteEthIPCore(LiteXModule):
             arp_table      = self.arp.table,
             with_broadcast = with_ip_broadcast,
             dw             = dw,
+            gateway_ip     = gateway_ip,
+            netmask        = netmask,
         )
         # ICMP (Optional).
         # ----------------
@@ -118,6 +122,8 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         interface         = "crossbar",
         endianness        = "big",
         eth_mtu           = eth_mtu_default,
+        gateway_ip        = None,
+        netmask           = None,
     ):
         # Parameters.
         # -----------
@@ -147,6 +153,8 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
             eth_mtu           = eth_mtu,
+            gateway_ip        = gateway_ip,
+            netmask           = netmask,
         )
         # UDP.
         # ----

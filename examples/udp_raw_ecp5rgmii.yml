@@ -19,6 +19,8 @@ core            : udp
 
 mac_address     : 0x10e2d5000000
 ip_address      : 172.30.0.1
+# gateway_ip    : 172.30.0.254
+# netmask       : 255.255.255.0
 
 tx_cdc_depth    : 16
 tx_cdc_buffered : True
