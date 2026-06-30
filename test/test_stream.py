@@ -376,7 +376,98 @@ class TestStream(unittest.TestCase):
 
 
 class TestStream2UDPTX(unittest.TestCase):
-    """Tests for LiteEthStream2UDPTX with FIFO (disable-mid-packet safety)."""
+    """Tests for LiteEthStream2UDPTX with FIFO."""
+
+    def _send_words(self, dut, words):
+        for data, last in words:
+            yield dut.sink.data.eq(data)
+            yield dut.sink.valid.eq(1)
+            yield dut.sink.last.eq(last)
+            yield
+            while not (yield dut.sink.ready):
+                yield
+        yield dut.sink.valid.eq(0)
+        yield dut.sink.last.eq(0)
+
+    def test_back_to_back_multibeat_packets(self):
+        data_width = 32
+        dut = LiteEthStream2UDPTX(
+            ip_address = 0xC0A80132,
+            udp_port   = 2342,
+            data_width = data_width,
+            fifo_depth = 8,
+        )
+
+        packets = [
+            [0xA000, 0xA001],
+            [0xB000, 0xB001],
+            [0xC000, 0xC001],
+        ]
+        results = []
+
+        def producer():
+            words = []
+            for packet in packets:
+                for n, word in enumerate(packet):
+                    words.append((word, n == (len(packet) - 1)))
+            yield from self._send_words(dut, words)
+            for _ in range(64):
+                yield
+
+        def consumer():
+            current = []
+            yield dut.source.ready.eq(1)
+            for _ in range(128):
+                if (yield dut.source.valid):
+                    current.append((yield dut.source.data))
+                    expected_length = len(packets[len(results)]) * (data_width//8)
+                    self.assertEqual((yield dut.source.length), expected_length)
+                    if (yield dut.source.last):
+                        self.assertEqual((yield dut.source.last_be), 0b1000)
+                        results.append(current)
+                        current = []
+                    else:
+                        self.assertEqual((yield dut.source.last_be), 0)
+                yield
+
+        run_simulation(dut, [producer(), consumer()])
+        self.assertEqual(results, packets)
+
+    def test_full_fifo_without_last_emits_packet(self):
+        data_width = 32
+        fifo_depth = 4
+        dut = LiteEthStream2UDPTX(
+            ip_address = 0xC0A80132,
+            udp_port   = 2342,
+            data_width = data_width,
+            fifo_depth = fifo_depth,
+        )
+
+        words   = [(0xD000 + n, 0) for n in range(fifo_depth)]
+        results = []
+
+        def producer():
+            yield from self._send_words(dut, words)
+            for _ in range(64):
+                yield
+
+        def consumer():
+            yield dut.source.ready.eq(1)
+            for _ in range(128):
+                if (yield dut.source.valid):
+                    results.append((
+                        (yield dut.source.data),
+                        (yield dut.source.last),
+                        (yield dut.source.length),
+                    ))
+                    if (yield dut.source.last):
+                        break
+                yield
+
+        run_simulation(dut, [producer(), consumer()])
+        self.assertEqual([r[0] for r in results], [w[0] for w in words])
+        self.assertEqual([r[1] for r in results], [0, 0, 0, 1])
+        self.assertEqual(results[-1][2], fifo_depth * (data_width//8))
 
     def _run_disable_mid_packet(self, disable_at_word):
         """Disable the TX module mid-packet and verify the packet completes
