@@ -379,6 +379,10 @@ class PHYCore(SoCMini):
                 pads       = ethphy_pads,
                 dw         = 64,
             )
+        elif phy in [liteeth_phys.LiteEthPHYETHERNET]:
+            assert self.clk_freq >= 40e6
+            ethphy = phy(
+                pads               = platform.request("raw_eth"))
         else:
             raise ValueError("Unsupported PHY")
         self.ethphy = ethphy
