@@ -57,6 +57,8 @@ class BenchSoC(SoCCore):
             udp        = self.ethcore_etherbone.udp,
             ip_address = "192.168.1.100",
             udp_port   = 6000,
+            # Match Etherbone's frontend clock domain so the UDP crossbar inserts CDC.
+            cd         = "etherbone",
         )
 
         # Leds -------------------------------------------------------------------------------------
