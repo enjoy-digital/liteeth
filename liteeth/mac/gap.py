@@ -13,26 +13,28 @@ from liteeth.common import *
 # MAC Gap ------------------------------------------------------------------------------------------
 
 class LiteEthMACGap(Module):
-    def __init__(self, dw):
+    def __init__(self, dw, cycles=None):
         self.sink   = sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 
         # # #
 
-        gap     = math.ceil(eth_interpacket_gap/(dw//8))
-        counter = Signal(max=gap, reset_less=True)
+        if cycles is None:
+            cycles = math.ceil(eth_interpacket_gap/(dw//8))
+        counter = Signal(max=2**len(cycles), reset_less=True) if isinstance(cycles, Signal) else \
+                  Signal(max=cycles + 1, reset_less=True)
 
         self.submodules.fsm = fsm = FSM(reset_state="COPY")
         fsm.act("COPY",
-            NextValue(counter, 0),
             sink.connect(source),
             If(sink.valid & sink.last & sink.ready,
+                NextValue(counter, cycles),
                 NextState("GAP")
             )
         )
         fsm.act("GAP",
-            NextValue(counter, counter + 1),
-            If(counter == (gap-1),
+            NextValue(counter, counter - 1),
+            If(counter == 1,
                 NextState("COPY")
             )
         )
