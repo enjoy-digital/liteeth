@@ -22,6 +22,8 @@ class LiteEthMACWishboneInterface(LiteXModule):
         rxslots_read_only  = True,
         txslots_write_only = False,
         eth_mtu            = eth_mtu_default,
+        rx_packet_fifo_depth = 0,
+        tx_packet_fifo_depth = 0,
     ):
         self.sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = stream.Endpoint(eth_phy_description(dw))
@@ -34,7 +36,17 @@ class LiteEthMACWishboneInterface(LiteXModule):
         # ----------------
         self.eth_mtu = eth_mtu
         sram_depth = math.ceil(eth_mtu/(dw//8))
-        self.sram = sram.LiteEthMACSRAM(dw, sram_depth, nrxslots, ntxslots, endianness, timestamp, eth_mtu=eth_mtu)
+        self.sram = sram.LiteEthMACSRAM(
+            dw                   = dw,
+            depth                = sram_depth,
+            nrxslots             = nrxslots,
+            ntxslots             = ntxslots,
+            endianness           = endianness,
+            timestamp            = timestamp,
+            eth_mtu              = eth_mtu,
+            rx_packet_fifo_depth = rx_packet_fifo_depth,
+            tx_packet_fifo_depth = tx_packet_fifo_depth,
+        )
         self.comb += [
             self.sink.connect(self.sram.sink),
             self.sram.source.connect(self.source),
