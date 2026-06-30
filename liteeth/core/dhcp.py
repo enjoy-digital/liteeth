@@ -11,9 +11,7 @@ DHCP
 Minimal DHCP (IPV4) support for LiteEth.
 
 Limitations/TODOs:
-- No lease time parsing/support, user logic should consider it short (or known from server) and
-issue a DHCP request regularly. Limitations is due to 32-bit data-path and parsing. Switching to a
-8-bit data-path for DHCP options would allow supporting it more easily.
+- User logic should issue a DHCP request before the parsed lease time expires.
 - Additional checks could be made on RX (see FIXMEs, but cost logic on FPGA).
 - Define more DHCP constants and use them in the code.
 """
@@ -319,12 +317,12 @@ class LiteEthDHCPRX(LiteXModule):
         self.mac_address        = Signal(48) # i
         self.server_ip_address  = Signal(32) # o
         self.offered_ip_address = Signal(32) # o
+        self.lease_time         = Signal(32) # o
 
         # TODO: Parse more DHCP Options.
         # self.gateway_ip_address = Signal(32)
         # self.subnet_mask        = Signal(32)
         # self.router             = Signal(32)
-        # self.lease_time         = Signal(32)
 
         # # #
 
@@ -393,6 +391,7 @@ class LiteEthDHCPRX(LiteXModule):
                    (udp_port.source.length >= DHCP_FIXED_HEADER_LENGTH + 4 + 4),
                     udp_port.source.ready.eq(0),
                     NextValue(message_type_seen, 0),
+                    NextValue(self.lease_time, 0),
                     NextState("HEADER")
                 ).Else(
                     NextState("DROP")
@@ -561,7 +560,8 @@ class LiteEthDHCPRX(LiteXModule):
             )
         )
         fsm.act("OPTION-LENGTH",
-            If((option_code == DHCP_OPTTYP_MESSAGE_TYPE) & (option_byte != 0x01),
+            If(((option_code == DHCP_OPTTYP_MESSAGE_TYPE) & (option_byte != 0x01)) |
+               ((option_code == DHCP_OPTTYP_LEASE_TIME)   & (option_byte != 0x04)),
                 NextState("ERROR")
             ).Else(
                 NextValue(option_length, option_byte),
@@ -594,6 +594,14 @@ class LiteEthDHCPRX(LiteXModule):
                         1 : NextValue(self.server_ip_address[16:24], option_byte),
                         2 : NextValue(self.server_ip_address[ 8:16], option_byte),
                         3 : NextValue(self.server_ip_address[ 0: 8], option_byte),
+                    })
+                ),
+                If((option_code == DHCP_OPTTYP_LEASE_TIME) & (option_length == 4),
+                    Case(option_value_index, {
+                        0 : NextValue(self.lease_time[24:32], option_byte),
+                        1 : NextValue(self.lease_time[16:24], option_byte),
+                        2 : NextValue(self.lease_time[ 8:16], option_byte),
+                        3 : NextValue(self.lease_time[ 0: 8], option_byte),
                     })
                 ),
                 finish_option_value()
@@ -637,6 +645,7 @@ class LiteEthDHCP(LiteXModule):
         # Parameters
         self.mac_address = Signal(48) # i
         self.ip_address  = Signal(32) # o
+        self.lease_time  = Signal(32) # o
 
         # # #
 
@@ -706,6 +715,7 @@ class LiteEthDHCP(LiteXModule):
             rx.ack.eq(1),
             If(rx.present & ~rx.error & (rx.type == DHCP_RX_ACK),
                 NextValue(self.ip_address, offered_ip_address),
+                NextValue(self.lease_time, rx.lease_time),
                 NextState("IDLE")
             )
         )

@@ -19,6 +19,7 @@ mac_address        = 0x10e2d5000001
 transaction_id     = 0x12345678
 offered_ip_address = convert_ip("192.168.1.100")
 server_ip_address  = convert_ip("192.168.1.1")
+lease_time         = 3600
 
 # Helpers ------------------------------------------------------------------------------------------
 
@@ -228,6 +229,7 @@ class TestDHCPRX(unittest.TestCase):
                         type               = (yield dut.rx.type),
                         offered_ip_address = (yield dut.rx.offered_ip_address),
                         server_ip_address  = (yield dut.rx.server_ip_address),
+                        lease_time         = (yield dut.rx.lease_time),
                     )
                     yield dut.rx.ack.eq(1)
                     yield
@@ -283,6 +285,35 @@ class TestDHCPRX(unittest.TestCase):
         self.assertEqual(result["type"], DHCP_RX_ACK)
         self.assertEqual(result["server_ip_address"], server_ip_address)
 
+    def test_ack_parses_lease_time_option(self):
+        packet = build_dhcp_response(
+            message_type = DHCP_OPTVAL_MESSAGE_TYPE_ACK,
+            options      = [
+                DHCP_OPTTYP_SRV_IP_ADDRESS, 0x04, *split_be(server_ip_address, 4),
+                DHCP_OPTTYP_LEASE_TIME,     0x04, *split_be(lease_time, 4),
+                DHCP_OPTTYP_MESSAGE_TYPE,   0x01, DHCP_OPTVAL_MESSAGE_TYPE_ACK,
+                DHCP_OPTTYP_END,
+            ],
+        )
+        result = self.receive_packet(packet)
+
+        self.assertEqual(result["error"], 0)
+        self.assertEqual(result["type"], DHCP_RX_ACK)
+        self.assertEqual(result["lease_time"], lease_time)
+
+    def test_bad_lease_time_length_is_rejected(self):
+        packet = build_dhcp_response(
+            message_type = DHCP_OPTVAL_MESSAGE_TYPE_ACK,
+            options      = [
+                DHCP_OPTTYP_MESSAGE_TYPE, 0x01, DHCP_OPTVAL_MESSAGE_TYPE_ACK,
+                DHCP_OPTTYP_LEASE_TIME,   0x03, 0x00, 0x0e, 0x10,
+                DHCP_OPTTYP_END,
+            ],
+        )
+        result = self.receive_packet(packet)
+
+        self.assertEqual(result["error"], 1)
+
 # Test DHCP Core -----------------------------------------------------------------------------------
 
 class TestDHCPCore(unittest.TestCase):
@@ -305,6 +336,7 @@ class TestDHCPCore(unittest.TestCase):
             "done":          False,
             "timeout":       False,
             "ip_address":    0,
+            "lease_time":     0,
         }
 
         def make_server_response(message_type, xid):
@@ -315,6 +347,7 @@ class TestDHCPCore(unittest.TestCase):
                 options      = [
                     DHCP_OPTTYP_SRV_IP_ADDRESS, 0x04, *split_be(server_ip_address, 4),
                     DHCP_OPTTYP_MESSAGE_TYPE, 0x01, message_type,
+                    DHCP_OPTTYP_LEASE_TIME, 0x04, *split_be(lease_time, 4),
                     DHCP_OPTTYP_END,
                 ],
             )
@@ -376,6 +409,7 @@ class TestDHCPCore(unittest.TestCase):
                 if results["ack_sent"] and (yield dut.dhcp.done):
                     results["done"]       = True
                     results["ip_address"] = (yield dut.dhcp.ip_address)
+                    results["lease_time"] = (yield dut.dhcp.lease_time)
                     break
                 yield
 
@@ -387,6 +421,7 @@ class TestDHCPCore(unittest.TestCase):
         self.assertTrue(results["done"])
         self.assertFalse(results["timeout"])
         self.assertEqual(results["ip_address"], offered_ip_address)
+        self.assertEqual(results["lease_time"], lease_time)
 
     def test_ignores_rx_errors_while_waiting_for_offer(self):
         bad_packet = build_dhcp_response(
@@ -470,6 +505,7 @@ class TestDHCPSignals(unittest.TestCase):
 
         self.assertEqual(len(dut.tx.offered_ip_address), 32)
         self.assertEqual(len(dut.rx.offered_ip_address), 32)
+        self.assertEqual(len(dut.rx.lease_time), 32)
 
         class CoreDUT(LiteXModule):
             def __init__(self):
@@ -480,6 +516,7 @@ class TestDHCPSignals(unittest.TestCase):
 
         core_dut = CoreDUT()
         self.assertEqual(len(core_dut.dhcp.ip_address), 32)
+        self.assertEqual(len(core_dut.dhcp.lease_time), 32)
 
 if __name__ == "__main__":
     unittest.main()
