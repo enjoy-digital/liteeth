@@ -112,7 +112,6 @@ class LiteEthMAC(LiteXModule):
 class LiteEthMACCoreCrossbar(LiteXModule):
     def __init__(self, core, crossbar, interface, dw, hw_mac=None):
         rx_ready = Signal()
-        rx_valid = Signal()
 
         # IP core packet processing.
         self.packetizer   = LiteEthMACPacketizer(dw)
@@ -163,6 +162,8 @@ class LiteEthMACCoreCrossbar(LiteXModule):
             mac_mcast4 = Signal() # Matches IPv4 Multicast MAC addresses (01:00:5E:XX:XX:XX).
             mac_mcast6 = Signal() # Matches IPv6 Multicast MAC addresses (33:33:XX:XX:XX:XX).
             mac_valid  = Signal() # Matches any of the above MAC types.
+            hw_valid   = Signal() # Packet is expected on the hardware path.
+            cpu_valid  = Signal() # Packet is expected on the CPU path.
             self.comb += [
                 # Hardware MAC address check.
                 mac_local.eq(hw_mac == filter_depacketizer.source.payload.target_mac),
@@ -175,18 +176,27 @@ class LiteEthMACCoreCrossbar(LiteXModule):
                 # Combine all conditions to determine if the packet should be processed.
                 mac_valid.eq(mac_local | mac_bcast | mac_mcast4 | mac_mcast6),
 
-                # Accept when both FIFOs are ready.
-                rx_ready.eq(hw_fifo.sink.ready & cpu_fifo.sink.ready),
+                # Select paths:
+                # - Local unicast: HW only.
+                # - Broadcast/Multicast: HW + CPU.
+                # - Other unicast: CPU only.
+                hw_valid.eq(mac_valid),
+                cpu_valid.eq(~mac_local),
 
-                # Present when ready and Depacketizer valid.
-                rx_valid.eq(rx_ready & filter_depacketizer.source.valid),
+                # Accept when all selected sinks are ready.
+                rx_ready.eq((~hw_valid  | hw_fifo.sink.ready) &
+                            (~cpu_valid | cpu_fifo.sink.ready)),
 
                 # Depacketizer -> HW FIFO/CPU FIFO.
                 filter_depacketizer.source.connect(hw_fifo.sink,  omit={"ready", "valid"}),
                 filter_depacketizer.source.connect(cpu_fifo.sink, omit={"ready", "valid"}),
                 filter_depacketizer.source.ready.eq(rx_ready),
-                hw_fifo.sink.valid.eq(rx_valid & mac_valid),
-                cpu_fifo.sink.valid.eq(rx_valid & ~mac_local),
+                hw_fifo.sink.valid.eq(
+                    filter_depacketizer.source.valid & hw_valid &
+                    (~cpu_valid | cpu_fifo.sink.ready)),
+                cpu_fifo.sink.valid.eq(
+                    filter_depacketizer.source.valid & cpu_valid &
+                    (~hw_valid | hw_fifo.sink.ready)),
             ]
         else:
             # RX Broadcast.
@@ -194,15 +204,12 @@ class LiteEthMACCoreCrossbar(LiteXModule):
                 # Accept when both Interface/Depacketizer are ready.
                 rx_ready.eq(interface.sink.ready & self.depacketizer.sink.ready),
 
-                # Present when ready and Core valid.
-                rx_valid.eq(rx_ready & core.source.valid),
-
                 # Core -> Interface/Depacketizer.
                 core.source.connect(interface.sink,         omit={"ready", "valid"}),
                 core.source.connect(self.depacketizer.sink, omit={"ready", "valid"}),
                 core.source.ready.eq(rx_ready),
-                interface.sink.valid.eq(rx_valid),
-                self.depacketizer.sink.valid.eq(rx_valid),
+                interface.sink.valid.eq(core.source.valid & self.depacketizer.sink.ready),
+                self.depacketizer.sink.valid.eq(core.source.valid & interface.sink.ready),
             ]
 
         # TX arbiter FSM.
