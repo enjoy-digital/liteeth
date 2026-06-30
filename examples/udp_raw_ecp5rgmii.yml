@@ -8,6 +8,7 @@
 phy          : LiteEthECP5PHYRGMII
 phy_tx_delay : 0e-9
 phy_rx_delay : 2e-9
+# phy_dynamic_link : True # Enable experimental 10/100/1000 RGMII rate adaptation.
 # phy_hw_init_reset : True # Enable startup PHY reset pulse when required by the board PHY.
 device       : LFE5U-25F-6BG256C
 vendor       : lattice

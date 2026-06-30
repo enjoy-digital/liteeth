@@ -285,12 +285,18 @@ class PHYCore(SoCMini):
             liteeth_phys.LiteEthS7PHYRGMII,
             liteeth_phys.LiteEthECP5PHYRGMII,
         ]:
-            ethphy = phy(
+            phy_kwargs = dict(
                 clock_pads         = platform.request("rgmii_clocks"),
                 pads               = platform.request("rgmii"),
                 tx_delay           = core_config.get("phy_tx_delay", 2e-9),
                 rx_delay           = core_config.get("phy_rx_delay", 2e-9),
-                with_hw_init_reset = core_config.get("phy_hw_init_reset", False))
+                with_hw_init_reset = core_config.get("phy_hw_init_reset", False),
+            )
+            if phy in [liteeth_phys.LiteEthECP5PHYRGMII]:
+                phy_kwargs.update(
+                    with_dynamic_link = core_config.get("phy_dynamic_link", False),
+                )
+            ethphy = phy(**phy_kwargs)
         # SGMII.
         elif phy in [
             # 7-Series GTP/GTX.
