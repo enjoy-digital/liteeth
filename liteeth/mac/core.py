@@ -143,7 +143,7 @@ class LiteEthMACCore(LiteXModule):
 
             def add_gap(self):
                 """Add inter-frame gap insertion in the PHY TX domain."""
-                tx_gap = gap.LiteEthMACGap(phy_dw)
+                tx_gap = gap.LiteEthMACGap(phy_dw, cycles=getattr(phy, "tx_gap_cycles", None))
                 tx_gap = ClockDomainsRenamer("eth_tx")(tx_gap)
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
