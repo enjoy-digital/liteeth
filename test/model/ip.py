@@ -25,9 +25,11 @@ def carry_around_add(a, b):
 
 def checksum(msg):
     s = 0
-    for i in range(0, len(msg), 2):
+    for i in range(0, len(msg) - 1, 2):
         w = msg[i] + (msg[i+1] << 8)
         s = carry_around_add(s, w)
+    if len(msg)%2:
+        s = carry_around_add(s, msg[-1])
     return ~s & 0xffff
 
 
