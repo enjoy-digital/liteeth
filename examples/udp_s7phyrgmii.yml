@@ -8,6 +8,7 @@
 phy       : LiteEthS7PHYRGMII
 vendor    : xilinx
 toolchain : vivado
+# phy_hw_init_reset : True # Enable startup PHY reset pulse when required by the board PHY.
 
 # Core -------------------------------------------------------------------------
 clk_freq    : 125e6
