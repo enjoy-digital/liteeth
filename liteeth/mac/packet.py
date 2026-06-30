@@ -80,12 +80,8 @@ class LiteEthMACPacketWriter(LiteXModule):
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(packet_fifo.source.valid,
-                If(self.enable,
-                    NextState("WRITE")
-                ).Else(
-                    NextState("DISCARD-ALL")
-                )
+            If(packet_fifo.source.valid & self.enable,
+                NextState("WRITE")
             )
         )
         fsm.act("WRITE",
