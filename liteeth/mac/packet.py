@@ -18,7 +18,8 @@ from liteeth.common import *
 # MAC Packet Writer Frontend -----------------------------------------------------------------------
 
 class LiteEthMACPacketWriter(LiteXModule):
-    def __init__(self, dw, depth, eth_mtu=eth_mtu_default, fifo_depth=1, timestamp=None):
+    def __init__(self, dw, depth, eth_mtu=eth_mtu_default, fifo_depth=1, timestamp=None,
+        drop_when_disabled=False):
         # Endpoint / Signals.
         self.sink   = sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_packet_description(dw))
@@ -84,8 +85,17 @@ class LiteEthMACPacketWriter(LiteXModule):
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
-            If(packet_source.valid & self.enable,
-                NextState("WRITE")
+            If(packet_source.valid,
+                If(self.enable,
+                    NextState("WRITE")
+                ).Elif(drop_when_disabled,
+                    packet_source.ready.eq(1),
+                    If(packet_source.last,
+                        NextState("DISCARD")
+                    ).Else(
+                        NextState("DISCARD-ALL")
+                    )
+                )
             )
         )
         fsm.act("WRITE",

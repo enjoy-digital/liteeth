@@ -212,6 +212,64 @@ class TestMACPacketWriter(unittest.TestCase):
                 self.assertEqual(result["source_valid"], 0)
                 self.assertEqual(result["drop"], 0)
 
+    def test_writer_drop_when_disabled_discards_without_backpressure(self):
+        for dw, data in mac_packet_test_cases(length=4):
+            with self.subTest(dw=dw):
+                dut    = LiteEthMACPacketWriter(
+                    dw                 = dw,
+                    depth              = len(mac_packet_words(dw, data)),
+                    eth_mtu            = eth_mtu_default,
+                    fifo_depth         = 0,
+                    drop_when_disabled = True,
+                )
+                result = {
+                    "accepted"     : 0,
+                    "source_valid" : False,
+                    "done"         : False,
+                    "drop"         : False,
+                    "timeout"      : False,
+                }
+
+                def generator(timeout=128):
+                    yield dut.enable.eq(0)
+                    yield dut.source.ready.eq(1)
+
+                    words = mac_packet_words(dw, data)
+                    for n, word in enumerate(words):
+                        last = n == len(words) - 1
+                        yield dut.sink.data.eq(word)
+                        yield dut.sink.last.eq(last)
+                        yield dut.sink.last_be.eq(mac_packet_last_be(dw, len(data)) if last else 0)
+                        yield dut.sink.error.eq(0)
+                        yield dut.sink.valid.eq(1)
+                        yield
+                        result["source_valid"] |= bool((yield dut.source.valid))
+                        result["done"]         |= bool((yield dut.done))
+                        if (yield dut.sink.ready):
+                            result["accepted"] += 1
+                        else:
+                            result["timeout"] = True
+                            return
+
+                    yield dut.sink.valid.eq(0)
+                    yield dut.sink.last.eq(0)
+                    yield dut.sink.last_be.eq(0)
+                    for _ in range(timeout):
+                        result["source_valid"] |= bool((yield dut.source.valid))
+                        result["done"]         |= bool((yield dut.done))
+                        if (yield dut.drop):
+                            result["drop"] = True
+                            return
+                        yield
+                    result["timeout"] = True
+
+                run_simulation(dut, generator())
+                self.assertFalse(result["timeout"])
+                self.assertEqual(result["accepted"], len(mac_packet_words(dw, data)))
+                self.assertFalse(result["source_valid"])
+                self.assertFalse(result["done"])
+                self.assertTrue(result["drop"])
+
     def test_writer_disabled_backpressures_until_enabled(self):
         for dw, data in mac_packet_test_cases(length=4):
             with self.subTest(dw=dw):

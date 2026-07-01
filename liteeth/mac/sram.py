@@ -50,11 +50,12 @@ class LiteEthMACSRAMWriter(LiteXModule):
 
         # Packet frontend.
         self.packet = packet = LiteEthMACPacketWriter(
-            dw         = dw,
-            depth      = depth,
-            eth_mtu    = eth_mtu,
-            fifo_depth = fifo_depth,
-            timestamp  = timestamp,
+            dw                 = dw,
+            depth              = depth,
+            eth_mtu            = eth_mtu,
+            fifo_depth         = fifo_depth,
+            timestamp          = timestamp,
+            drop_when_disabled = fifo_depth == 0,
         )
         self.sink = packet.sink
         self.comb += packet.source.ready.eq(1),
