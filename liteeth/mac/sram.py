@@ -21,7 +21,7 @@ from liteeth.mac.packet import LiteEthMACPacketWriter, LiteEthMACPacketReader
 
 class LiteEthMACSRAMWriter(LiteXModule):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None,
-        eth_mtu=eth_mtu_default, packet_fifo_depth=0):
+        eth_mtu=eth_mtu_default, fifo_depth=0):
         # Endpoint / Signals.
         self.crc_error = Signal()
 
@@ -53,7 +53,7 @@ class LiteEthMACSRAMWriter(LiteXModule):
             dw         = dw,
             depth      = depth,
             eth_mtu    = eth_mtu,
-            fifo_depth = packet_fifo_depth,
+            fifo_depth = fifo_depth,
             timestamp  = timestamp,
         )
         self.sink = packet.sink
@@ -118,7 +118,7 @@ class LiteEthMACSRAMWriter(LiteXModule):
 # MAC SRAM Reader ----------------------------------------------------------------------------------
 
 class LiteEthMACSRAMReader(LiteXModule):
-    def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None, packet_fifo_depth=0):
+    def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None, fifo_depth=0):
         # Parameters Check / Compute.
         assert dw in [8, 16, 32, 64]
         slotbits   = max(int(math.log2(nslots)), 1)
@@ -148,7 +148,7 @@ class LiteEthMACSRAMReader(LiteXModule):
         self.packet = packet = LiteEthMACPacketReader(
             dw         = dw,
             depth      = depth,
-            fifo_depth = packet_fifo_depth,
+            fifo_depth = fifo_depth,
             timestamp  = timestamp,
         )
         self.source = source = packet.source
@@ -243,7 +243,7 @@ class LiteEthMACSRAMReader(LiteXModule):
 
 class LiteEthMACSRAM(LiteXModule):
     def __init__(self, dw, depth, nrxslots, ntxslots, endianness, timestamp=None,
-        eth_mtu=eth_mtu_default, rx_packet_fifo_depth=0, tx_packet_fifo_depth=0):
+        eth_mtu=eth_mtu_default, rx_fifo_depth=0, tx_fifo_depth=0):
         self.writer = LiteEthMACSRAMWriter(
             dw                = dw,
             depth             = depth,
@@ -251,7 +251,7 @@ class LiteEthMACSRAM(LiteXModule):
             endianness        = endianness,
             timestamp         = timestamp,
             eth_mtu           = eth_mtu,
-            packet_fifo_depth = rx_packet_fifo_depth,
+            fifo_depth        = rx_fifo_depth,
         )
         self.reader = LiteEthMACSRAMReader(
             dw                = dw,
@@ -259,7 +259,7 @@ class LiteEthMACSRAM(LiteXModule):
             nslots            = ntxslots,
             endianness        = endianness,
             timestamp         = timestamp,
-            packet_fifo_depth = tx_packet_fifo_depth,
+            fifo_depth        = tx_fifo_depth,
         )
         self.ev     = SharedIRQ(self.writer.ev, self.reader.ev)
         self.sink, self.source = self.writer.sink, self.reader.source

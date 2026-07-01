@@ -32,8 +32,8 @@ class LiteEthMAC(LiteXModule):
         rx_cdc_depth       = 32,
         rx_cdc_buffered    = False,
         eth_mtu            = eth_mtu_default,
-        rx_packet_fifo_depth = 0,
-        tx_packet_fifo_depth = 0,
+        rx_fifo_depth      = 0,
+        tx_fifo_depth      = 0,
     ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -81,8 +81,8 @@ class LiteEthMAC(LiteXModule):
                 endianness = endianness,
                 timestamp  = timestamp,
                 eth_mtu    = eth_mtu,
-                rx_packet_fifo_depth = rx_packet_fifo_depth,
-                tx_packet_fifo_depth = tx_packet_fifo_depth,
+                rx_fifo_depth = rx_fifo_depth,
+                tx_fifo_depth = tx_fifo_depth,
             )
             if full_memory_we:
                 wishbone_interface = self.apply_full_memory_we(wishbone_interface)
