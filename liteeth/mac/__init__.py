@@ -7,10 +7,50 @@
 
 from litex.gen import *
 
+from litex.soc.interconnect.packet import PacketFIFO
+
 from liteeth.common import *
 from liteeth.mac.common import *
 from liteeth.mac.core import LiteEthMACCore
 from liteeth.mac.wishbone import LiteEthMACWishboneInterface
+
+# MAC Packet FIFOs ---------------------------------------------------------------------------------
+
+class LiteEthMACPacketFIFOs(LiteXModule):
+    def __init__(self, interface, dw, depth, rx_fifo_depth=0, tx_fifo_depth=0):
+        self.sink   = stream.Endpoint(eth_phy_description(dw))
+        self.source = stream.Endpoint(eth_phy_description(dw))
+
+        # # #
+
+        assert rx_fifo_depth >= 0
+        assert tx_fifo_depth >= 0
+
+        if rx_fifo_depth:
+            self.rx_fifo = rx_fifo = PacketFIFO(
+                eth_phy_description(dw),
+                payload_depth = rx_fifo_depth * depth,
+                param_depth   = rx_fifo_depth,
+            )
+            self.comb += [
+                self.sink.connect(rx_fifo.sink),
+                rx_fifo.source.connect(interface.sink),
+            ]
+        else:
+            self.comb += self.sink.connect(interface.sink)
+
+        if tx_fifo_depth:
+            self.tx_fifo = tx_fifo = PacketFIFO(
+                eth_phy_description(dw),
+                payload_depth = tx_fifo_depth * depth,
+                param_depth   = tx_fifo_depth,
+            )
+            self.comb += [
+                interface.source.connect(tx_fifo.sink),
+                tx_fifo.source.connect(self.source),
+            ]
+        else:
+            self.comb += interface.source.connect(self.source)
 
 # MAC ----------------------------------------------------------------------------------------------
 
@@ -81,12 +121,22 @@ class LiteEthMAC(LiteXModule):
                 endianness = endianness,
                 timestamp  = timestamp,
                 eth_mtu    = eth_mtu,
-                rx_fifo_depth = rx_fifo_depth,
-                tx_fifo_depth = tx_fifo_depth,
+                rx_drop_when_disabled = rx_fifo_depth == 0,
             )
             if full_memory_we:
                 wishbone_interface = self.apply_full_memory_we(wishbone_interface)
             self.interface = wishbone_interface
+            mac_interface  = wishbone_interface
+            if rx_fifo_depth or tx_fifo_depth:
+                sram_depth = (eth_mtu + (dw//8) - 1)//(dw//8)
+                self.packet_fifos = LiteEthMACPacketFIFOs(
+                    interface     = wishbone_interface,
+                    dw            = dw,
+                    depth         = sram_depth,
+                    rx_fifo_depth = rx_fifo_depth,
+                    tx_fifo_depth = tx_fifo_depth,
+                )
+                mac_interface = self.packet_fifos
             self.ev        = self.interface.sram.ev
             self.bus_rx    = self.interface.bus_rx
             self.bus_tx    = self.interface.bus_tx
@@ -95,13 +145,13 @@ class LiteEthMAC(LiteXModule):
             # Wishbone Mode.
             # --------------
             if interface in ["wishbone"]:
-                self.comb += self.interface.source.connect(self.core.sink)
-                self.comb += self.core.source.connect(self.interface.sink)
+                self.comb += mac_interface.source.connect(self.core.sink)
+                self.comb += self.core.source.connect(mac_interface.sink)
             # Hybrid Mode.
             # ------------
             if interface in ["hybrid"]:
                 self.crossbar     = LiteEthMACCrossbar(dw)
-                self.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, self.interface, dw, hw_mac)
+                self.mac_crossbar = LiteEthMACCoreCrossbar(self.core, self.crossbar, mac_interface, dw, hw_mac)
 
     def apply_full_memory_we(self, interface):
         # FullMemoryWE splits memory into 8-bit blocks to ensure proper block RAM inference on most FPGAs.

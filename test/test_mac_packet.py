@@ -7,7 +7,10 @@ import unittest
 
 from migen import *
 
-from liteeth.common import eth_mtu_default
+from litex.soc.interconnect import stream
+
+from liteeth.common import eth_mtu_default, eth_phy_description
+from liteeth.mac import LiteEthMACPacketFIFOs
 from liteeth.mac.packet import LiteEthMACPacketWriter, LiteEthMACPacketReader
 
 # Helpers ------------------------------------------------------------------------------------------
@@ -68,10 +71,138 @@ def mac_packet_send(sink, dw, data, error=0):
 # -------------------------------------------------------------------------
 
 class MACPacketReaderDUT(Module):
-    def __init__(self, dw, depth, fifo_depth=1, timestamp=None):
-        self.packet = LiteEthMACPacketReader(dw, depth, fifo_depth=fifo_depth, timestamp=timestamp)
+    def __init__(self, dw, depth, timestamp=None):
+        self.packet = LiteEthMACPacketReader(dw, depth, timestamp=timestamp)
         self.submodules += self.packet
         self.source = self.packet.source
+
+class MACPacketFIFOInterface:
+    pass
+
+class MACPacketFIFOsDUT(Module):
+    def __init__(self, dw, depth, rx_fifo_depth=0, tx_fifo_depth=0):
+        self.interface        = interface = MACPacketFIFOInterface()
+        self.interface.sink   = stream.Endpoint(eth_phy_description(dw))
+        self.interface.source = stream.Endpoint(eth_phy_description(dw))
+        self.fifos = LiteEthMACPacketFIFOs(interface, dw, depth,
+            rx_fifo_depth = rx_fifo_depth,
+            tx_fifo_depth = tx_fifo_depth,
+        )
+        self.submodules += self.fifos
+
+def mac_packet_writer_send(dut, dw, data, result=None, error=0, timeout=128):
+    words = mac_packet_words(dw, data)
+    for n, word in enumerate(words):
+        last = n == len(words) - 1
+        yield dut.sink.data.eq(word)
+        yield dut.sink.last.eq(last)
+        yield dut.sink.last_be.eq(mac_packet_last_be(dw, len(data)) if last else 0)
+        yield dut.sink.error.eq(error if last else 0)
+        yield dut.sink.valid.eq(1)
+        for _ in range(timeout):
+            yield
+            if result is not None:
+                if "source_valid" in result:
+                    result["source_valid"] |= bool((yield dut.source.valid))
+                if (yield dut.source.valid) and (yield dut.source.ready):
+                    if "data" in result:
+                        result["data"] += mac_packet_bytes(dw, (yield dut.source.data))
+                    if "offsets" in result:
+                        result["offsets"].append((yield dut.offset))
+                    if "write_count" in result:
+                        result["write_count"] += 1
+            if (yield dut.sink.ready):
+                break
+        else:
+            if result is not None:
+                result["timeout"] = True
+            return
+
+    yield dut.sink.valid.eq(0)
+    yield dut.sink.last.eq(0)
+    yield dut.sink.last_be.eq(0)
+    yield dut.sink.error.eq(0)
+    yield
+
+# Test MAC Packet FIFOs ---------------------------------------------------------------------------
+
+class TestMACPacketFIFOs(unittest.TestCase):
+    def test_rx_fifo_buffers_packet(self):
+        dw     = 32
+        data   = [n + 1 for n in range(10)]
+        depth  = len(mac_packet_words(dw, data))
+        dut    = MACPacketFIFOsDUT(dw, depth, rx_fifo_depth=1)
+        result = {"accepted": 0, "data": [], "last_be": None, "timeout": False}
+
+        def generator(timeout=128):
+            yield dut.interface.sink.ready.eq(0)
+
+            words = mac_packet_words(dw, data)
+            for n, word in enumerate(words):
+                last = n == len(words) - 1
+                yield dut.fifos.sink.data.eq(word)
+                yield dut.fifos.sink.last.eq(last)
+                yield dut.fifos.sink.last_be.eq(mac_packet_last_be(dw, len(data)) if last else 0)
+                yield dut.fifos.sink.error.eq(0)
+                yield dut.fifos.sink.valid.eq(1)
+                for _ in range(timeout):
+                    yield
+                    if (yield dut.fifos.sink.ready):
+                        result["accepted"] += 1
+                        break
+                else:
+                    result["timeout"] = True
+                    return
+
+            yield dut.fifos.sink.valid.eq(0)
+            yield dut.fifos.sink.last.eq(0)
+            yield dut.fifos.sink.last_be.eq(0)
+            yield dut.interface.sink.ready.eq(1)
+
+            for _ in range(timeout):
+                if (yield dut.interface.sink.valid) and (yield dut.interface.sink.ready):
+                    last    = (yield dut.interface.sink.last)
+                    last_be = (yield dut.interface.sink.last_be)
+                    result["data"] += mac_packet_bytes(dw, (yield dut.interface.sink.data), last, last_be)
+                    if last:
+                        result["last_be"] = last_be
+                        return
+                yield
+            result["timeout"] = True
+
+        run_simulation(dut, generator())
+        self.assertFalse(result["timeout"])
+        self.assertEqual(result["accepted"], depth)
+        self.assertEqual(result["data"], data)
+        self.assertEqual(result["last_be"], mac_packet_last_be(dw, len(data)))
+
+    def test_tx_fifo_buffers_packet(self):
+        dw     = 32
+        data   = [n + 1 for n in range(10)]
+        depth  = len(mac_packet_words(dw, data))
+        dut    = MACPacketFIFOsDUT(dw, depth, tx_fifo_depth=1)
+        result = {"data": [], "last_be": None, "timeout": False}
+
+        def generator(timeout=128):
+            yield dut.fifos.source.ready.eq(0)
+            yield from mac_packet_send(dut.interface.source, dw, data)
+            yield dut.fifos.source.ready.eq(1)
+
+            for _ in range(timeout):
+                if (yield dut.fifos.source.valid) and (yield dut.fifos.source.ready):
+                    last    = (yield dut.fifos.source.last)
+                    last_be = (yield dut.fifos.source.last_be)
+                    result["data"] += mac_packet_bytes(dw, (yield dut.fifos.source.data), last, last_be)
+                    if last:
+                        result["last_be"] = last_be
+                        return
+                yield
+            result["timeout"] = True
+
+        run_simulation(dut, generator())
+        self.assertFalse(result["timeout"])
+        self.assertEqual(result["data"], data)
+        self.assertEqual(result["last_be"], mac_packet_last_be(dw, len(data)))
 
 # Test MAC Packet Writer ---------------------------------------------------------------------------
 
@@ -83,7 +214,9 @@ class TestMACPacketWriter(unittest.TestCase):
         def generator(timeout=128):
             yield dut.enable.eq(enable)
             yield dut.source.ready.eq(1)
-            yield from mac_packet_send(dut.sink, dw, data, error=error)
+            yield from mac_packet_writer_send(dut, dw, data, result=result, error=error)
+            if result["timeout"]:
+                return
 
             for _ in range(timeout):
                 result["source_valid"] |= bool((yield dut.source.valid))
@@ -113,16 +246,12 @@ class TestMACPacketWriter(unittest.TestCase):
 
                 def generator(timeout=128):
                     yield dut.enable.eq(1)
-                    yield dut.source.ready.eq(0)
-                    yield from mac_packet_send(dut.sink, dw, data)
                     yield dut.source.ready.eq(1)
+                    yield from mac_packet_writer_send(dut, dw, data, result=result)
+                    if result["timeout"]:
+                        return
 
                     for _ in range(timeout):
-                        if (yield dut.source.valid) and (yield dut.source.ready):
-                            word    = (yield dut.source.data)
-                            result["data"] += mac_packet_bytes(dw, word)
-                            result["offsets"].append((yield dut.offset))
-                            result["write_count"] += 1
                         if (yield dut.done):
                             result["done"]   = True
                             result["length"] = (yield dut.length)
@@ -138,44 +267,23 @@ class TestMACPacketWriter(unittest.TestCase):
                 self.assertTrue(result["done"])
                 self.assertEqual(result["length"], len(data))
 
-    def test_writer_zero_depth_good_packet(self):
+    def test_writer_direct_good_packet(self):
         for dw, data in mac_packet_test_cases(length=10):
             with self.subTest(dw=dw):
                 dut    = LiteEthMACPacketWriter(
-                    dw         = dw,
-                    depth      = len(mac_packet_words(dw, data)),
-                    eth_mtu    = eth_mtu_default,
-                    fifo_depth = 0,
+                    dw      = dw,
+                    depth   = len(mac_packet_words(dw, data)),
+                    eth_mtu = eth_mtu_default,
                 )
-                result = {"data": [], "done": False, "length": None, "timeout": False}
+                result = {"data": [], "done": False, "length": None, "source_valid": False, "timeout": False}
 
                 def generator(timeout=128):
                     yield dut.enable.eq(1)
                     yield dut.source.ready.eq(1)
-                    words = mac_packet_words(dw, data)
-                    for n, word in enumerate(words):
-                        last = n == len(words) - 1
-                        yield dut.sink.data.eq(word)
-                        yield dut.sink.last.eq(last)
-                        yield dut.sink.last_be.eq(mac_packet_last_be(dw, len(data)) if last else 0)
-                        yield dut.sink.error.eq(0)
-                        yield dut.sink.valid.eq(1)
-                        for _ in range(timeout):
-                            yield
-                            if (yield dut.source.valid) and (yield dut.source.ready):
-                                result["data"] += mac_packet_bytes(dw, (yield dut.source.data))
-                            if (yield dut.sink.ready):
-                                break
-                        else:
-                            result["timeout"] = True
-                            return
-
-                    yield dut.sink.valid.eq(0)
-                    yield dut.sink.last.eq(0)
-                    yield dut.sink.last_be.eq(0)
+                    yield from mac_packet_writer_send(dut, dw, data, result=result)
+                    if result["timeout"]:
+                        return
                     for _ in range(timeout):
-                        if (yield dut.source.valid) and (yield dut.source.ready):
-                            result["data"] += mac_packet_bytes(dw, (yield dut.source.data))
                         if (yield dut.done):
                             result["done"]   = True
                             result["length"] = (yield dut.length)
@@ -189,10 +297,10 @@ class TestMACPacketWriter(unittest.TestCase):
                 self.assertTrue(result["done"])
                 self.assertEqual(result["length"], len(data))
 
-    def test_writer_zero_depth_disabled_backpressures(self):
+    def test_writer_disabled_backpressures(self):
         for dw, _ in mac_packet_test_cases(length=4):
             with self.subTest(dw=dw):
-                dut    = LiteEthMACPacketWriter(dw, depth=4, eth_mtu=eth_mtu_default, fifo_depth=0)
+                dut    = LiteEthMACPacketWriter(dw, depth=4, eth_mtu=eth_mtu_default)
                 result = {"ready": None, "source_valid": None, "drop": None}
 
                 def generator():
@@ -219,7 +327,6 @@ class TestMACPacketWriter(unittest.TestCase):
                     dw                 = dw,
                     depth              = len(mac_packet_words(dw, data)),
                     eth_mtu            = eth_mtu_default,
-                    fifo_depth         = 0,
                     drop_when_disabled = True,
                 )
                 result = {
@@ -278,7 +385,7 @@ class TestMACPacketWriter(unittest.TestCase):
                     "data"             : [],
                     "done"             : False,
                     "drop"             : False,
-                    "source_valid"     : False,
+                    "source_valid_before_enable": False,
                     "backpressured"    : False,
                     "length"           : None,
                     "timeout"          : False,
@@ -287,19 +394,24 @@ class TestMACPacketWriter(unittest.TestCase):
                 def generator(timeout=128):
                     yield dut.enable.eq(0)
                     yield dut.source.ready.eq(1)
-                    yield from mac_packet_send(dut.sink, dw, data)
+                    words = mac_packet_words(dw, data)
+                    yield dut.sink.data.eq(words[0])
+                    yield dut.sink.last.eq(len(words) == 1)
+                    yield dut.sink.last_be.eq(mac_packet_last_be(dw, len(data)) if len(words) == 1 else 0)
+                    yield dut.sink.valid.eq(1)
 
                     for _ in range(4):
-                        result["source_valid"]  |= bool((yield dut.source.valid))
-                        result["drop"]          |= bool((yield dut.drop))
-                        result["done"]          |= bool((yield dut.done))
-                        result["backpressured"] |= not bool((yield dut.sink.ready))
+                        result["source_valid_before_enable"] |= bool((yield dut.source.valid))
+                        result["drop"]                       |= bool((yield dut.drop))
+                        result["done"]                       |= bool((yield dut.done))
+                        result["backpressured"]              |= not bool((yield dut.sink.ready))
                         yield
 
                     yield dut.enable.eq(1)
+                    yield from mac_packet_writer_send(dut, dw, data, result=result)
+                    if result["timeout"]:
+                        return
                     for _ in range(timeout):
-                        if (yield dut.source.valid) and (yield dut.source.ready):
-                            result["data"] += mac_packet_bytes(dw, (yield dut.source.data))
                         if (yield dut.drop):
                             result["drop"] = True
                         if (yield dut.done):
@@ -311,7 +423,7 @@ class TestMACPacketWriter(unittest.TestCase):
 
                 run_simulation(dut, generator())
                 self.assertFalse(result["timeout"])
-                self.assertFalse(result["source_valid"])
+                self.assertFalse(result["source_valid_before_enable"])
                 self.assertFalse(result["drop"])
                 self.assertTrue(result["backpressured"])
                 self.assertTrue(result["done"])
@@ -361,21 +473,12 @@ class TestMACPacketWriter(unittest.TestCase):
                 def generator(timeout=128):
                     yield timestamp.eq(timestamp_value)
                     yield dut.enable.eq(1)
-                    yield dut.source.ready.eq(0)
-                    yield from mac_packet_send(dut.sink, dw, data)
-
                     yield dut.source.ready.eq(1)
-                    result["timeout"] = (yield from wait_until(lambda: (yield dut.source.valid), timeout=timeout))
+                    yield from mac_packet_writer_send(dut, dw, data)
+                    result["timeout"] = (yield from wait_until(lambda: (yield dut.done), timeout=timeout))
                     if result["timeout"]:
                         return
-                    yield
-
-                    for _ in range(timeout):
-                        if (yield dut.done):
-                            result["timestamp"] = (yield dut.timestamp)
-                            return
-                        yield
-                    result["timeout"] = True
+                    result["timestamp"] = (yield dut.timestamp)
 
                 run_simulation(dut, generator())
                 self.assertFalse(result["timeout"])
@@ -385,16 +488,7 @@ class TestMACPacketWriter(unittest.TestCase):
 
 class TestMACPacketReader(unittest.TestCase):
     def _run_reader_until_done(self, dw, data, timestamp=None, timestamp_value=0x55):
-        return self._run_reader_until_done_with_fifo_depth(
-            dw              = dw,
-            data            = data,
-            fifo_depth      = 1,
-            timestamp       = timestamp,
-            timestamp_value = timestamp_value,
-        )
-
-    def _run_reader_until_done_with_fifo_depth(self, dw, data, fifo_depth, timestamp=None, timestamp_value=0x55):
-        dut    = MACPacketReaderDUT(dw, depth=len(mac_packet_words(dw, data)), fifo_depth=fifo_depth, timestamp=timestamp)
+        dut    = MACPacketReaderDUT(dw, depth=len(mac_packet_words(dw, data)), timestamp=timestamp)
         result = {"data": [], "last_be": None, "done": False, "timeout": False}
         if timestamp is not None:
             result["timestamp"] = None
@@ -403,21 +497,34 @@ class TestMACPacketReader(unittest.TestCase):
             if timestamp is not None:
                 yield timestamp.eq(timestamp_value)
             yield dut.packet.length.eq(len(data))
-            yield dut.source.ready.eq(0)
+            yield dut.source.ready.eq(1)
             yield dut.packet.enable.eq(1)
             yield
             yield dut.packet.enable.eq(0)
-            yield from mac_packet_send(dut.packet.sink, dw, data)
-            yield dut.source.ready.eq(1)
 
+            words = mac_packet_words(dw, data)
+            for n, word in enumerate(words):
+                last = n == len(words) - 1
+                yield dut.packet.sink.data.eq(word)
+                yield dut.packet.sink.last.eq(last)
+                yield dut.packet.sink.valid.eq(1)
+                for _ in range(timeout):
+                    yield
+                    if (yield dut.source.valid) and (yield dut.source.ready):
+                        source_last    = (yield dut.source.last)
+                        source_last_be = (yield dut.source.last_be)
+                        result["data"] += mac_packet_bytes(dw, (yield dut.source.data), source_last, source_last_be)
+                        if source_last:
+                            result["last_be"] = source_last_be
+                    if (yield dut.packet.sink.ready):
+                        break
+                else:
+                    result["timeout"] = True
+                    return
+
+            yield dut.packet.sink.valid.eq(0)
+            yield dut.packet.sink.last.eq(0)
             for _ in range(timeout):
-                if (yield dut.source.valid) and (yield dut.source.ready):
-                    word    = (yield dut.source.data)
-                    last    = (yield dut.source.last)
-                    last_be = (yield dut.source.last_be)
-                    result["data"] += mac_packet_bytes(dw, word, last, last_be)
-                    if last:
-                        result["last_be"] = last_be
                 if (yield dut.packet.done):
                     result["done"] = True
                     if timestamp is not None:
@@ -442,13 +549,12 @@ class TestMACPacketReader(unittest.TestCase):
                 self.assertEqual(result["last_be"], mac_packet_last_be(dw, len(data)))
                 self.assertTrue(result["done"])
 
-    def test_reader_zero_depth_packet_length_last_be_and_done(self):
+    def test_reader_direct_packet_length_last_be_and_done(self):
         for dw, data in mac_packet_test_cases(length=10):
             with self.subTest(dw=dw):
                 dut    = MACPacketReaderDUT(
-                    dw         = dw,
-                    depth      = len(mac_packet_words(dw, data)),
-                    fifo_depth = 0,
+                    dw    = dw,
+                    depth = len(mac_packet_words(dw, data)),
                 )
                 result = {"data": [], "last_be": None, "done": False, "timeout": False}
 
@@ -494,10 +600,10 @@ class TestMACPacketReader(unittest.TestCase):
                 self.assertEqual(result["last_be"], mac_packet_last_be(dw, len(data)))
                 self.assertTrue(result["done"])
 
-    def test_reader_zero_depth_waits_for_enable(self):
+    def test_reader_waits_for_enable(self):
         for dw, data in mac_packet_test_cases(length=4):
             with self.subTest(dw=dw):
-                dut    = MACPacketReaderDUT(dw, depth=len(mac_packet_words(dw, data)), fifo_depth=0)
+                dut    = MACPacketReaderDUT(dw, depth=len(mac_packet_words(dw, data)))
                 result = {"ready": None, "source_valid": None, "done": None}
 
                 def generator():
@@ -540,25 +646,34 @@ class TestMACPacketReader(unittest.TestCase):
                 def generator(timeout=128):
                     nwords = len(mac_packet_words(dw, data))
                     yield dut.packet.length.eq(len(data))
-                    yield dut.source.ready.eq(0)
+                    yield dut.source.ready.eq(1)
                     yield dut.packet.enable.eq(1)
                     yield
                     yield dut.packet.enable.eq(0)
-                    yield from mac_packet_send(dut.packet.sink, dw, data)
 
-                    if nwords > 1:
-                        yield dut.source.ready.eq(1)
-                        accepted = 0
+                    words = mac_packet_words(dw, data)
+                    for n, word in enumerate(words):
+                        last = n == nwords - 1
+                        yield dut.packet.sink.data.eq(word)
+                        yield dut.packet.sink.last.eq(last)
+                        yield dut.packet.sink.valid.eq(1)
+                        if last:
+                            yield dut.source.ready.eq(0)
                         for _ in range(timeout):
-                            if (yield dut.source.valid) and (yield dut.source.ready):
-                                accepted += 1
-                                if accepted == nwords - 1:
-                                    yield dut.source.ready.eq(0)
-                                    break
                             yield
-                        if accepted != nwords - 1:
+                            if (yield dut.packet.sink.ready):
+                                break
+                            if last:
+                                result["done_before_ready"] |= bool((yield dut.packet.done))
+                                if (yield dut.source.valid) and (yield dut.source.last):
+                                    break
+                        else:
                             result["timeout"] = True
                             return
+
+                        if last:
+                            yield
+                            break
 
                     result["timeout"] = (yield from wait_until(lambda: (yield dut.source.valid) and (yield dut.source.last), timeout=timeout))
                     if result["timeout"]:

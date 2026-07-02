@@ -11,15 +11,12 @@ import math
 
 from litex.gen import *
 
-from litex.soc.interconnect.packet import PacketFIFO
-
 from liteeth.common import *
 
 # MAC Packet Writer Frontend -----------------------------------------------------------------------
 
 class LiteEthMACPacketWriter(LiteXModule):
-    def __init__(self, dw, depth, eth_mtu=eth_mtu_default, fifo_depth=1, timestamp=None,
-        drop_when_disabled=False):
+    def __init__(self, dw, depth, eth_mtu=eth_mtu_default, timestamp=None, drop_when_disabled=False):
         # Endpoint / Signals.
         self.sink   = sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_packet_description(dw))
@@ -34,7 +31,6 @@ class LiteEthMACPacketWriter(LiteXModule):
         # Parameters Check / Compute.
         assert dw in [8, 16, 32, 64]
         assert depth > 0
-        assert fifo_depth >= 0
         if timestamp is not None:
             timestampbits  = len(timestamp)
             self.timestamp = Signal(timestampbits)
@@ -45,18 +41,7 @@ class LiteEthMACPacketWriter(LiteXModule):
         error   = Signal()
         pkt_len = Signal.like(self.length)
 
-        # Optional Packet FIFO.
-        if fifo_depth:
-            packet_fifo = PacketFIFO(
-                eth_phy_description(dw),
-                payload_depth = fifo_depth * depth,
-                param_depth   = fifo_depth,
-            )
-            self.submodules += packet_fifo
-            self.comb += sink.connect(packet_fifo.sink)
-            packet_source = packet_fifo.source
-        else:
-            packet_source = sink
+        packet_source = sink
         if timestamp is not None:
             timestamp_value = Signal(timestampbits)
             self.comb += self.timestamp.eq(timestamp_value)
@@ -82,29 +67,15 @@ class LiteEthMACPacketWriter(LiteXModule):
             self.offset.eq(length),
             self.length.eq(Mux(self.done, pkt_len, next_length)),
         ]
-        # FSM.
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            If(packet_source.valid,
-                If(self.enable,
-                    NextState("WRITE")
-                ).Elif(drop_when_disabled,
-                    packet_source.ready.eq(1),
-                    If(packet_source.last,
-                        NextState("DISCARD")
-                    ).Else(
-                        NextState("DISCARD-ALL")
-                    )
-                )
-            )
-        )
-        fsm.act("WRITE",
-            If(packet_source.valid,
+
+        def write_statements(idle=False):
+            continue_statements = [NextState("WRITE")] if idle else []
+            return [
                 source.valid.eq(packet_source.valid),
                 source.data.eq(packet_source.data),
                 source.last.eq(packet_source.last),
                 packet_source.ready.eq(source.ready),
-                If(source.ready,
+                If(packet_source.valid & source.ready,
                     NextValue(length, next_length),
                     NextValue(pkt_len, next_length),
                     If(next_length > eth_mtu,
@@ -121,11 +92,40 @@ class LiteEthMACPacketWriter(LiteXModule):
                         ).Else(
                             NextState("TERMINATE")
                         )
-                    ).Elif(last_error,
-                        NextValue(error, 1)
+                    ).Else(
+                        If(last_error,
+                            NextValue(error, 1)
+                        ),
+                        *continue_statements
+                    )
+                )
+            ]
+
+        # FSM.
+        self.fsm = fsm = FSM(reset_state="IDLE")
+        if drop_when_disabled:
+            fsm.act("IDLE",
+                If(self.enable,
+                    *write_statements(idle=True)
+                ).Else(
+                    packet_source.ready.eq(1),
+                    If(packet_source.valid,
+                        If(packet_source.last,
+                            NextState("DISCARD")
+                        ).Else(
+                            NextState("DISCARD-ALL")
+                        )
                     )
                 )
             )
+        else:
+            fsm.act("IDLE",
+                If(self.enable,
+                    *write_statements(idle=True)
+                )
+            )
+        fsm.act("WRITE",
+            *write_statements()
         )
         fsm.act("DISCARD-ALL",
             packet_source.ready.eq(1),
@@ -149,7 +149,9 @@ class LiteEthMACPacketWriter(LiteXModule):
             NextState("IDLE")
         )
         if timestamp is not None:
-            self.sync += If(fsm.ongoing("WRITE") & packet_source.valid & source.ready & (length == 0),
+            self.sync += If(
+                (fsm.ongoing("IDLE") | fsm.ongoing("WRITE")) &
+                self.enable & packet_source.valid & packet_source.ready & (length == 0),
                 timestamp_value.eq(timestamp)
             )
 
@@ -157,7 +159,7 @@ class LiteEthMACPacketWriter(LiteXModule):
 # MAC Packet Reader Frontend -----------------------------------------------------------------------
 
 class LiteEthMACPacketReader(LiteXModule):
-    def __init__(self, dw, depth, fifo_depth=1, timestamp=None):
+    def __init__(self, dw, depth, timestamp=None):
         # Endpoint / Signals.
         self.sink   = sink   = stream.Endpoint(eth_packet_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
@@ -171,7 +173,6 @@ class LiteEthMACPacketReader(LiteXModule):
         # Parameters Check / Compute.
         assert dw in [8, 16, 32, 64]
         assert depth > 0
-        assert fifo_depth >= 0
         if timestamp is not None:
             timestampbits  = len(timestamp)
             self.timestamp = Signal(timestampbits)
@@ -182,41 +183,27 @@ class LiteEthMACPacketReader(LiteXModule):
             timestamp_value = Signal(timestampbits)
             self.comb += self.timestamp.eq(timestamp_value)
 
-        # Optional Packet FIFO.
         direct_read = Signal()
-        if fifo_depth:
-            packet_fifo = PacketFIFO(
-                eth_phy_description(dw),
-                payload_depth = fifo_depth * depth,
-                param_depth   = fifo_depth,
-            )
-            self.submodules += packet_fifo
-            packet_sink = packet_fifo.sink
-            self.comb += packet_fifo.source.connect(source)
-            self.comb += packet_sink.error.eq(0)
-        else:
-            packet_sink = sink
-            self.comb += [
-                source.valid.eq(sink.valid & direct_read),
-                source.data.eq(sink.data),
-                source.last.eq(sink.last),
-                source.error.eq(0),
-                sink.ready.eq(source.ready & direct_read),
-            ]
+        self.comb += [
+            source.valid.eq(sink.valid & direct_read),
+            source.data.eq(sink.data),
+            source.last.eq(sink.last),
+            source.error.eq(0),
+            sink.ready.eq(source.ready & direct_read),
+        ]
 
         # Encode Length to last_be.
         length_lsb = self.length[:int(math.log2(dw/8))] if (dw != 8) else 0
-        last_be    = packet_sink.last_be if fifo_depth else source.last_be
-        self.comb += If(packet_sink.last,
+        self.comb += If(source.last,
             Case(length_lsb, {
-                1         : last_be.eq(0b00000001),
-                2         : last_be.eq(0b00000010),
-                3         : last_be.eq(0b00000100),
-                4         : last_be.eq(0b00001000),
-                5         : last_be.eq(0b00010000),
-                6         : last_be.eq(0b00100000),
-                7         : last_be.eq(0b01000000),
-                "default" : last_be.eq(2**(dw//8 - 1)),
+                1         : source.last_be.eq(0b00000001),
+                2         : source.last_be.eq(0b00000010),
+                3         : source.last_be.eq(0b00000100),
+                4         : source.last_be.eq(0b00001000),
+                5         : source.last_be.eq(0b00010000),
+                6         : source.last_be.eq(0b00100000),
+                7         : source.last_be.eq(0b01000000),
+                "default" : source.last_be.eq(2**(dw//8 - 1)),
             })
         )
 
@@ -231,31 +218,13 @@ class LiteEthMACPacketReader(LiteXModule):
                 NextState("READ")
             )
         )
-        read_statements = []
-        if fifo_depth:
-            read_statements += [
-                packet_sink.valid.eq(sink.valid),
-                packet_sink.data.eq(sink.data),
-                packet_sink.last.eq(sink.last),
-                sink.ready.eq(packet_sink.ready),
-            ]
         fsm.act("READ",
             direct_read.eq(1),
-            *read_statements,
             If(sink.valid & sink.ready & sink.last,
                 NextState("END")
             )
         )
-        if fifo_depth:
-            end_statements = [If(source.valid & source.ready & source.last,
-                self.done.eq(1),
-                NextState("IDLE"),
-            )]
-        else:
-            end_statements = [
-                self.done.eq(1),
-                NextState("IDLE"),
-            ]
         fsm.act("END",
-            *end_statements,
+            self.done.eq(1),
+            NextState("IDLE"),
         )
