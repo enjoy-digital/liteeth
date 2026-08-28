@@ -1,7 +1,10 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Originally adapted from phy/usp_gty_10g_baser.py, and supersedes it.
+#
+# Copyright (c) 2017-2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -9,16 +12,14 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
 
-from litex.soc.interconnect import stream
-
-from liteiclink.serdes.gty_ultrascale_init import GTYRXInit, GTYTXInit
-
 from liteiclink.serdes.common import *
-from liteiclink.serdes.gty_ultrascale import  GTYChannelPLL, GTYQuadPLL
+from liteiclink.serdes.gty_ultrascale import GTYChannelPLL, GTYQuadPLL
+from liteiclink.serdes.gty_ultrascale_init import GTYRXInit, GTYTXInit
 
 # USP_GTY_10G_BASER --------------------------------------------------------------------------------
 
-class USP_GTY_10G_BASER(LiteXModule):
+class PMA_USP_GTY_10G_BASER(LiteXModule):
+    """UltraScale+ GTY transceiver wrapper for use with 10GbE"""
     def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity = 0, rx_polarity = 0):
         # Interfaces.
         self.tx_data   = tx_data   = Signal(64)
