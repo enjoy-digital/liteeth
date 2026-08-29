@@ -16,7 +16,8 @@ from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXG
 from liteiclink.serdes.gty_ultrascale import GTYQuadPLL
 from liteiclink.serdes.gth4_ultrascale import GTH4QuadPLL
 from liteeth.phy.pcs_10g import PCS
-from liteeth.phy.pma_10g import PMA_USP_GTY_10G_BASER, PMA_USP_GTH_10G_BASER
+from liteeth.phy.pma_10g import (PMA_USP_GTY_10G_BASER, PMA_USP_GTH_10G_BASER,
+                                PMA_USP_GTY_5G_BASER)
 
 
 class USP_GTY_10G_BASER(LiteXModule):
@@ -37,7 +38,7 @@ class USP_GTY_10G_BASER(LiteXModule):
     rx_clk_freq = 156.25e6
     tx_clk_freq = 156.25e6
 
-    # Overridden in the subclass for GTH
+    # Overridden in the subclasses for GTH and for 5GBASE-R
     transceiver = (GTYQuadPLL, PMA_USP_GTY_10G_BASER)
 
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
@@ -240,3 +241,12 @@ class USP_GTY_10G_BASER(LiteXModule):
 class USP_GTH_10G_BASER(USP_GTY_10G_BASER):
     """10GBASE-R via UltraScale+ GTH transceiver"""
     transceiver = (GTH4QuadPLL, PMA_USP_GTH_10G_BASER)
+
+
+class USP_GTY_5G_BASER(USP_GTY_10G_BASER):
+    """5GBASE-R via UltraScale+ GTY transceiver"""
+    linerate    = 5.15625e9
+    rx_clk_freq = linerate/66   # one 66-bit block per user clock: 78.125 MHz
+    tx_clk_freq = linerate/66
+
+    transceiver = (GTYQuadPLL, PMA_USP_GTY_5G_BASER)

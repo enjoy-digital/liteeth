@@ -20,6 +20,19 @@ from liteiclink.serdes.gty_ultrascale_init import GTYRXInit, GTYTXInit
 
 class PMA_USP_GTY_10G_BASER(LiteXModule):
     """UltraScale+ GTY transceiver wrapper for use with 10GbE"""
+
+    # These are the only instantiation parameters that depend on the line rate.
+    rate_config = {
+        "RXCDR_CFG2"              : 0b0000001001101001,
+        "RXCDR_CFG2_GEN2"         : 0b1001101001,
+        "RXCDR_CFG2_GEN3"         : 0b0000001001101001,
+        "ADAPT_CFG1"              : 0b1111101100011100,
+        "PROGDIV_CFG"             : 33.0,
+        # PCIe-only (noop here) but kept to preserve the gt_wizard output.
+        "PCIE_BUFG_DIV_CTRL"      : 0b0011010100000000,
+        "PCIE_PLL_SEL_MODE_GEN12" : 0b10,
+    }
+
     def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity = 0, rx_polarity = 0):
         # Interfaces.
         self.tx_data   = tx_data   = Signal(64)
@@ -72,7 +85,7 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_ACJTAG_MODE                  = 0b0,
             p_ACJTAG_RESET                 = 0b0,
             p_ADAPT_CFG0                   = 0b0000000000000000,
-            p_ADAPT_CFG1                   = 0b1111101100011100,
+            p_ADAPT_CFG1                   = self.rate_config["ADAPT_CFG1"],
             p_ADAPT_CFG2                   = 0b0000000000000000,
             p_ALIGN_COMMA_DOUBLE           = "FALSE",
             p_ALIGN_COMMA_ENABLE           = 0b1111111111,
@@ -218,9 +231,9 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_PCIE3_CLK_COR_MIN_LAT        = 0b00000,
             p_PCIE3_CLK_COR_THRSH_TIMER    = 0b001000,
             p_PCIE_64B_DYN_CLKSW_DIS       = "FALSE",
-            p_PCIE_BUFG_DIV_CTRL           = 0b0011010100000000,
+            p_PCIE_BUFG_DIV_CTRL           = self.rate_config["PCIE_BUFG_DIV_CTRL"],
             p_PCIE_GEN4_64BIT_INT_EN       = "FALSE",
-            p_PCIE_PLL_SEL_MODE_GEN12      = 0b10,
+            p_PCIE_PLL_SEL_MODE_GEN12      = self.rate_config["PCIE_PLL_SEL_MODE_GEN12"],
             p_PCIE_PLL_SEL_MODE_GEN3       = 0b10,
             p_PCIE_PLL_SEL_MODE_GEN4       = 0b10,
             p_PCIE_RXPCS_CFG_GEN3          = 0b0000101010100101,
@@ -256,9 +269,9 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_RXCDR_CFG0_GEN3              = 0b0000000000000011,
             p_RXCDR_CFG1                   = 0b0000000000000000,
             p_RXCDR_CFG1_GEN3              = 0b0000000000000000,
-            p_RXCDR_CFG2                   = 0b0000001001101001,
-            p_RXCDR_CFG2_GEN2              = 0b1001101001,
-            p_RXCDR_CFG2_GEN3              = 0b0000001001101001,
+            p_RXCDR_CFG2                   = self.rate_config["RXCDR_CFG2"],
+            p_RXCDR_CFG2_GEN2              = self.rate_config["RXCDR_CFG2_GEN2"],
+            p_RXCDR_CFG2_GEN3              = self.rate_config["RXCDR_CFG2_GEN3"],
             p_RXCDR_CFG2_GEN4              = 0b0000000101100100,
             p_RXCDR_CFG3                   = 0b0000000000010010,
             p_RXCDR_CFG3_GEN2              = 0b010010,
@@ -349,7 +362,7 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_RXOOB_CFG                    = 0b000000110,
             p_RXOOB_CLK_CFG                = "PMA",
             p_RXOSCALRESET_TIME            = 0b00011,
-            p_RXOUT_DIV                    = 1,
+            p_RXOUT_DIV                    = pll.config["d"],
             p_RXPCSRESET_TIME              = 0b00011,
             p_RXPHBEACON_CFG               = 0b0000000000000000,
             p_RXPHDLY_CFG                  = 0b0010000001110000,
@@ -407,7 +420,7 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_RX_INT_DATAWIDTH             = 2,
             p_RX_PMA_POWER_SAVE            = 0b0,
             p_RX_PMA_RSV0                  = 0b0000000000101111,
-            p_RX_PROGDIV_CFG               = 33.0,
+            p_RX_PROGDIV_CFG               = self.rate_config["PROGDIV_CFG"],
             p_RX_PROGDIV_RATE              = 0b0000000000000001,
             p_RX_RESLOAD_CTRL              = 0b0000,
             p_RX_RESLOAD_OVRD              = 0b0,
@@ -468,7 +481,7 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_TXFIFO_ADDR_CFG              = "LOW",
             p_TXGBOX_FIFO_INIT_RD_ADDR     = 4,
             p_TXGEARBOX_EN                 = "TRUE",
-            p_TXOUT_DIV                    = 1,
+            p_TXOUT_DIV                    = pll.config["d"],
             p_TXPCSRESET_TIME              = 0b00011,
             p_TXPHDLY_CFG0                 = 0b0110000001110000,
             p_TXPHDLY_CFG1                 = 0b0000000000001111,
@@ -526,7 +539,7 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
             p_TX_PMA_RSV0                  = 0b0000000000000000,
             p_TX_PMA_RSV1                  = 0b0000000000000000,
             p_TX_PROGCLK_SEL               = "PREPI",
-            p_TX_PROGDIV_CFG               = 33.0,
+            p_TX_PROGDIV_CFG               = self.rate_config["PROGDIV_CFG"],
             p_TX_PROGDIV_RATE              = 0b0000000000000001,
             p_TX_RXDETECT_CFG              = 0b00000000110010,
             p_TX_RXDETECT_REF              = 5,
@@ -747,3 +760,24 @@ class PMA_USP_GTY_10G_BASER(LiteXModule):
 
     def do_finalize(self):
         self.specials += Instance("GTYE4_CHANNEL", **self.gty_params)
+
+
+# USP_GTY_5G_BASER ---------------------------------------------------------------------------------
+
+class PMA_USP_GTY_5G_BASER(PMA_USP_GTY_10G_BASER):
+    """UltraScale+ GTY transceiver wrapper for use with 5GbE (5GBASE-R, 5.15625 Gb/s).
+
+    Identical to the 10GbE wrapper apart from the attributes below and the channel output divider,
+    which follows the PLL: liteiclink solves both rates on the same QPLL VCO (10.3125 GHz, N=66,
+    M=1 from a 156.25 MHz reference) and separates them with d=1 against d=2. Values are from
+    Vivado's transceiver wizard at 5.15625 Gb/s.
+    """
+    rate_config = dict(PMA_USP_GTY_10G_BASER.rate_config,
+        RXCDR_CFG2              = 0b0000001001011001,
+        RXCDR_CFG2_GEN2         = 0b1001011001,
+        RXCDR_CFG2_GEN3         = 0b0000001001011001,
+        ADAPT_CFG1              = 0b1111100000011100,
+        PROGDIV_CFG             = 66.0,
+        PCIE_BUFG_DIV_CTRL      = 0b0001000000000000,
+        PCIE_PLL_SEL_MODE_GEN12 = 0b00,
+    )

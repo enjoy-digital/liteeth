@@ -22,9 +22,10 @@ from litex.soc.interconnect import stream
 
 from litex.soc.cores.clock     import *
 from litex.soc.cores.led       import LedChaser
+from litex.soc.cores.bitbang   import I2CMaster
 
 from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
-from liteeth.phy.us_gt_10g_baser import USP_GTY_10G_BASER
+from liteeth.phy.us_gt_10g_baser import USP_GTY_10G_BASER, USP_GTY_5G_BASER
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -54,7 +55,7 @@ class BenchSoC(SoCMini):
         # SoCMini ----------------------------------------------------------------------------------
         SoCMini.__init__(
             self, platform, clk_freq=sys_clk_freq,
-            ident="LiteEth 10G demo on Alibaba Cloud KU3P Board",
+            ident=f"LiteEth {eth_speed.upper()} demo on Alibaba Cloud KU3P Board",
             ident_version=True,
         )
 
@@ -77,7 +78,8 @@ class BenchSoC(SoCMini):
                 refclk_from_fabric =False,
             )
         else:
-            self.ethphy = USP_GTY_10G_BASER(
+            phy_cls = {"5g": USP_GTY_5G_BASER, "10g": USP_GTY_10G_BASER}[eth_speed]
+            self.ethphy = phy_cls(
                 refclk_or_clk_pads=eth_refclk,
                 data_pads=self.platform.request("sfp", eth_sfp),
                 sys_clk_freq=self.clk_freq,
@@ -91,6 +93,9 @@ class BenchSoC(SoCMini):
             buffer_depth=255,
         )
 
+        self.sfp0_i2c = I2CMaster(platform.request("sfp_i2c", 0))
+        self.sfp1_i2c = I2CMaster(platform.request("sfp_i2c", 1))
+
         self.add_ram("sram", origin=0x20000000, size=0x1000)
 
         # LEDs -------------------------------------------------------------------------------------
@@ -102,9 +107,10 @@ class BenchSoC(SoCMini):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteX SoC on Alibaba Cloud KU3P board, with 1G or 10G Ethernet.")
-    # Note that the system clock frequency must be comfortably above 156.25e6 in order to handle 10G traffic.
+    # Note that the system clock frequency must be comfortably above the PHY's receive clock in
+    # order to keep up: 156.25MHz for 10GBASE-R, half that for 5GBASE-R.
     parser.add_argument("--sys-clk-freq", default=200e6, type=float,            help="System clock frequency.")
-    parser.add_argument("--eth-speed",    default="10g", choices=["1g", "10g"], help="Ethernet speed: 1000BASE-X or 10GBASE-R.")
+    parser.add_argument("--eth-speed",    default="10g", choices=["1g", "5g", "10g"], help="Ethernet speed: 1000BASE-X, 5GBASE-R or 10GBASE-R.")
     parser.add_argument("--eth-sfp",      default=0, type=int, choices=[0, 1],  help="Ethernet SFP.")
     parser.add_argument("--eth-ip",       default="192.168.1.50",               help="Etherbone IP address.")
     parser.add_argument("--build",        action="store_true", help="Build bitstream")
