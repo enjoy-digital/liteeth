@@ -217,6 +217,15 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += rx_crc
                 self.pipeline.append(rx_crc)
 
+                # source.error is combinational from last_be through the per-lane CRC engine
+                # select. Buffering here avoids disturbing error/last alignment inside the checker.
+                if eth_needs_pipelining(phy):
+                    rx_crc_buffer = stream.Buffer(eth_phy_description(datapath_dw),
+                        pipe_valid=True, pipe_ready=True)
+                    rx_crc_buffer = ClockDomainsRenamer(cd_rx)(rx_crc_buffer)
+                    self.submodules += rx_crc_buffer
+                    self.pipeline.append(rx_crc_buffer)
+
                 # Synchronize CRC error to sys domain.
                 ps = PulseSynchronizer(cd_rx, "sys")
                 self.submodules += ps

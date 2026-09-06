@@ -8,9 +8,9 @@ from migen import *
 
 from litex.gen import *
 
-from liteeth.phy.pcs_10g.encoder import XGMIIBaseREncoder
-from liteeth.phy.pcs_10g.prbs import PRBS31Generator
-from liteeth.phy.pcs_10g.scrambler import Scrambler
+from liteeth.phy.pcs_baser.encoder import XGMIIBaseREncoder
+from liteeth.phy.pcs_baser.prbs import PRBS31Generator
+from liteeth.phy.pcs_baser.scrambler import Scrambler
 
 # PCS TX Interface ---------------------------------------------------------------------------------
 

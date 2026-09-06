@@ -11,7 +11,7 @@ from migen import *
 
 from litex.gen import *
 
-from liteeth.phy.pcs_10g.lfsr import fibonacci_lfsr
+from liteeth.phy.pcs_baser.lfsr import fibonacci_lfsr
 
 # Constants ----------------------------------------------------------------------------------------
 

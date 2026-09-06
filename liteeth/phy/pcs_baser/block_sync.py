@@ -8,7 +8,7 @@ from migen import *
 
 from litex.gen import *
 
-from liteeth.phy.pcs_10g.common import *
+from liteeth.phy.pcs_baser.common import *
 
 # PCS RX Frame Sync --------------------------------------------------------------------------------
 

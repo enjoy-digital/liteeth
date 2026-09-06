@@ -8,7 +8,7 @@ from migen import *
 
 from litex.gen import *
 
-from liteeth.phy.pcs_10g.lfsr import fibonacci_lfsr
+from liteeth.phy.pcs_baser.lfsr import fibonacci_lfsr
 
 SCRAMBLER_WIDTH = 58 # State bits, S0..S57 (Figure 49-8).
 SCRAMBLER_TAP_0 = 38 # S38, the x^39 term.

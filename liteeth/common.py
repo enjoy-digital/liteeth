@@ -18,6 +18,16 @@ from litex.soc.interconnect.packet import Header, HeaderField
 
 # Ethernet Constants -------------------------------------------------------------------------------
 
+# Datapaths faster than this are likely to need extra pipeline stages to close timing. For example,
+# 10GBASE-R at 156.25MHz does not on most applicable devices, 25GBASE-R at 390.625MHz does. This is
+# a rough guess.
+eth_pipelining_clk_freq = 200e6
+
+def eth_needs_pipelining(phy):
+    """True if a PHY's receive clock is fast enough to need the extra pipeline stages."""
+    return getattr(phy, "rx_clk_freq", 0) > eth_pipelining_clk_freq
+
+
 eth_mtu_default      = 1530
 eth_mtu_jumboframe   = 9022
 eth_min_frame_length = 64

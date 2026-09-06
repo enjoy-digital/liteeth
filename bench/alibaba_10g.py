@@ -25,7 +25,7 @@ from litex.soc.cores.led       import LedChaser
 from litex.soc.cores.bitbang   import I2CMaster
 
 from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
-from liteeth.phy.us_gt_10g_baser import USP_GTY_10G_BASER, USP_GTY_5G_BASER
+from liteeth.phy.us_gt_baser import USP_GTY_10G_BASER, USP_GTY_5G_BASER, USP_GTY_25G_BASER
 
 # CRG ----------------------------------------------------------------------------------------------
 
@@ -66,6 +66,7 @@ class BenchSoC(SoCMini):
 
         # Etherbone --------------------------------------------------------------------------------
         eth_refclk = self.platform.request("sfp_mgt_clk", 0)
+        # 25G runs fractional-N from this reference (N = 82.5). See USP_GTY_25G_BASER.
         eth_refclk_freq = 156.25e6
         platform.add_period_constraint(eth_refclk.p, 1e9/eth_refclk_freq)
 
@@ -78,7 +79,9 @@ class BenchSoC(SoCMini):
                 refclk_from_fabric =False,
             )
         else:
-            phy_cls = {"5g": USP_GTY_5G_BASER, "10g": USP_GTY_10G_BASER}[eth_speed]
+            phy_cls = {"5g" : USP_GTY_5G_BASER,
+                       "10g": USP_GTY_10G_BASER,
+                       "25g": USP_GTY_25G_BASER}[eth_speed]
             self.ethphy = phy_cls(
                 refclk_or_clk_pads=eth_refclk,
                 data_pads=self.platform.request("sfp", eth_sfp),
@@ -106,11 +109,11 @@ class BenchSoC(SoCMini):
 # Build --------------------------------------------------------------------------------------------
 
 def main():
-    parser = argparse.ArgumentParser(description="LiteX SoC on Alibaba Cloud KU3P board, with 1G or 10G Ethernet.")
-    # Note that the system clock frequency must be comfortably above the PHY's receive clock in
-    # order to keep up: 156.25MHz for 10GBASE-R, half that for 5GBASE-R.
+    parser = argparse.ArgumentParser(description="LiteX SoC on Alibaba Cloud KU3P board, with multi-gig ethernet.")
+    # sys_clk should exceed the PHY receive clock: 156.25MHz for 10GBASE-R, half that for 5G.
+    # 25GBASE-R receives at 390.625MHz, so throughput into sys is capped at 64 bits x sys_clk.
     parser.add_argument("--sys-clk-freq", default=200e6, type=float,            help="System clock frequency.")
-    parser.add_argument("--eth-speed",    default="10g", choices=["1g", "5g", "10g"], help="Ethernet speed: 1000BASE-X, 5GBASE-R or 10GBASE-R.")
+    parser.add_argument("--eth-speed",    default="10g", choices=["1g", "5g", "10g", "25g"], help="Ethernet speed: 1000BASE-X, 5/10/25GBASE-R.")
     parser.add_argument("--eth-sfp",      default=0, type=int, choices=[0, 1],  help="Ethernet SFP.")
     parser.add_argument("--eth-ip",       default="192.168.1.50",               help="Etherbone IP address.")
     parser.add_argument("--build",        action="store_true", help="Build bitstream")

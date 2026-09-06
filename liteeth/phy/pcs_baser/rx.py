@@ -11,13 +11,13 @@ from migen import *
 
 from litex.gen import *
 
-from liteeth.phy.pcs_10g.ber_mon import PCSRXBERMonitor
-from liteeth.phy.pcs_10g.common import *
-from liteeth.phy.pcs_10g.decoder import XGMIIBaseRDecoder
-from liteeth.phy.pcs_10g.block_sync import PCSRXFrameSync
-from liteeth.phy.pcs_10g.prbs import PRBS31Checker
-from liteeth.phy.pcs_10g.scrambler import Descrambler
-from liteeth.phy.pcs_10g.watchdog import PCSRXWatchdog
+from liteeth.phy.pcs_baser.ber_mon import PCSRXBERMonitor
+from liteeth.phy.pcs_baser.common import *
+from liteeth.phy.pcs_baser.decoder import XGMIIBaseRDecoder
+from liteeth.phy.pcs_baser.block_sync import PCSRXFrameSync
+from liteeth.phy.pcs_baser.prbs import PRBS31Checker
+from liteeth.phy.pcs_baser.scrambler import Descrambler
+from liteeth.phy.pcs_baser.watchdog import PCSRXWatchdog
 
 # PCS RX Interface ---------------------------------------------------------------------------------
 
@@ -251,7 +251,7 @@ class PCSRX(LiteXModule):
     64B/66B decoder, and implements the receive state machine of Figure 49-15 on top of them.
     """
     def __init__(self, dw=64, hdr_width=2, prbs31_enable=False, bitslip_high_cycles=1,
-                 bitslip_low_cycles=8, count_125us=195):
+                 bitslip_low_cycles=8, count_125us=195, with_pipelining=False):
         self.xgmii_rxd           = Signal(dw)
         self.xgmii_rxc           = Signal(dw//8)
 
@@ -281,13 +281,32 @@ class PCSRX(LiteXModule):
         )
         self.decoder = decoder = XGMIIBaseRDecoder()
 
+        # Classification pipeline stage -------------------------------------------------------------
+        # Classification (49.2.13.2.3) gets its own cycle, with the decoder's data delayed to
+        # match, so it does not share a cycle with the state machine it feeds. Blocks stay in
+        # step: r_type_p is still the one-block lookahead of Figure 49-15, and r_type_cur is it
+        # registered again. Costs a cycle of receive latency.
+        encoded_data_d = Signal(dw, reset_less=True)
+        encoded_hdr_d  = Signal(hdr_width, reset_less=True)
+        r_type_p       = Signal(max=R_TYPE_E + 1, reset_less=True)
+
+        classify = [
+            encoded_data_d.eq(interface.encoded_rx_data),
+            encoded_hdr_d.eq(interface.encoded_rx_hdr),
+            r_type_p.eq(_r_type(self, interface.encoded_rx_data, interface.encoded_rx_hdr)),
+        ]
+        if with_pipelining:
+            self.sync += classify
+        else:
+            self.comb += classify
+
         self.comb += [
             interface.serdes_rx_data.eq(self.serdes_rx_data),
             interface.serdes_rx_hdr.eq(self.serdes_rx_hdr),
             interface.cfg_rx_prbs31_enable.eq(self.cfg_rx_prbs31_enable),
 
-            decoder.encoded_rx_data.eq(interface.encoded_rx_data),
-            decoder.encoded_rx_hdr.eq(interface.encoded_rx_hdr),
+            decoder.encoded_rx_data.eq(encoded_data_d),
+            decoder.encoded_rx_hdr.eq(encoded_hdr_d),
 
             # The watchdog judges window quality from the decoder's block error reports.
             interface.rx_bad_block.eq(decoder.rx_bad_block),
@@ -304,9 +323,9 @@ class PCSRX(LiteXModule):
         ]
 
         # Receive state machine (Figure 49-15) ------------------------------------------------------
-        # r_type_next classifies the block at the decoder's input; r_type_cur is the same signal one
-        # cycle later, so it classifies the block the decoder is presenting now.
-        r_type_next = _r_type(self, interface.encoded_rx_data, interface.encoded_rx_hdr)
+        # r_type_next classifies the block at the decoder's input. r_type_cur is the same signal
+        # one cycle later, classifying the block the decoder is presenting now.
+        r_type_next = r_type_p
         r_type_cur  = Signal(max=R_TYPE_E + 1, reset_less=True)
         self.sync += r_type_cur.eq(r_type_next)
 

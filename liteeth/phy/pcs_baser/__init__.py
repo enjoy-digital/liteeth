@@ -19,8 +19,8 @@ from migen import *
 
 from litex.gen import *
 
-from liteeth.phy.pcs_10g.rx import PCSRX
-from liteeth.phy.pcs_10g.tx import PCSTX
+from liteeth.phy.pcs_baser.rx import PCSRX
+from liteeth.phy.pcs_baser.tx import PCSTX
 
 # PCS ----------------------------------------------------------------------------------------------
 
@@ -30,7 +30,7 @@ class PCS(LiteXModule):
     XGMII (SDR) to transceiver 64b+2b data+header, wrapping both Tx and Rx directions.
     """
     def __init__(self, dw=64, hdr_width=2, prbs31_enable=False, bitslip_high_cycles=1,
-                 bitslip_low_cycles=8, count_125us=195):
+                 bitslip_low_cycles=8, count_125us=195, with_pipelining=False):
         self.xgmii_txd           = Signal(dw)
         self.xgmii_txc           = Signal(dw//8)
         self.xgmii_rxd           = Signal(dw)
@@ -82,6 +82,7 @@ class PCS(LiteXModule):
             bitslip_high_cycles = bitslip_high_cycles,
             bitslip_low_cycles  = bitslip_low_cycles,
             count_125us         = count_125us,
+            with_pipelining     = with_pipelining,
         ))
 
         self.comb += [

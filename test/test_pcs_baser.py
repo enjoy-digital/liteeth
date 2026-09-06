@@ -16,17 +16,17 @@ from litex.gen.sim import run_simulation
 
 from liteeth.common import eth_phy_description, eth_preamble
 from liteeth.mac.core import LiteEthMACCore
-from liteeth.phy.pcs_10g import PCS
-from liteeth.phy.pcs_10g.ber_mon import PCSRXBERMonitor
-from liteeth.phy.pcs_10g.block_sync import PCSRXFrameSync
-from liteeth.phy.pcs_10g.common import *
-from liteeth.phy.pcs_10g.decoder import XGMIIBaseRDecoder
-from liteeth.phy.pcs_10g.encoder import XGMIIBaseREncoder
-from liteeth.phy.pcs_10g.rx import PCSRX
-from liteeth.phy.pcs_10g.tx import PCSTX
-from liteeth.phy.pcs_10g.prbs import PRBS31Checker, PRBS31Generator
-from liteeth.phy.pcs_10g.scrambler import Scrambler, Descrambler
-from liteeth.phy.pcs_10g.watchdog import PCSRXWatchdog
+from liteeth.phy.pcs_baser import PCS
+from liteeth.phy.pcs_baser.ber_mon import PCSRXBERMonitor
+from liteeth.phy.pcs_baser.block_sync import PCSRXFrameSync
+from liteeth.phy.pcs_baser.common import *
+from liteeth.phy.pcs_baser.decoder import XGMIIBaseRDecoder
+from liteeth.phy.pcs_baser.encoder import XGMIIBaseREncoder
+from liteeth.phy.pcs_baser.rx import PCSRX
+from liteeth.phy.pcs_baser.tx import PCSTX
+from liteeth.phy.pcs_baser.prbs import PRBS31Checker, PRBS31Generator
+from liteeth.phy.pcs_baser.scrambler import Scrambler, Descrambler
+from liteeth.phy.pcs_baser.watchdog import PCSRXWatchdog
 from liteeth.phy.xgmii import LiteEthPHYXGMII
 
 from test.model.mac import MACPacket
@@ -710,7 +710,7 @@ class PCSLoopbackDUT(LiteXModule):
     That is what a transceiver in near-end loopback presents, minus the transceiver. `bit_offset`
     additionally misaligns the block boundary, so the receiver has to slip its way back to it.
     """
-    def __init__(self, dw=64, bit_offset=None):
+    def __init__(self, dw=64, bit_offset=None, with_pipelining=False):
         # A loopback has one clock: there is no separately recovered receive clock.
         #
         # The 125 us window and the transceiver's slip settling period are both shortened to what
@@ -720,6 +720,7 @@ class PCSLoopbackDUT(LiteXModule):
             dw                 = dw,
             count_125us        = 8,
             bitslip_low_cycles = 1,
+            with_pipelining    = with_pipelining,
         ))
 
         if bit_offset is None:
@@ -756,7 +757,8 @@ class PCSLoopbackDUT(LiteXModule):
             If(offset == width - 1, offset.eq(0)).Else(offset.eq(offset + 1)),
         )
 
-PCS_LATENCY     = 4   # Registers on the way round: encoder, transmit interface, descrambler, decoder.
+PCS_LATENCY     = 4   # encoder, transmit interface, descrambler, decoder.
+PCS_LATENCY_PIPELINED = PCS_LATENCY + 1 # the extra block classification stage.
 LOOPBACK_CYCLES = 400 # Enough for an aligned receiver to reach PCS_status.
 SLIP_CYCLES     = 500 # Enough for a misaligned one to walk to the block boundary first.
 
@@ -784,13 +786,13 @@ def xgmii_stimulus(cycles):
     return (pattern*(cycles//len(pattern) + 1))[:cycles]
 
 @lru_cache(maxsize=None)
-def run_pcs_loopback(cycles, bit_offset=None):
+def run_pcs_loopback(cycles, bit_offset=None, with_pipelining=False):
     """Drive XGMII into a looped-back PCS and record what comes back, cycle by cycle.
 
     Cached, because a full PCS is the slowest thing here to simulate and several tests read
     different things out of the same run.
     """
-    dut       = PCSLoopbackDUT(bit_offset=bit_offset)
+    dut       = PCSLoopbackDUT(bit_offset=bit_offset, with_pipelining=with_pipelining)
     transfers = xgmii_stimulus(cycles)
 
     return transfers, run_cycles(dut,
@@ -842,6 +844,13 @@ class TestPCSLoopback(unittest.TestCase):
         self.assertTrue(samples[-1]["status"], "the PCS never reached PCS_status")
         self.assertEqual(self.find_latency(transfers, samples), PCS_LATENCY)
 
+    def test_loopback_pipelined(self):
+        """The extra classification stage must be transparent apart from one cycle of latency."""
+        transfers, samples = run_pcs_loopback(LOOPBACK_CYCLES, with_pipelining=True)
+
+        self.assertTrue(samples[-1]["status"], "the pipelined PCS never reached PCS_status")
+        self.assertEqual(self.find_latency(transfers, samples), PCS_LATENCY_PIPELINED)
+
     def test_bitslip_alignment(self):
         """A receiver started off the block boundary must slip its way onto it.
 
@@ -849,13 +858,15 @@ class TestPCSLoopback(unittest.TestCase):
         window at any offset into the stream must still arrive at block lock.
         """
         for bit_offset in (1, 33, 65):
-            with self.subTest(bit_offset=bit_offset):
-                transfers, samples = run_pcs_loopback(SLIP_CYCLES, bit_offset=bit_offset)
-
-                self.assertTrue(samples[-1]["status"],
-                    f"the PCS never locked from a {bit_offset}-bit offset")
-                # The sliding window costs one register of its own on top of the PCS pipeline.
-                self.assertEqual(self.find_latency(transfers, samples), PCS_LATENCY + 1)
+            for pipelined in (False, True):
+                with self.subTest(bit_offset=bit_offset, pipelined=pipelined):
+                    transfers, samples = run_pcs_loopback(SLIP_CYCLES, bit_offset=bit_offset,
+                                                          with_pipelining=pipelined)
+                    self.assertTrue(samples[-1]["status"],
+                        f"the PCS never locked from a {bit_offset}-bit offset")
+                    # The sliding window costs one register of its own on top of the PCS pipeline.
+                    expected = PCS_LATENCY_PIPELINED if pipelined else PCS_LATENCY
+                    self.assertEqual(self.find_latency(transfers, samples), expected + 1)
 
     def test_no_bad_blocks_once_up(self):
         """A link at PCS_status carrying legal XGMII must never report a bad block."""
