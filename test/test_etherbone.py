@@ -20,6 +20,7 @@ from test.stream_helpers import Packet, PacketLogger, PacketStreamer
 
 ip_address = 0x12345678
 udp_port   = 0x1234
+src_port   = 0x5678
 
 # Helpers ------------------------------------------------------------------------------------------
 
@@ -67,18 +68,33 @@ class DUT(LiteXModule):
 
         self.streamer = PacketStreamer(eth_udp_user_description(32), byte_data=True)
         self.logger   = PacketLogger(eth_udp_user_description(32), byte_data=True)
-        udp_port_endpoint = self.udp.crossbar.port
+        self.tx_port  = udp_port_endpoint = self.udp.crossbar.port
         self.comb += [
             self.streamer.source.connect(udp_port_endpoint.source),
             udp_port_endpoint.sink.connect(self.logger.sink),
         ]
+        self.tx_params = []
+
+    @passive
+    def tx_params_logger(self):
+        # Sample the UDP params on the first beat of each TX packet.
+        first = True
+        while True:
+            if (yield self.tx_port.sink.valid) and (yield self.tx_port.sink.ready):
+                if first:
+                    self.tx_params.append((
+                        (yield self.tx_port.sink.src_port),
+                        (yield self.tx_port.sink.dst_port),
+                    ))
+                first = (yield self.tx_port.sink.last)
+            yield
 
 # Test Etherbone -----------------------------------------------------------------------------------
 
 class TestEtherbone(unittest.TestCase):
     def send(self, dut, packet):
         packet = encode_packet(packet)
-        yield dut.streamer.source.src_port.eq(udp_port)
+        yield dut.streamer.source.src_port.eq(src_port)
         yield dut.streamer.source.dst_port.eq(udp_port)
         yield dut.streamer.source.ip_address.eq(ip_address)
         yield dut.streamer.source.length.eq(len(packet))
@@ -156,4 +172,9 @@ class TestEtherbone(unittest.TestCase):
             self.main_generator(dut),
             dut.streamer.generator(),
             dut.logger.generator(),
+            dut.tx_params_logger(),
         ])
+        self.assertTrue(len(dut.tx_params) > 0)
+        for tx_src_port, tx_dst_port in dut.tx_params:
+            self.assertEqual(tx_src_port, udp_port)
+            self.assertEqual(tx_dst_port, src_port)
