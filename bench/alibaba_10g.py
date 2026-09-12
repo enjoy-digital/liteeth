@@ -24,6 +24,7 @@ from litex.soc.cores.clock     import *
 from litex.soc.cores.led       import LedChaser
 from litex.soc.cores.bitbang   import I2CMaster
 
+from liteeth.common import eth_mtu_default
 from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
 from liteeth.phy.us_gt_baser import USP_GTY_10G_BASER, USP_GTY_5G_BASER, USP_GTY_25G_BASER
 
@@ -49,7 +50,8 @@ class _CRG(LiteXModule):
 # BenchSoC ------------------------------------------------------------------------------------------
 
 class BenchSoC(SoCMini):
-    def __init__(self, sys_clk_freq=200e6, eth_speed="10g", eth_sfp=0, eth_ip="192.168.1.50"):
+    def __init__(self, sys_clk_freq=200e6, eth_speed="10g", eth_sfp=0, eth_ip="192.168.1.50",
+        eth_mtu=eth_mtu_default):
         platform = alibaba_xcku3p.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
@@ -94,6 +96,7 @@ class BenchSoC(SoCMini):
             ip_address=eth_ip,
             data_width=64,
             buffer_depth=255,
+            eth_mtu=eth_mtu,
         )
 
         self.sfp0_i2c = I2CMaster(platform.request("sfp_i2c", 0))
@@ -116,6 +119,7 @@ def main():
     parser.add_argument("--eth-speed",    default="10g", choices=["1g", "5g", "10g", "25g"], help="Ethernet speed: 1000BASE-X, 5/10/25GBASE-R.")
     parser.add_argument("--eth-sfp",      default=0, type=int, choices=[0, 1],  help="Ethernet SFP.")
     parser.add_argument("--eth-ip",       default="192.168.1.50",               help="Etherbone IP address.")
+    parser.add_argument("--eth-mtu",      default=eth_mtu_default, type=int,    help="Ethernet MTU (LiteEth frame size, e.g. 9030 for jumbo frames).")
     parser.add_argument("--build",        action="store_true", help="Build bitstream")
     parser.add_argument("--load",         action="store_true", help="Load bitstream")
     args = parser.parse_args()
@@ -125,6 +129,7 @@ def main():
         eth_speed      = args.eth_speed,
         eth_sfp        = args.eth_sfp,
         eth_ip         = args.eth_ip,
+        eth_mtu        = args.eth_mtu,
     )
 
     builder = Builder(soc, csr_csv="csr.csv")

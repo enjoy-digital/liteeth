@@ -7,7 +7,7 @@
 from migen import *
 from litex.gen import *
 
-from migen.genlib.cdc import MultiReg
+from migen.genlib.cdc import MultiReg, PulseSynchronizer
 
 from litex.soc.interconnect.csr import CSRField, CSRStatus, CSRStorage
 
@@ -17,7 +17,7 @@ from liteiclink.serdes.gty_ultrascale import GTYQuadPLL
 from liteiclink.serdes.gth4_ultrascale import GTH4QuadPLL
 from liteeth.phy.pcs_baser import PCS
 from liteeth.phy.pma_baser import (PMA_USP_GTY_10G_BASER, PMA_USP_GTH_10G_BASER,
-                                PMA_USP_GTY_5G_BASER, PMA_USP_GTY_25G_BASER)
+                                PMA_USP_GTY_5G_BASER, PMA_USP_GTH_5G_BASER, PMA_USP_GTY_25G_BASER)
 
 
 class USP_GTY_10G_BASER(LiteXModule):
@@ -100,7 +100,6 @@ class USP_GTY_10G_BASER(LiteXModule):
 
         self.comb += [
             pma.tx_init.restart.eq(self.reset),
-            pma.rx_init.restart.eq(self.reset),
             pma.loopback.eq(self.loopback),
         ]
 
@@ -156,6 +155,14 @@ class USP_GTY_10G_BASER(LiteXModule):
             pma.rx_slip.eq(pcs.serdes_rx_bitslip),
 
             self.link_up.eq(pcs.rx_status),
+        ]
+
+        # Lets the PCS ask for a fresh CDR lock when it cannot reach block sync.
+        ps_restart = PulseSynchronizer("eth_rx", "sys")
+        self.submodules += ps_restart
+        self.comb += [
+            ps_restart.i.eq(pcs.serdes_rx_reset_req),
+            pma.rx_init.restart.eq(self.reset | ps_restart.o),
         ]
 
         # XGMII
@@ -278,6 +285,15 @@ class USP_GTY_5G_BASER(USP_GTY_10G_BASER):
     tx_clk_freq = linerate/66
 
     transceiver = (GTYQuadPLL, PMA_USP_GTY_5G_BASER)
+
+
+class USP_GTH_5G_BASER(USP_GTH_10G_BASER):
+    """5GBASE-R via UltraScale+ GTH transceiver"""
+    linerate    = 5.15625e9
+    rx_clk_freq = linerate/66   # one 66-bit block per user clock: 78.125 MHz
+    tx_clk_freq = linerate/66
+
+    transceiver = (GTH4QuadPLL, PMA_USP_GTH_5G_BASER)
 
 
 class GTYQuadPLL0(GTYQuadPLL):
