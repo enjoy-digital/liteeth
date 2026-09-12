@@ -74,6 +74,7 @@ class LiteEthMAC(LiteXModule):
         eth_mtu            = eth_mtu_default,
         rx_fifo_depth      = 0,
         tx_fifo_depth      = 0,
+        with_store_and_forward = "auto",
     ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -91,6 +92,7 @@ class LiteEthMAC(LiteXModule):
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
             eth_mtu           = eth_mtu,
+            with_store_and_forward = with_store_and_forward,
         )
         self.csrs = []
 
