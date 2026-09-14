@@ -17,7 +17,7 @@ from liteeth.phy.pcs_1000basex import PCS
 # GW5 1000BASE-X PHY -------------------------------------------------------------------------------
 
 class GW5_1000BASEX(LiteXModule):
-    """GW5AST-138B 1000BASE-X PHY on Q1 lane 0, using a 100 MHz Q1 REFCLK1.
+    """GW5AST-138B 1000BASE-X PHY on Q1 lane 0 or 1, using a 100 MHz Q1 REFCLK1.
 
     The hard SerDes uses a raw 10-bit interface at 125 MHz. LiteEth implements the
     8b/10b PCS and autonegotiation; the SerDes performs comma alignment. The embedded
@@ -30,9 +30,11 @@ class GW5_1000BASEX(LiteXModule):
     tx_clk_freq = 125e6
     rx_clk_freq = 125e6
 
-    def __init__(self, platform, with_csr=True, pcs_kwargs=None):
+    def __init__(self, platform, with_csr=True, pcs_kwargs=None, lane=0):
         if platform.devicename != "GW5AST-138B":
-            raise ValueError("GW5_1000BASEX currently supports GW5AST-138B, Q1 lane 0.")
+            raise ValueError("GW5_1000BASEX currently supports GW5AST-138B.")
+        if lane not in (0, 1):
+            raise ValueError("GW5_1000BASEX supports Q1 lanes 0 and 1.")
 
         self.reset     = Signal()
         self.pll_lock  = Signal()
@@ -151,31 +153,31 @@ class GW5_1000BASEX(LiteXModule):
                 f"i_FABRIC_LN{n}_RATE_I_H"      : Constant(0, 2),
                 f"i_FABRIC_LN{n}_TX_VLD_IN"     : Constant(0, 1),
             })
-        serdes_params.update(
-            i_FABRIC_LN0_RSTN_I         = ~reset,
-            i_LANE0_PCS_TX_RST          = reset,
-            i_LANE0_PCS_RX_RST          = reset,
-            i_LANE0_FABRIC_TX_CLK       = ClockSignal("eth_tx"),
-            i_LANE0_FABRIC_RX_CLK       = ClockSignal("eth_rx"),
-            i_FABRIC_LN0_TXDATA_I       = tx_data,
-            i_FABRIC_LN0_TX_VLD_IN      = 1,
-            i_LANE0_RX_IF_FIFO_RDEN     = ~rx_empty,
-            o_LANE0_PCS_TX_O_FABRIC_CLK = self.cd_eth_tx.clk,
-            o_LANE0_PCS_RX_O_FABRIC_CLK = self.cd_eth_rx.clk,
-            o_FABRIC_LN0_RXDATA_O       = rx_data,
-            o_FABRIC_LN0_RX_VLD_OUT     = rx_valid,
-            o_LANE0_RX_IF_FIFO_EMPTY    = rx_empty,
-            o_FABRIC_LANE0_CMU_OK_O     = self.pll_lock,
-            o_FABRIC_LN0_PMA_RX_LOCK_O  = self.cdr_lock,
-            o_LANE0_ALIGN_LINK          = self.aligned,
-        )
+        serdes_params.update({
+            f"i_FABRIC_LN{lane}_RSTN_I"         : ~reset,
+            f"i_LANE{lane}_PCS_TX_RST"          : reset,
+            f"i_LANE{lane}_PCS_RX_RST"          : reset,
+            f"i_LANE{lane}_FABRIC_TX_CLK"       : ClockSignal("eth_tx"),
+            f"i_LANE{lane}_FABRIC_RX_CLK"       : ClockSignal("eth_rx"),
+            f"i_FABRIC_LN{lane}_TXDATA_I"       : tx_data,
+            f"i_FABRIC_LN{lane}_TX_VLD_IN"      : 1,
+            f"i_LANE{lane}_RX_IF_FIFO_RDEN"     : ~rx_empty,
+            f"o_LANE{lane}_PCS_TX_O_FABRIC_CLK" : self.cd_eth_tx.clk,
+            f"o_LANE{lane}_PCS_RX_O_FABRIC_CLK" : self.cd_eth_rx.clk,
+            f"o_FABRIC_LN{lane}_RXDATA_O"       : rx_data,
+            f"o_FABRIC_LN{lane}_RX_VLD_OUT"     : rx_valid,
+            f"o_LANE{lane}_RX_IF_FIFO_EMPTY"    : rx_empty,
+            f"o_FABRIC_LANE{lane}_CMU_OK_O"     : self.pll_lock,
+            f"o_FABRIC_LN{lane}_PMA_RX_LOCK_O"  : self.cdr_lock,
+            f"o_LANE{lane}_ALIGN_LINK"          : self.aligned,
+        })
         self.specials += Instance("GTR12_QUAD", **serdes_params)
 
         # Configuration ----------------------------------------------------------------------------
         # Write the embedded configuration in the gateware directory when Gowin runs.
         platform.toolchain.additional_tcl_commands += [
             'set serdes_csr [open "gw5_1000basex.csr" w]',
-            'puts -nonewline $serdes_csr {' + _serdes_csr + '}',
+            'puts -nonewline $serdes_csr {' + _serdes_csr[lane] + '}',
             'close $serdes_csr',
             'set_csr gw5_1000basex.csr',
         ]
@@ -198,7 +200,8 @@ class GW5_1000BASEX(LiteXModule):
 # Generated with Gowin 1.9.12. Keep the TOML source below with the register writes so configuration
 # changes can be regenerated; see doc/gw5_1000basex.md. Normal builds only need the register writes.
 
-_serdes_csr = """\
+_serdes_csr = {
+    0 : """\
 # GW5AST-138B Q1 lane 0: 100 MHz REFCLK1, 1.25 Gb/s, raw 10-bit PCS.
 upar_write_driver(0xb00000,0x00FFAA55) # top.checkRegAcess
 upar_write_driver(0x908104,0x00022322) # q1.qpll0.reset
@@ -458,10 +461,274 @@ upar_write_driver(0x90882c,0x00707120) # q1.release_ln
 upar_write_driver(0x908840,0x00707120) # q1.release_ln
 upar_write_driver(0x908854,0x00707120) # q1.release_ln
 upar_write_driver(0x908868,0x00707120) # q1.release_ln
-"""
+""",
+    1 : """\
+# GW5AST-138B Q1 lane 1: 100 MHz REFCLK1, 1.25 Gb/s, raw 10-bit PCS.
+upar_write_driver(0xb00000,0x00FFAA55) # top.checkRegAcess
+upar_write_driver(0x908104,0x00022322) # q1.qpll0.reset
+upar_write_driver(0x908000,0x00022322) # q1.qpll1.reset
+upar_write_driver(0x90a204,0x00022322) # q1.ln1.cpll.reset
+upar_write_driver(0x808760,0x0001D010) # q0.cfg_refclk_mux
+upar_write_driver(0x808764,0x00005010) # q0.cfg_refclk_mux
+upar_write_driver(0x908760,0x00015410) # q1.cfg_refclk_mux
+upar_write_driver(0x908764,0x00005010) # q1.cfg_refclk_mux
+upar_write_driver(0xc10008,0x00000003) # q1.cfg_quad_cmn
+upar_write_driver(0x900b91,0x0000F300) # q1.cfg_quad_cmn
+upar_write_driver(0x900bfa,0x00020000) # q1.cfg_quad_cmn
+upar_write_driver(0x908398,0x00000001) # q1.cfg_quad_cmn
+upar_write_driver(0x90839c,0x0000001E) # q1.cfg_quad_cmn
+upar_write_driver(0x908900,0x00000001) # q1.cfg_quad_mcu
+upar_write_driver(0x908904,0x000050FF) # q1.cfg_quad_mcu
+upar_write_driver(0x908908,0x00005F00) # q1.cfg_quad_mcu
+upar_write_driver(0x90890c,0x00006080) # q1.cfg_quad_mcu
+upar_write_driver(0x908910,0x00005800) # q1.cfg_quad_mcu
+upar_write_driver(0x908914,0x00006001) # q1.cfg_quad_mcu
+upar_write_driver(0x908918,0x000044FF) # q1.cfg_quad_mcu
+upar_write_driver(0x90891c,0x0000A000) # q1.cfg_quad_mcu
+upar_write_driver(0x9003a9,0x00008000) # q1.ln0.cfg_ln
+upar_write_driver(0x909070,0x00000000) # q1.ln0.cfg_ln
+upar_write_driver(0x909074,0x00000000) # q1.ln0.cfg_ln
+upar_write_driver(0x90906c,0x00020110) # q1.ln0.cfg_ln
+upar_write_driver(0x900200,0x00000000) # q1.ln0.cfg_ln
+upar_write_driver(0x9005a9,0x00008000) # q1.ln1.cfg_ln
+upar_write_driver(0x909270,0x00000000) # q1.ln1.cfg_ln
+upar_write_driver(0x909274,0x00000000) # q1.ln1.cfg_ln
+upar_write_driver(0x90926c,0x00020110) # q1.ln1.cfg_ln
+upar_write_driver(0x900400,0x00000000) # q1.ln1.cfg_ln
+upar_write_driver(0x90946c,0x00020110) # q1.ln2.cfg_ln
+upar_write_driver(0x900600,0x00000055) # q1.ln2.cfg_ln
+upar_write_driver(0x900602,0x00550000) # q1.ln2.cfg_ln
+upar_write_driver(0x90966c,0x00020110) # q1.ln3.cfg_ln
+upar_write_driver(0x900800,0x00000055) # q1.ln3.cfg_ln
+upar_write_driver(0x900802,0x00550000) # q1.ln3.cfg_ln
+upar_write_driver(0x908200,0x0000000B) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x90821c,0x007F00BF) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x908220,0x01FF01FF) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x908224,0x00030003) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x90827c,0x00000000) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x908288,0x89ABCDEF) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x90828c,0x01234567) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x908710,0x00000008) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x908714,0x04000700) # q1.ln0.cfg_txdrv_cmn
+upar_write_driver(0x901970,0x00000000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901971,0x00004000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901972,0x00010000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901973,0x58000000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901974,0x00000001) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901975,0x00006000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901976,0x00030000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901977,0x41000000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901978,0x00000000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x901979,0x0000A000) # q1.ln1.cfg_txdrv_mcu
+upar_write_driver(0x908300,0x0000000B) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x90831c,0x007F00BF) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x908320,0x01FF01FF) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x908324,0x00030003) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x90837c,0x00000000) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x908388,0x89ABCDEF) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x90838c,0x01234567) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x908720,0x00000008) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x908724,0x04000700) # q1.ln1.cfg_txdrv_cmn
+upar_write_driver(0x908380,0x00000014) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908384,0x00000014) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x90833c,0x191A1A1A) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908340,0x18181919) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908344,0x17171718) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908348,0x15161616) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x90834c,0x14151515) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908350,0x13141414) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908354,0x12131313) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908358,0x12121212) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x90835c,0x11111111) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908360,0x10101011) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908364,0x10101010) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908368,0x0F0F0F0F) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x90836c,0x0E0F0F0F) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908370,0x0E0E0E0E) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908374,0x0D0E0E0E) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908378,0x0D0D0D0D) # q1.ln1.cfg_txdrv_cal
+upar_write_driver(0x908400,0x0000000B) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x90841c,0x007F00BF) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x908420,0x01FF01FF) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x908424,0x00030003) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x90847c,0x00000000) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x908488,0x89ABCDEF) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x90848c,0x01234567) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x908730,0x00000008) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x908734,0x04000700) # q1.ln2.cfg_txdrv_cmn
+upar_write_driver(0x908500,0x0000000B) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x90851c,0x007F00BF) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x908520,0x01FF01FF) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x908524,0x00030003) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x90857c,0x00000000) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x908588,0x89ABCDEF) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x90858c,0x01234567) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x908740,0x00000008) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x908744,0x04000700) # q1.ln3.cfg_txdrv_cmn
+upar_write_driver(0x808984,0x00000000) # q0.cfg_cmx_refclk_det_sel
+upar_write_driver(0x908808,0x00000003) # q1.preload_init_pll
+upar_write_driver(0x90880c,0x00000011) # q1.preload_init_pll
+upar_write_driver(0x90886c,0x00000001) # q1.preload_init_pll
+upar_write_driver(0x90a244,0x00000001) # q1.ln1.cpll.cfg_cpll_cmn
+upar_write_driver(0x90a250,0x00000064) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x90a254,0x00000064) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x90a258,0x00000064) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x90a22c,0x000900B0) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x90a230,0x00000005) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x90a234,0x00000404) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x90a238,0x006400C8) # q1.ln1.cpll.cfg_gcfsm
+upar_write_driver(0x9005a5,0x00000300) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a208,0x00000001) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a200,0x00000001) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a23c,0x00000003) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a20c,0x10320108) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a214,0x00000F01) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a218,0x01B50008) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a21c,0x000041C3) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a224,0x06674080) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a220,0x00000015) # q1.ln1.cpll.cfg_pma_force
+upar_write_driver(0x90a300,0x60015800) # q1.ln1.cpll.cfg_cpll_mcu
+upar_write_driver(0x90a304,0x0000A000) # q1.ln1.cpll.cfg_cpll_mcu
+upar_write_driver(0x9083a0,0x00007510) # q1.ln1.cpll.cfg_txlane_clktree
+upar_write_driver(0x90a05c,0x00000000) # q1.preload_init_pll
+upar_write_driver(0x90a25c,0x00000000) # q1.preload_init_pll
+upar_write_driver(0x90a45c,0x00000000) # q1.preload_init_pll
+upar_write_driver(0x90a65c,0x00000000) # q1.preload_init_pll
+upar_write_driver(0x90815c,0x00000000) # q1.preload_init_pll
+upar_write_driver(0x90806c,0x00000000) # q1.preload_init_pll
+upar_write_driver(0xc10008,0x00000002) # q1.preload_spec_phy
+upar_write_driver(0x900333,0x48000000) # q1.preload_spec_phy
+upar_write_driver(0x900533,0x48000000) # q1.preload_spec_phy
+upar_write_driver(0x900733,0x48000000) # q1.preload_spec_phy
+upar_write_driver(0x900933,0x48000000) # q1.preload_spec_phy
+upar_write_driver(0x90882c,0x00707320) # q1.preload_spec_phy
+upar_write_driver(0x908840,0x00707320) # q1.preload_spec_phy
+upar_write_driver(0x908854,0x00707320) # q1.preload_spec_phy
+upar_write_driver(0x908868,0x00707320) # q1.preload_spec_phy
+upar_write_driver(0x900e4f,0x01000000) # q1.preload_spec_phy
+upar_write_driver(0x900331,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x900531,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x900731,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x900931,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x900a1a,0x00010000) # q1.preload_spec_phy
+upar_write_driver(0x90881c,0xFFFFFFFF) # q1.preload_spec_phy
+upar_write_driver(0x908820,0x000007FF) # q1.preload_spec_phy
+upar_write_driver(0x908824,0x00000001) # q1.preload_spec_phy
+upar_write_driver(0x908828,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x908830,0xFFFFFFFF) # q1.preload_spec_phy
+upar_write_driver(0x908834,0x000007FF) # q1.preload_spec_phy
+upar_write_driver(0x908838,0x00000001) # q1.preload_spec_phy
+upar_write_driver(0x90883c,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x908844,0xFFFFFFFF) # q1.preload_spec_phy
+upar_write_driver(0x908848,0x000007FF) # q1.preload_spec_phy
+upar_write_driver(0x90884c,0x00000001) # q1.preload_spec_phy
+upar_write_driver(0x908850,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x908858,0xFFFFFFFF) # q1.preload_spec_phy
+upar_write_driver(0x90885c,0x000007FF) # q1.preload_spec_phy
+upar_write_driver(0x908860,0x00000001) # q1.preload_spec_phy
+upar_write_driver(0x908864,0x00000000) # q1.preload_spec_phy
+upar_write_driver(0x900458,0x00000080) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90057b,0xFA000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90057c,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900579,0x0000FA00) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90057a,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900585,0x0000FA00) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900586,0x00FA0000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900432,0x00FA0000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900433,0xFA000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x9083b8,0x00000020) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90045b,0x79000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90045c,0x000000D2) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900454,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900460,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900461,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900453,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90045e,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90045f,0x00000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x9083bc,0x00000111) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900ad3,0x3F000000) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900ad5,0x00000700) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x900ad4,0x00000007) # q1.ln1.CDR.config_cdr
+upar_write_driver(0x90053e,0x00010000) # q1.ln1.CDR.toggle_rxsd
+upar_write_driver(0x90053e,0x00000000) # q1.ln1.CDR.toggle_rxsd
+upar_write_driver(0x9082c0,0x00000010) # q1.preload_spec_phy
+upar_write_driver(0x9083c0,0x00000010) # q1.preload_spec_phy
+upar_write_driver(0x9084c0,0x00000010) # q1.preload_spec_phy
+upar_write_driver(0x9085c0,0x00000010) # q1.preload_spec_phy
+upar_write_driver(0x908200,0x00000002) # q1.preload_spec_phy
+upar_write_driver(0x908300,0x00000002) # q1.preload_spec_phy
+upar_write_driver(0x908400,0x00000002) # q1.preload_spec_phy
+upar_write_driver(0x908500,0x00000002) # q1.preload_spec_phy
+upar_write_driver(0x908238,0x00000B00) # q1.preload_spec_phy
+upar_write_driver(0x908338,0x00000B00) # q1.preload_spec_phy
+upar_write_driver(0x908438,0x00000B00) # q1.preload_spec_phy
+upar_write_driver(0x908538,0x00000B00) # q1.preload_spec_phy
+upar_write_driver(0x908234,0x0000E000) # q1.preload_spec_phy
+upar_write_driver(0x908334,0x0000E000) # q1.preload_spec_phy
+upar_write_driver(0x908434,0x0000E000) # q1.preload_spec_phy
+upar_write_driver(0x908534,0x0000E000) # q1.preload_spec_phy
+upar_write_driver(0x908884,0x00000000) # q1.preload_fpcs
+upar_write_driver(0x909000,0x00000000) # q1.preload_fpcs
+upar_write_driver(0x909200,0x00000000) # q1.preload_fpcs
+upar_write_driver(0x909400,0x00000000) # q1.preload_fpcs
+upar_write_driver(0x909600,0x00000000) # q1.preload_fpcs
+upar_write_driver(0x908870,0x00010000) # q1.preload_fpcs_clock_root
+upar_write_driver(0x900202,0x00110000) # q1.preload_fpcs_clock_root
+upar_write_driver(0x900402,0x00110000) # q1.preload_fpcs_clock_root
+upar_write_driver(0x900602,0x00110000) # q1.preload_fpcs_clock_root
+upar_write_driver(0x900802,0x00110000) # q1.preload_fpcs_clock_root
+upar_write_driver(0x90906c,0x00000110) # q1.preload_fpcs_clock_root
+upar_write_driver(0x90926c,0x00000110) # q1.preload_fpcs_clock_root
+upar_write_driver(0x90946c,0x00000110) # q1.preload_fpcs_clock_root
+upar_write_driver(0x90966c,0x00000110) # q1.preload_fpcs_clock_root
+upar_write_driver(0x908918,0x00004000) # q1.preload_mcu
+upar_write_driver(0x90891c,0x00006300) # q1.preload_mcu
+upar_write_driver(0x908920,0x000051FF) # q1.preload_mcu
+upar_write_driver(0x908924,0x000052FF) # q1.preload_mcu
+upar_write_driver(0x908928,0x00005F00) # q1.preload_mcu
+upar_write_driver(0x90892c,0x00006080) # q1.preload_mcu
+upar_write_driver(0x908930,0x000044A2) # q1.preload_mcu
+upar_write_driver(0x908934,0x0000A000) # q1.preload_mcu
+upar_write_driver(0xc10008,0x00000003) # q1.pll_release_reset
+upar_write_driver(0x90a204,0x00022233) # q1.ln1.cpll.release_reset
+upar_write_driver(0x900456,0x00000000) # q1.ln1.setNearEndSerialLoopBack
+upar_write_driver(0x90888c,0x00000000) # q1.ln1.setParallelTx2RxLoopBack
+upar_write_driver(0x90926c,0x00020110) # q1.ln1.setParallelTx2RxLoopBack
+upar_write_driver(0x900401,0x00000000) # q1.ln1.setParallelTx2RxLoopBack
+upar_write_driver(0x90052d,0x00000000) # q1.ln1.setParallelTx2RxLoopBack
+upar_write_driver(0x9084dc,0x00000031) # q1.ln1.cfg_rx_couple_mode
+upar_write_driver(0x9005a7,0x00000000) # q1.ln1.cfg_rx_couple_mode
+upar_write_driver(0x900424,0x00000041) # q1.ln1.cfg_rx_couple_mode
+upar_write_driver(0x900425,0x00004100) # q1.ln1.cfg_rx_couple_mode
+upar_write_driver(0x900426,0x00410000) # q1.ln1.cfg_rx_couple_mode
+upar_write_driver(0x900427,0x41000000) # q1.ln1.cfg_rx_couple_mode
+upar_write_driver(0x909268,0x000001FB) # q1.ln1.cfg_fpcs
+upar_write_driver(0x90926c,0x00020110) # q1.ln1.cfg_fpcs
+upar_write_driver(0x908628,0x00000106) # q1.ln1.cfg_tx_GearFIFO
+upar_write_driver(0x90862c,0x0008020C) # q1.ln1.cfg_tx_GearFIFO
+upar_write_driver(0x908608,0x0000101A) # q1.ln1.cfg_rx_GearFIFO
+upar_write_driver(0x90860c,0x0008020C) # q1.ln1.cfg_rx_GearFIFO
+upar_write_driver(0x909210,0x0000017C) # q1.ln1.cfg_word_align_comma
+upar_write_driver(0x909214,0x000003FF) # q1.ln1.cfg_word_align_comma
+upar_write_driver(0x909220,0x0008017C) # q1.ln1.cfg_bonding
+upar_write_driver(0x909288,0x00000000) # q1.ln1.cfg_bonding
+upar_write_driver(0x90927c,0x0000007C) # q1.ln1.cfg_bonding
+upar_write_driver(0x909280,0x0000007C) # q1.ln1.cfg_bonding
+upar_write_driver(0x909284,0x0000007C) # q1.ln1.cfg_bonding
+upar_write_driver(0x90888c,0x00000100) # q1.ln1.cfg_bonding
+upar_write_driver(0x90922c,0x0010017C) # q1.ln1.cfg_ctc
+upar_write_driver(0x909278,0x0000007C) # q1.ln1.cfg_ctc
+upar_write_driver(0x90923c,0x00000008) # q1.ln1.cfg_tx_data_manipulation
+upar_write_driver(0x909208,0x00000008) # q1.ln1.cfg_rx_data_manipulation
+upar_write_driver(0x90882c,0x00707120) # q1.release_ln
+upar_write_driver(0x908840,0x00707120) # q1.release_ln
+upar_write_driver(0x908854,0x00707120) # q1.release_ln
+upar_write_driver(0x908868,0x00707120) # q1.release_ln
+""",
+}
 
 _serdes_toml = """\
-# GW5AST-138B Q1 lane 0: 100 MHz REFCLK1, 1.25 Gb/s, raw 10-bit PCS.
+# GW5AST-138B Q1 lane {lane}: 100 MHz REFCLK1, 1.25 Gb/s, raw 10-bit PCS.
 # Source for the embedded CSR configuration; see doc/gw5_1000basex.md for regeneration.
 device = "GW5AST-138"
 
@@ -587,7 +854,7 @@ mac_quad_clk_sel = "Q0"
 lane_reset_by_fabric = true
 ref_pad0_freq = "0M"
 ref_pad1_freq = "100M"
-rx_quad_clk_internal_sel = "LN0_PMA_RX_CLK"
+rx_quad_clk_internal_sel = "LN{lane}_PMA_RX_CLK"
 rx_quad_clk_sel = "Internal"
 tx_quad_clk_internal_sel = "CM0"
 tx_quad_clk_sel = "Internal"
@@ -599,7 +866,7 @@ refomux0_sel = 0
 qpll0_ref_sel = 0
 qpll1_ref_sel = 0
 
-[q1.ln0]
+[q1.ln{lane}]
 locked_from_fabric = false
 chbond_trigger_by_fabric = true
 enable = true
@@ -635,8 +902,8 @@ ctc_skipb_pattern_is_kcode = false
 ctc_rd_start_depth = "16"
 ffe_manual = false
 sr_sd_thsel = 6
-chbond_mst_sel = "q1.ln0"
-ctc_mst_sel = "q1.ln0"
+chbond_mst_sel = "q1.ln{lane}"
+ctc_mst_sel = "q1.ln{lane}"
 pcs_rx_reset_by_fabric = true
 pcs_tx_reset_by_fabric = true
 rx_bit_invert = false
@@ -651,7 +918,7 @@ rx_slip_distance = 8
 tx_bit_invert = false
 tx_byte_invert = false
 tx_data_manipulation_enable = false
-tx_if_cfg_mst_sel = "q1.ln0"
+tx_if_cfg_mst_sel = "q1.ln{lane}"
 tx_if_cfg_rd_start_depth = 8
 tx_ovs_mode = "OFF"
 tx_ovs_ratio = "N/A"
@@ -659,7 +926,7 @@ tx_pol_invert = false
 tx_slip_distance = 8
 cpll_ref_sel = 0
 
-[q1.ln1]
+[q1.ln{other_lane}]
 locked_from_fabric = false
 chbond_trigger_by_fabric = true
 enable = false
@@ -694,8 +961,8 @@ ctc_skipb_pattern = 124
 ctc_skipb_pattern_is_kcode = false
 ctc_rd_start_depth = "16"
 ffe_manual = false
-chbond_mst_sel = "q1.ln1"
-ctc_mst_sel = "q1.ln1"
+chbond_mst_sel = "q1.ln{other_lane}"
+ctc_mst_sel = "q1.ln{other_lane}"
 pcs_rx_reset_by_fabric = true
 pcs_tx_reset_by_fabric = true
 rx_bit_invert = false
@@ -710,7 +977,7 @@ rx_slip_distance = 8
 tx_bit_invert = false
 tx_byte_invert = false
 tx_data_manipulation_enable = false
-tx_if_cfg_mst_sel = "q1.ln1"
+tx_if_cfg_mst_sel = "q1.ln{other_lane}"
 tx_if_cfg_rd_start_depth = 8
 tx_ovs_mode = "OFF"
 tx_ovs_ratio = "N/A"
