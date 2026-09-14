@@ -19,19 +19,22 @@ adds the TX/RX clock constraints and asynchronous clock-domain exceptions.
 
 ## SerDes configuration
 
-`liteeth/phy/gw5_1000basex.csr` contains the SerDes initialization register
-writes. The PHY adds it to the Gowin project with `set_csr`; no separately
-generated or encrypted PHY IP is needed for a normal build.
+`liteeth/phy/gw5_1000basex.py` embeds the SerDes initialization register
+writes and their TOML source. During the Gowin build, the project script
+writes `gw5_1000basex.csr` in the gateware directory and loads it with
+`set_csr`. No separate configuration files, generated/encrypted PHY IP,
+or file writes during Python module construction are needed.
 
-The accompanying TOML records the configuration used to produce these
-writes with Gowin 1.9.12's generator:
+To modify the SerDes setup, export the embedded TOML and regenerate the
+register writes with Gowin 1.9.12's generator:
 
 ```sh
+python3 -c 'from liteeth.phy.gw5_1000basex import _serdes_toml; print(_serdes_toml, end="")' > gw5_1000basex.toml
 /path/to/gowin/IDE/bin/serdes_toml_to_csr.dist/serdes_toml_to_csr_138k.bin \
-    liteeth/phy/gw5_1000basex.toml \
-    -o liteeth/phy/gw5_1000basex.csr --comment
+    gw5_1000basex.toml -o gw5_1000basex.csr --comment
 ```
 
+Update both embedded strings together after checking the generated writes.
 The generator requires its vendor runtime dependencies. Regeneration is
 only needed when changing the SerDes configuration. The checked-in setup
 enables only Q1 lane 0: 1.25 Gb/s TX/RX, 10-bit data, hardware comma
