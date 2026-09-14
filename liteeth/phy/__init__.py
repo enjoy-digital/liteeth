@@ -35,6 +35,7 @@ from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII as LiteEthECP5PHYRGMII
 
 from liteeth.phy.a7_1000basex      import A7_1000BASEX
 from liteeth.phy.a7_1000basex      import A7_2500BASEX
+from liteeth.phy.a7_1000basex      import A7_5000BASEX
 from liteeth.phy.k7_1000basex      import K7_1000BASEX
 from liteeth.phy.k7_1000basex      import K7_2500BASEX
 from liteeth.phy.ku_1000basex      import KU_1000BASEX
