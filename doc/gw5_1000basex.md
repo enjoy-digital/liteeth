@@ -19,6 +19,24 @@ require fabric I/O constraints. The board target must enable the SFP
 transmitter and provide the reference clock. LiteX's Ethernet integration
 adds the TX/RX clock constraints and asynchronous clock-domain exceptions.
 
+## Raw SerDes interface
+
+`GW5SerDes(platform, lane=0)` exposes the same configured transceiver without
+the LiteEth PCS or MAC buffers. This permits another PCS, such as White Rabbit,
+to reuse the Gowin instance, reset controls and register configuration.
+
+The caller registers `tx_data[9:0]` on `tx_clk` and samples `rx_data[9:0]`
+on `rx_clk`, both nominally 125 MHz. `rx_data` retains the full 88-bit vendor
+output, but only its low ten bits carry symbols in this configuration.
+`rx_valid` qualifies received symbols; `rx_empty` is the RX FIFO status.
+`reset` is active high. `pll_lock`, `cdr_lock` and `aligned` expose the raw
+status signals. The caller supplies clock domains, synchronized resets,
+status crossings and timing constraints.
+
+This interface retains the hardware comma aligner and RX FIFO. It does not
+provide deterministic latency, a bitslide measurement, clock tuning or a
+latency calibration. Those require additional work for timing applications.
+
 ## SerDes configuration
 
 `liteeth/phy/gw5_1000basex.py` embeds the SerDes initialization register
