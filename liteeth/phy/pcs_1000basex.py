@@ -283,7 +283,7 @@ class PCSRX(LiteXModule):
 
 class PCS(LiteXModule):
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, eth_tx_clk_freq=125e6, with_csr=False):
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, eth_tx_clk_freq=125e6, with_csr=False, with_autoneg=True):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -384,93 +384,100 @@ class PCS(LiteXModule):
             )
         ]
 
-        # FSM.
-        # ----
-        self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
-        # AN_ENABLE.
-        fsm.act("AUTONEG-BREAKLINK",
-            self.tx.config_valid.eq(1),
-            config_empty.eq(1),
-            breaklink_timer.wait.eq(1),
-            If(breaklink_timer.done,
-                NextState("AUTONEG-WAIT-ABI")
+        if with_autoneg:
+            # FSM.
+            # ----
+            self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
+            # AN_ENABLE.
+            fsm.act("AUTONEG-BREAKLINK",
+                self.tx.config_valid.eq(1),
+                config_empty.eq(1),
+                breaklink_timer.wait.eq(1),
+                If(breaklink_timer.done,
+                    NextState("AUTONEG-WAIT-ABI")
+                )
             )
-        )
-        # ABILITY_DETECT.
-        fsm.act("AUTONEG-WAIT-ABI",
-            self.align.eq(1),
-            self.tx.config_valid.eq(1),
-            If(rx_config_reg_abi.o,
-                NextState("AUTONEG-WAIT-ACK")
-            ),
-            If(checker_tick & checker_error,
-                self.restart.eq(1),
-                NextState("AUTONEG-BREAKLINK")
-            )
-        )
-        # ACKNOWLEDGE_DETECT.
-        fsm.act("AUTONEG-WAIT-ACK",
-            self.tx.config_valid.eq(1),
-            autoneg_ack.eq(1),
-            If(rx_config_reg_ack.o,
-                NextState("AUTONEG-SEND-MORE-ACK")
-            ),
-            If(checker_tick & checker_error,
-                self.restart.eq(1),
-                NextState("AUTONEG-BREAKLINK")
-            )
-        )
-        # COMPLETE_ACKNOWLEDGE.
-        fsm.act("AUTONEG-SEND-MORE-ACK",
-            self.tx.config_valid.eq(1),
-            autoneg_ack.eq(1),
-            more_ack_timer.wait.eq(~is_sgmii),
-            sgmii_ack_timer.wait.eq(is_sgmii),
-            If((is_sgmii & sgmii_ack_timer.done) |
-                (~is_sgmii & more_ack_timer.done),
-                NextState("RUNNING")
-            ),
-            If(checker_tick & checker_error,
-                self.restart.eq(1),
-                NextState("AUTONEG-BREAKLINK")
-            )
-        )
-        # LINK_OK.
-        fsm.act("RUNNING",
-            self.link_up.eq(~linkdown),
-            If((checker_tick & checker_error) | linkdown,
-                self.restart.eq(1),
-                NextState("AUTONEG-BREAKLINK")
-            )
-        )
-
-        # RX Config (and consistency check).
-        # ----------------------------------
-        rx_config_reg_count  = Signal(4)
-        rx_config_reg_last   = Signal(16)
-        self.sync.eth_rx += [
-            If(self.rx.seen_config_reg,
-                # Consistency Count/Check.
-                rx_config_reg_last.eq(self.rx.config_reg),
-                If(self.rx.config_reg != rx_config_reg_last,
-                    rx_config_reg_count.eq(8 - 1)
-                ).Else(
-                    If(rx_config_reg_count != 0,
-                        rx_config_reg_count.eq(rx_config_reg_count - 1),
-                    ).Else(
-                        # When RX Config is consistent.
-                        # Acknowledgement.
-                        If(self.rx.config_reg[14],
-                            rx_config_reg_ack.i.eq(1),
-                        # Ability match.
-                        ).Else(
-                            rx_config_reg_abi.i.eq(1),
-                        )
-                    )
+            # ABILITY_DETECT.
+            fsm.act("AUTONEG-WAIT-ABI",
+                self.align.eq(1),
+                self.tx.config_valid.eq(1),
+                If(rx_config_reg_abi.o,
+                    NextState("AUTONEG-WAIT-ACK")
                 ),
-                self.lp_abi.i.eq(self.rx.config_reg)
+                If(checker_tick & checker_error,
+                    self.restart.eq(1),
+                    NextState("AUTONEG-BREAKLINK")
+                )
             )
-        ]
+            # ACKNOWLEDGE_DETECT.
+            fsm.act("AUTONEG-WAIT-ACK",
+                self.tx.config_valid.eq(1),
+                autoneg_ack.eq(1),
+                If(rx_config_reg_ack.o,
+                    NextState("AUTONEG-SEND-MORE-ACK")
+                ),
+                If(checker_tick & checker_error,
+                    self.restart.eq(1),
+                    NextState("AUTONEG-BREAKLINK")
+                )
+            )
+            # COMPLETE_ACKNOWLEDGE.
+            fsm.act("AUTONEG-SEND-MORE-ACK",
+                self.tx.config_valid.eq(1),
+                autoneg_ack.eq(1),
+                more_ack_timer.wait.eq(~is_sgmii),
+                sgmii_ack_timer.wait.eq(is_sgmii),
+                If((is_sgmii & sgmii_ack_timer.done) |
+                    (~is_sgmii & more_ack_timer.done),
+                    NextState("RUNNING")
+                ),
+                If(checker_tick & checker_error,
+                    self.restart.eq(1),
+                    NextState("AUTONEG-BREAKLINK")
+                )
+            )
+            # LINK_OK.
+            fsm.act("RUNNING",
+                self.link_up.eq(~linkdown),
+                If((checker_tick & checker_error) | linkdown,
+                    self.restart.eq(1),
+                    NextState("AUTONEG-BREAKLINK")
+                )
+            )
+
+            # RX Config (and consistency check).
+            # ----------------------------------
+            rx_config_reg_count  = Signal(4)
+            rx_config_reg_last   = Signal(16)
+            self.sync.eth_rx += [
+                If(self.rx.seen_config_reg,
+                    # Consistency Count/Check.
+                    rx_config_reg_last.eq(self.rx.config_reg),
+                    If(self.rx.config_reg != rx_config_reg_last,
+                        rx_config_reg_count.eq(8 - 1)
+                    ).Else(
+                        If(rx_config_reg_count != 0,
+                            rx_config_reg_count.eq(rx_config_reg_count - 1),
+                        ).Else(
+                            # When RX Config is consistent.
+                            # Acknowledgement.
+                            If(self.rx.config_reg[14],
+                                rx_config_reg_ack.i.eq(1),
+                            # Ability match.
+                            ).Else(
+                                rx_config_reg_abi.i.eq(1),
+                            )
+                        )
+                    ),
+                    self.lp_abi.i.eq(self.rx.config_reg)
+                )
+            ]
+        else:
+            # Fixed-rate link, no Clause 37 autonegotiation.
+            self.comb += [
+                self.align.eq(1),
+                self.link_up.eq(~checker_error),
+            ]
 
         if with_csr:
             self.add_csr()
