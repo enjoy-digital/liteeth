@@ -13,7 +13,10 @@ from migen import *
 
 from litex.soc.interconnect.stream import *
 
-from liteeth.frontend.stream import LiteEthStream2UDPTX
+from litex.gen import LiteXModule
+
+from liteeth.frontend.stream import LiteEthStream2UDPTX, LiteEthUDP2StreamRX
+from liteeth.frontend.stream import tkeep2last_be, last_be2tkeep
 
 # Helpers ------------------------------------------------------------------------------------------
 
@@ -584,3 +587,357 @@ class TestStream2UDPTX(unittest.TestCase):
     def test_disable_at_last_word(self):
         """Disable on the final word of a packet (should be harmless)."""
         self._run_disable_mid_packet(disable_at_word=16)
+
+
+# Test Stream <-> UDP with last_be -----------------------------------------------------------------
+
+class TestStreamLastBE(unittest.TestCase):
+    """LiteEthStream2UDPTX / LiteEthUDP2StreamRX with last_be: byte-granular packet lengths."""
+
+    def _packets(self, lengths, seed=42):
+        prng = random.Random(seed)
+        return [StreamPacket([prng.randrange(256) for _ in range(l)]) for l in lengths]
+
+    def _run(self, dut, packets, expect_npackets=None, seed=42):
+        recvd = []
+        run_simulation(dut, [
+            stream_inserter(dut.sink, src=packets, seed=seed),
+            stream_collector(dut.source,
+                dest            = recvd,
+                expect_npackets = len(packets) if expect_npackets is None else expect_npackets,
+                seed            = seed,
+            ),
+        ])
+        return recvd
+
+    def test_tx_lengths(self):
+        lengths = [1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 100, 1472, 1473, 1500, 8972]
+        for data_width in [32, 64]:
+            with self.subTest(data_width=data_width):
+                dut = LiteEthStream2UDPTX(
+                    ip_address   = 0xC0A80132,
+                    udp_port     = 2342,
+                    data_width   = data_width,
+                    fifo_depth   = 2048*(64//data_width), # Must hold a full 8972-byte packet.
+                    with_last_be = True,
+                )
+                packets = self._packets(lengths)
+                recvd   = self._run(dut, packets)
+                self.assertEqual(len(recvd), len(packets))
+                for sent, got in zip(packets, recvd):
+                    self.assertEqual(got.data, sent.data)
+                    self.assertEqual(got.params["length"],     len(sent.data))
+                    self.assertEqual(got.params["dst_port"],   2342)
+                    self.assertEqual(got.params["ip_address"], 0xC0A80132)
+
+    def test_tx_no_fifo(self):
+        # Without FIFO each word is a packet; last_be gives its byte length.
+        dut = LiteEthStream2UDPTX(
+            ip_address   = 0,
+            udp_port     = 1,
+            data_width   = 64,
+            fifo_depth   = None,
+            with_last_be = True,
+        )
+        packets = self._packets([1, 2, 3, 4, 5, 6, 7, 8])
+        recvd   = self._run(dut, packets)
+        for sent, got in zip(packets, recvd):
+            self.assertEqual(got.data, sent.data)
+            self.assertEqual(got.params["length"], len(sent.data))
+
+    def test_tx_split_on_full_fifo(self):
+        # A packet larger than the FIFO is split: full chunks of fifo_depth words, then the
+        # remainder with the sink's last_be.
+        dut = LiteEthStream2UDPTX(
+            ip_address   = 0,
+            udp_port     = 1,
+            data_width   = 64,
+            fifo_depth   = 8,
+            with_last_be = True,
+        )
+        packets = self._packets([100]) # 13 words: 8 + 5 (last word: 4 bytes).
+        recvd   = self._run(dut, packets, expect_npackets=2)
+        self.assertEqual(len(recvd), 2)
+        self.assertEqual(recvd[0].data, packets[0].data[:64])
+        self.assertEqual(recvd[0].params["length"], 64)
+        self.assertEqual(recvd[1].data, packets[0].data[64:])
+        self.assertEqual(recvd[1].params["length"], 36)
+
+    def test_tx_legacy_last_be_zero(self):
+        # last_be left at 0 on the last word (legacy users): full last word.
+        dut = LiteEthStream2UDPTX(
+            ip_address   = 0,
+            udp_port     = 1,
+            data_width   = 64,
+            fifo_depth   = 16,
+            with_last_be = True,
+        )
+        words   = [(0x1111, 0), (0x2222, 0), (0x3333, 1)]
+        results = []
+
+        def producer():
+            for data, last in words:
+                yield dut.sink.data.eq(data)
+                yield dut.sink.valid.eq(1)
+                yield dut.sink.last.eq(last)
+                yield dut.sink.last_be.eq(0)
+                yield
+                while not (yield dut.sink.ready):
+                    yield
+            yield dut.sink.valid.eq(0)
+            for _ in range(64):
+                yield
+
+        def consumer():
+            yield dut.source.ready.eq(1)
+            for _ in range(128):
+                if (yield dut.source.valid):
+                    results.append((
+                        (yield dut.source.data),
+                        (yield dut.source.last),
+                        (yield dut.source.last_be),
+                        (yield dut.source.length),
+                    ))
+                    if (yield dut.source.last):
+                        break
+                yield
+
+        run_simulation(dut, [producer(), consumer()])
+        self.assertEqual([r[0] for r in results], [w[0] for w in words])
+        self.assertEqual(results[0][2],  0)
+        self.assertEqual(results[-1][1:], (1, 0x80, 24))
+
+    def test_rx_lengths(self):
+        lengths = [1, 7, 8, 9, 100, 1473, 8972]
+        for data_width, fifo_depth in [(64, None), (64, 16), (32, 16)]:
+            with self.subTest(data_width=data_width, fifo_depth=fifo_depth):
+                dut = LiteEthUDP2StreamRX(
+                    ip_address   = 0xC0A80132,
+                    udp_port     = 2342,
+                    data_width   = data_width,
+                    fifo_depth   = fifo_depth,
+                    with_last_be = True,
+                )
+                packets = self._packets(lengths)
+                for p in packets:
+                    p.params = {"dst_port": 2342, "length": len(p.data)}
+                recvd = self._run(dut, packets)
+                self.assertEqual(len(recvd), len(packets))
+                for sent, got in zip(packets, recvd):
+                    self.assertEqual(got.data, sent.data)
+
+    def test_tx_rx_loop(self):
+        class Loop(LiteXModule):
+            def __init__(self):
+                self.tx = LiteEthStream2UDPTX(
+                    ip_address   = 0xC0A80132,
+                    udp_port     = 2342,
+                    data_width   = 64,
+                    fifo_depth   = 2048,
+                    with_last_be = True,
+                )
+                self.rx = LiteEthUDP2StreamRX(
+                    ip_address   = 0xC0A80132,
+                    udp_port     = 2342,
+                    data_width   = 64,
+                    fifo_depth   = 16,
+                    with_last_be = True,
+                )
+                self.comb += self.tx.source.connect(self.rx.sink)
+                self.sink, self.source = self.tx.sink, self.rx.source
+
+        prng    = random.Random(1)
+        lengths = [1, 8972] + [prng.randrange(1, 8973) for _ in range(6)]
+        packets = self._packets(lengths)
+        recvd   = self._run(Loop(), packets)
+        self.assertEqual(len(recvd), len(packets))
+        for sent, got in zip(packets, recvd):
+            self.assertEqual(got.data, sent.data)
+
+    def test_tx_last_on_fifo_boundary(self):
+        # sink.last on the word that also fills the FIFO: the sink's last_be gives the length (no
+        # extra split, no full-word rounding).
+        dut = LiteEthStream2UDPTX(
+            ip_address   = 0,
+            udp_port     = 1,
+            data_width   = 64,
+            fifo_depth   = 8,
+            with_last_be = True,
+        )
+        packets = self._packets([61, 64]) # 8 words each: 5 bytes / 8 bytes in the last word.
+        recvd   = self._run(dut, packets)
+        self.assertEqual(len(recvd), 2)
+        for sent, got in zip(packets, recvd):
+            self.assertEqual(got.data, sent.data)
+            self.assertEqual(got.params["length"], len(sent.data))
+
+    def test_tx_8bit(self):
+        # 8-bit data-path: last_be is a single bit, 0 or 1 on the last byte (legacy users may leave
+        # it at 0), both mean one byte.
+        dut = LiteEthStream2UDPTX(
+            ip_address   = 0,
+            udp_port     = 1,
+            data_width   = 8,
+            fifo_depth   = 64,
+            with_last_be = True,
+        )
+        packets = self._packets([1, 2, 3, 17, 64])
+        recvd   = self._run(dut, packets)
+        for sent, got in zip(packets, recvd):
+            self.assertEqual(got.data, sent.data)
+            self.assertEqual(got.params["length"], len(sent.data))
+
+    def _tx_manual(self, dut, words):
+        """Send (data, last, last_be) words and return the (data, last, last_be, length) outputs."""
+        results = []
+
+        def producer():
+            for data, last, last_be in words:
+                yield dut.sink.data.eq(data)
+                yield dut.sink.valid.eq(1)
+                yield dut.sink.last.eq(last)
+                if hasattr(dut.sink, "last_be"):
+                    yield dut.sink.last_be.eq(last_be)
+                yield
+                while not (yield dut.sink.ready):
+                    yield
+            yield dut.sink.valid.eq(0)
+            for _ in range(64):
+                yield
+
+        def consumer():
+            yield dut.source.ready.eq(1)
+            for _ in range(128):
+                if (yield dut.source.valid):
+                    results.append((
+                        (yield dut.source.data),
+                        (yield dut.source.last),
+                        (yield dut.source.last_be),
+                        (yield dut.source.length),
+                    ))
+                yield
+
+        run_simulation(dut, [producer(), consumer()])
+        return results
+
+    def test_tx_non_one_hot_last_be(self):
+        # A non one-hot last_be (e.g. a tkeep mask driven by mistake) is treated as a full word.
+        dut = LiteEthStream2UDPTX(
+            ip_address   = 0,
+            udp_port     = 1,
+            data_width   = 64,
+            fifo_depth   = 16,
+            with_last_be = True,
+        )
+        results = self._tx_manual(dut, [(0x1111, 0, 0), (0x2222, 1, 0b00001111)])
+        self.assertEqual(len(results), 2)
+        self.assertEqual(results[-1][1:], (1, 0x80, 16))
+
+    def test_tx_no_fifo_without_last_be(self):
+        # Without FIFO and without last_be, each word is a full-word packet (last_be set on the last
+        # byte, length of a word).
+        dut = LiteEthStream2UDPTX(ip_address=0, udp_port=1, data_width=32, fifo_depth=None)
+        results = self._tx_manual(dut, [(0x1111, 0, 0), (0x2222, 0, 0), (0x3333, 1, 0)])
+        self.assertEqual([r[0] for r in results], [0x1111, 0x2222, 0x3333])
+        for r in results:
+            self.assertEqual(r[1:], (1, 0b1000, 4))
+
+    def test_tx_dynamic_ip_port(self):
+        # ip_address/udp_port given as Signals (e.g. pads of a standalone core) are followed and
+        # latched per packet.
+        class DUT(LiteXModule):
+            def __init__(self):
+                self.ip_address = Signal(32)
+                self.udp_port   = Signal(16)
+                self.tx = LiteEthStream2UDPTX(
+                    ip_address   = self.ip_address,
+                    udp_port     = self.udp_port,
+                    data_width   = 32,
+                    fifo_depth   = 16,
+                    with_last_be = True,
+                )
+                self.sink, self.source = self.tx.sink, self.tx.source
+
+        dut     = DUT()
+        packets = self._packets([5, 9])
+        recvd   = []
+        targets = [(0x0A000001, 1000), (0x0A000002, 2000)]
+
+        def tb():
+            for packet, (ip_address, udp_port) in zip(packets, targets):
+                yield dut.ip_address.eq(ip_address)
+                yield dut.udp_port.eq(udp_port)
+                yield from stream_inserter(dut.sink, src=[packet], valid_rand=0)
+                yield from stream_collector(dut.source,
+                    dest            = recvd,
+                    expect_npackets = len(recvd) + 1,
+                    ready_rand      = 0,
+                )
+
+        run_simulation(dut, tb())
+        self.assertEqual(len(recvd), 2)
+        for sent, got, (ip_address, udp_port) in zip(packets, recvd, targets):
+            self.assertEqual(got.data, sent.data)
+            self.assertEqual(got.params["ip_address"], ip_address)
+            self.assertEqual(got.params["dst_port"],   udp_port)
+            self.assertEqual(got.params["src_port"],   udp_port)
+
+        # Dynamic parameters and CSRs are exclusive.
+        with self.assertRaises(AssertionError):
+            LiteEthStream2UDPTX(ip_address=Signal(32), udp_port=1, with_csr=True)
+
+    def test_rx_port_filter(self):
+        # Packets for another UDP port are dropped, the following packet is received intact.
+        dut = LiteEthUDP2StreamRX(
+            ip_address   = 0xC0A80132,
+            udp_port     = 2342,
+            data_width   = 64,
+            fifo_depth   = 16,
+            with_last_be = True,
+        )
+        packets = self._packets([100, 37])
+        packets[0].params = {"dst_port": 1234, "length": 100}
+        packets[1].params = {"dst_port": 2342, "length": 37}
+        recvd = self._run(dut, packets, expect_npackets=1)
+        self.assertEqual(len(recvd), 1)
+        self.assertEqual(recvd[0].data, packets[1].data)
+
+# Test tkeep <-> last_be conversion ----------------------------------------------------------------
+
+class TestTKeepConversion(unittest.TestCase):
+    def test_conversions(self):
+        for width in [1, 4, 8]:
+            with self.subTest(width=width):
+                class DUT(Module):
+                    def __init__(self):
+                        self.keep    = Signal(width)
+                        self.last    = Signal()
+                        self.last_be = Signal(width)
+                        self.keep_o  = Signal(width)
+                        self.comb += [
+                            self.last_be.eq(tkeep2last_be(self.keep)),
+                            self.keep_o.eq(last_be2tkeep(self.last_be, self.last, width)),
+                        ]
+
+                dut  = DUT()
+                full = 2**width - 1
+
+                def tb():
+                    for n in range(1, width + 1):
+                        keep = (1 << n) - 1
+                        yield dut.keep.eq(keep)
+                        yield dut.last.eq(1)
+                        yield
+                        self.assertEqual((yield dut.last_be), 1 << (n - 1))
+                        self.assertEqual((yield dut.keep_o),  keep)
+                        yield dut.last.eq(0)
+                        yield
+                        self.assertEqual((yield dut.keep_o), full)
+                    # tkeep of 0 (pin not driven): last_be 0, full word.
+                    yield dut.keep.eq(0)
+                    yield dut.last.eq(1)
+                    yield
+                    self.assertEqual((yield dut.last_be), 0)
+                    self.assertEqual((yield dut.keep_o),  full)
+
+                run_simulation(dut, tb())
