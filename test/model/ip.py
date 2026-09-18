@@ -89,6 +89,7 @@ class IP(Module):
         self.loopback        = loopback
         self.rx_packet       = IPPacket()
         self.table           = {}
+        self.dont_fragment = 0
         self.request_pending = False
 
         self.udp_callback    = None

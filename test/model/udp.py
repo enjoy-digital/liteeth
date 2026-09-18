@@ -79,6 +79,7 @@ class UDP(Module):
         ip_packet.ihl             = 0x5
         ip_packet.total_length    = len(packet) + ipv4_header.length
         ip_packet.identification  = 0
+        ip_packet.dont_fragment   = 0
         ip_packet.flags           = 0
         ip_packet.fragment_offset = 0
         ip_packet.ttl             = 0x80
