@@ -50,7 +50,7 @@ from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.core.dhcp import LiteEthDHCP
 
-from liteeth.frontend.stream import LiteEthUDPStreamer
+from liteeth.frontend.stream import LiteEthUDPStreamer, tkeep2last_be, last_be2tkeep
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
 # IOs ----------------------------------------------------------------------------------------------
@@ -172,7 +172,8 @@ _io = [
     ),
 ]
 
-def get_udp_port_ios(name, data_width, dynamic_params=False):
+def get_udp_port_ios(name, data_width, dynamic_params=False, with_tkeep=True):
+    keep_width = data_width//8
     return [
         (f"{name}", 0,
             # Parameters.
@@ -186,12 +187,15 @@ def get_udp_port_ios(name, data_width, dynamic_params=False):
             Subsignal("sink_last",  Pins(1)),
             Subsignal("sink_ready", Pins(1)),
             Subsignal("sink_data",  Pins(data_width)),
+            # AXI-Stream tkeep: valid bytes of the last word (left unconnected/0: full word).
+            *([Subsignal("sink_keep",   Pins(keep_width))] if with_tkeep else []),
 
             # Source.
             Subsignal("source_valid", Pins(1)),
             Subsignal("source_last",  Pins(1)),
             Subsignal("source_ready", Pins(1)),
             Subsignal("source_data",  Pins(data_width)),
+            *([Subsignal("source_keep", Pins(keep_width))] if with_tkeep else []),
             Subsignal("source_error", Pins(1)),
         ),
     ]
@@ -225,6 +229,12 @@ def get_udp_raw_port_ios(name, data_width):
         ),
     ]
 
+def get_eth_mtu(core_config):
+    """Ethernet MTU from the config: ``eth_mtu``, ``jumbo_frames: True`` or the LiteEth default."""
+    eth_mtu = core_config.get("eth_mtu", None)
+    if eth_mtu is None:
+        eth_mtu = eth_mtu_jumboframe if core_config.get("jumbo_frames", False) else eth_mtu_default
+    return int(eth_mtu)
 
 # PHY Core -----------------------------------------------------------------------------------------
 
@@ -431,6 +441,7 @@ class MACCore(PHYCore):
             tx_cdc_buffered = tx_cdc_buffered,
             rx_cdc_depth    = rx_cdc_depth,
             rx_cdc_buffered = rx_cdc_buffered,
+            eth_mtu         = get_eth_mtu(core_config),
         )
 
         if bus_standard == "wishbone":
@@ -488,11 +499,20 @@ class UDPCore(PHYCore):
         tx_fifo_depth = port_cfg.get("tx_fifo_depth", 64)
         rx_fifo_depth = port_cfg.get("rx_fifo_depth", 64)
 
+        # AXI-Stream tkeep (exposed by default, "with_tkeep": False removes the pins): contiguous
+        # mask of the valid bytes of the last word, allows byte-granular packet lengths on the
+        # stream port (converted to/from LiteEth's last_be). A sink_keep of 0 on the last word (pin
+        # left unconnected/undriven by the user logic) means a full word, so user logic that only
+        # sends whole words does not need to drive it.
+        with_tkeep = port_cfg.get("with_tkeep", port_cfg.get("tkeep", True))
+        keep_width = data_width//8
+
         # Create/Add IOs.
         # ---------------
         platform.add_extension(get_udp_port_ios(name,
             data_width     = data_width,
-            dynamic_params = dynamic_params
+            dynamic_params = dynamic_params,
+            with_tkeep     = with_tkeep,
         ))
 
         port_ios = platform.request(name)
@@ -511,7 +531,8 @@ class UDPCore(PHYCore):
             udp_port      = udp_port,
             data_width    = data_width,
             tx_fifo_depth = tx_fifo_depth,
-            rx_fifo_depth = rx_fifo_depth
+            rx_fifo_depth = rx_fifo_depth,
+            with_last_be  = with_tkeep,
         )
         self.submodules += udp_streamer
 
@@ -524,6 +545,8 @@ class UDPCore(PHYCore):
             port_ios.sink_ready.eq(udp_streamer.sink.ready),
             udp_streamer.sink.data.eq(port_ios.sink_data)
         ]
+        if with_tkeep:
+            self.comb += udp_streamer.sink.last_be.eq(tkeep2last_be(port_ios.sink_keep))
 
         # Connect UDP Streamer to UDP Source IOs.
         self.comb += [
@@ -533,6 +556,12 @@ class UDPCore(PHYCore):
             port_ios.source_data.eq(udp_streamer.source.data),
             port_ios.source_error.eq(udp_streamer.source.error),
         ]
+        if with_tkeep:
+            self.comb += port_ios.source_keep.eq(last_be2tkeep(
+                last_be    = udp_streamer.source.last_be,
+                last       = udp_streamer.source.last,
+                keep_width = keep_width,
+            ))
 
     def add_raw_port(self, platform, name, port_cfg):
         # Use default Data-Width of 8-bit when not specified.
@@ -616,6 +645,8 @@ class UDPCore(PHYCore):
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
+            eth_mtu           = get_eth_mtu(core_config),
+            icmp_fifo_depth   = core_config.get("icmp_fifo_depth", 128),
         )
 
         # DHCP -------------------------------------------------------------------------------------
@@ -685,7 +716,7 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
-        if k in ["refclk_freq", "clk_freq"]:
+        if k in ["refclk_freq", "clk_freq", "eth_mtu", "icmp_fifo_depth"]:
             core_config[k] = int(float(core_config[k]))
         if k in ["phy_tx_delay", "phy_rx_delay"]:
             core_config[k] = float(core_config[k])
