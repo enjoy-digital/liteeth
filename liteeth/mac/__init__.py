@@ -74,6 +74,7 @@ class LiteEthMAC(LiteXModule):
         eth_mtu            = eth_mtu_default,
         rx_fifo_depth      = 0,
         tx_fifo_depth      = 0,
+        with_store_and_forward = "auto",
     ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -91,21 +92,33 @@ class LiteEthMAC(LiteXModule):
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
             eth_mtu           = eth_mtu,
+            with_store_and_forward = with_store_and_forward,
         )
         self.csrs = []
 
         # Crossbar Mode.
         # --------------
         if interface in ["crossbar"]:
-            self.crossbar     = LiteEthMACCrossbar(dw)
+            pipelined = eth_needs_pipelining(phy)
+            self.crossbar     = LiteEthMACCrossbar(dw, with_pipelining=pipelined)
             self.packetizer   = LiteEthMACPacketizer(dw)
             self.depacketizer = LiteEthMACDepacketizer(dw)
             self.comb += [
                 self.crossbar.master.source.connect(self.packetizer.sink),
                 self.packetizer.source.connect(self.core.sink),
                 self.core.source.connect(self.depacketizer.sink),
-                self.depacketizer.source.connect(self.crossbar.master.sink)
             ]
+            # Bounds the depacketizer's header fan-out, which is combinational into every
+            # param field and onward into the crossbar dispatch and downstream depacketizers.
+            if pipelined:
+                self.rx_buffer = stream.Buffer(eth_mac_description(dw),
+                    pipe_valid=True, pipe_ready=True)
+                self.comb += [
+                    self.depacketizer.source.connect(self.rx_buffer.sink),
+                    self.rx_buffer.source.connect(self.crossbar.master.sink),
+                ]
+            else:
+                self.comb += self.depacketizer.source.connect(self.crossbar.master.sink)
         # Wishbone/Hybrid Mode.
         # ---------------------
         if interface in ["wishbone", "hybrid"]:

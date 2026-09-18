@@ -7,10 +7,11 @@
 from litex.gen import *
 
 from litex.soc.interconnect import stream
+from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
-from liteeth.packet import Depacketizer, Packetizer
+from liteeth.packet import Depacketizer, PacketDropFIFO, Packetizer
 
 # UDP Crossbar -------------------------------------------------------------------------------------
 
@@ -34,8 +35,10 @@ class LiteEthUDPUserPort(LiteEthUDPSlavePort):
 
 
 class LiteEthUDPCrossbar(LiteEthCrossbar):
-    def __init__(self, dw=8):
-        self.dw = dw
+    def __init__(self, dw=8, eth_mtu=eth_mtu_default, with_store_and_forward=False):
+        self.dw                     = dw
+        self.eth_mtu                = eth_mtu
+        self.with_store_and_forward = with_store_and_forward
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
     def get_port(self, udp_port, dw=8, cd="sys", depth=None):
@@ -44,6 +47,12 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         user_port     = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(self.dw)
+
+        # Per-Port Packet FIFOs.
+        # ----------------------
+        slower            = (dw < self.dw) or (cd != "sys")
+        with_packet_fifos = self.with_store_and_forward and slower
+        packet_fifo_depth = eth_packet_fifo_depth(self.eth_mtu, self.dw)
 
         # TX
         # ---
@@ -64,17 +73,39 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         )
         self.comb += tx_cdc.source.connect(tx_converter.sink)
 
+        # Store-and-Forward (Optional): assembles the whole packet before sending.
+        tx_source = tx_converter.source
+        if with_packet_fifos:
+            self.tx_packet_fifo = tx_packet_fifo = PacketFIFO(
+                eth_udp_user_description(self.dw),
+                payload_depth = packet_fifo_depth,
+                param_depth   = 4,
+                buffered      = True,
+            )
+            self.comb += tx_converter.source.connect(tx_packet_fifo.sink)
+            tx_source = tx_packet_fifo.source
+
         # Interface.
-        self.comb += tx_converter.source.connect(internal_port.sink)
+        self.comb += tx_source.connect(internal_port.sink)
 
         # RX
         # --
+        # Store-and-Forward (Optional): take the burst off the shared path, drop what will not fit.
+        rx_source = internal_port.source
+        if with_packet_fifos:
+            self.rx_packet_fifo = rx_packet_fifo = PacketDropFIFO(
+                eth_udp_user_description(self.dw),
+                payload_depth = packet_fifo_depth,
+            )
+            self.comb += internal_port.source.connect(rx_packet_fifo.sink)
+            rx_source = rx_packet_fifo.source
+
         # Data-Width Conversion.
         self.rx_converter = rx_converter = stream.StrideConverter(
             description_from = eth_udp_user_description(self.dw),
             description_to   = eth_udp_user_description(user_port.dw)
         )
-        self.comb += internal_port.source.connect(rx_converter.sink)
+        self.comb += rx_source.connect(rx_converter.sink)
 
         # CDC.
         self.rx_cdc = rx_cdc = stream.ClockDomainCrossing(
@@ -233,7 +264,7 @@ class LiteEthUDPRX(LiteXModule):
 # UDP ----------------------------------------------------------------------------------------------
 
 class LiteEthUDP(LiteXModule):
-    def __init__(self, ip, ip_address, dw=8):
+    def __init__(self, ip, ip_address, dw=8, eth_mtu=eth_mtu_default, with_store_and_forward=False):
         self.tx = tx = LiteEthUDPTX(ip_address, dw)
         self.rx = rx = LiteEthUDPRX(ip_address, dw)
         ip_port = ip.crossbar.get_port(udp_protocol, dw)
@@ -241,7 +272,10 @@ class LiteEthUDP(LiteXModule):
             tx.source.connect(ip_port.sink),
             ip_port.source.connect(rx.sink)
         ]
-        self.crossbar = crossbar = LiteEthUDPCrossbar(dw)
+        self.crossbar = crossbar = LiteEthUDPCrossbar(dw,
+            eth_mtu                = eth_mtu,
+            with_store_and_forward = with_store_and_forward,
+        )
         self.comb += [
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)

@@ -1,24 +1,80 @@
 #
 # This file is part of LiteEth.
 #
-# Copyright (c) 2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Originally adapted from phy/usp_gty_10g_baser.py, and supersedes it.
+#
+# Copyright (c) 2017-2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
 # SPDX-License-Identifier: BSD-2-Clause
+
+import math
 
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 
 from litex.gen import *
 
-from litex.soc.interconnect import stream
-
-from liteiclink.serdes.gty_ultrascale_init import GTYRXInit, GTYTXInit
-
 from liteiclink.serdes.common import *
-from liteiclink.serdes.gty_ultrascale import  GTYChannelPLL, GTYQuadPLL
+from liteiclink.serdes.gty_ultrascale import GTYChannelPLL, GTYQuadPLL
+from liteiclink.serdes.gty_ultrascale_init import GTYRXInit, GTYTXInit
 
 # USP_GTY_10G_BASER --------------------------------------------------------------------------------
 
-class USP_GTY_10G_BASER(LiteXModule):
+class PMA_USP_GTY_10G_BASER(LiteXModule):
+    """UltraScale+ GTY transceiver wrapper for use with 10GbE"""
+
+    # The only instantiation parameters that depend on line rate, established by diffing
+    # gtwizard_ultrascale (v1.7, Vivado 2026.1) at 10.3125 against 25.78125 Gb/s. 10G values.
+    rate_config = {
+        "RXCDR_CFG2"              : 0b0000001001101001,
+        "RXCDR_CFG2_GEN2"         : 0b1001101001,
+        "RXCDR_CFG2_GEN3"         : 0b0000001001101001,
+        "ADAPT_CFG1"              : 0b1111101100011100,
+        "PROGDIV_CFG"             : 33.0,
+        "PROGDIV_RATE"            : 0b0000000000000001,
+        # PCIe-only (noop here) but kept to preserve the gt_wizard output.
+        "PCIE_BUFG_DIV_CTRL"      : 0b0011010100000000,
+        "PCIE_PLL_SEL_MODE_GEN12" : 0b10,
+        # Rate-dependent per the wizard diff, though unchanged between 5G and 10G.
+        "CH_HSPMUX"               : 0b0010000000100000,
+        "CKCAL1_CFG_0"            : 0b1100000011000000,
+        "CKCAL1_CFG_1"            : 0b0001000011000000,
+        "CKCAL2_CFG_0"            : 0b1100000011000000,
+        "CKCAL2_CFG_1"            : 0b1000000011000000,
+        "PREIQ_FREQ_BST"          : 1,
+        "RTX_BUF_CML_CTRL"        : 0b011,
+        "RTX_BUF_TERM_CTRL"       : 0b00,
+        "RXCDR_CFG3"              : 0b0000000000010010,
+        "RXCDR_CFG3_GEN2"         : 0b010010,
+        "RXCDR_CFG3_GEN3"         : 0b0000000000010010,
+        "RXCDR_CFG3_GEN4"         : 0b0000000000010010,
+        "RXCKCAL1_IQ_LOOP_RST_CFG": 0b0000000000000000,
+        "RXCKCAL1_I_LOOP_RST_CFG" : 0b0000000000000000,
+        "RXCKCAL1_Q_LOOP_RST_CFG" : 0b0000000000000000,
+        "RXCKCAL2_DX_LOOP_RST_CFG": 0b0000000000000000,
+        "RXCKCAL2_D_LOOP_RST_CFG" : 0b0000000000000000,
+        "RXCKCAL2_S_LOOP_RST_CFG" : 0b0000000000000000,
+        "RXCKCAL2_X_LOOP_RST_CFG" : 0b0000000000000000,
+        "RXDFE_KH_CFG2"           : 0b0000001000000000,
+        "RXDFE_KH_CFG3"           : 0b0100000100000001,
+        "RXPI_CFG0"               : 0b0000000001010100,
+        "RXPI_CFG1"               : 0b0000000011111100,
+        "RX_WIDEMODE_CDR"         : 0b01,
+        "RX_XMODE_SEL"            : 0b1,
+        "TXDRV_FREQBAND"          : 0b0,
+        "TXFE_CFG0"               : 0b0000001111000010,
+        "TXFE_CFG1"               : 0b0110110000000000,
+        "TXFE_CFG2"               : 0b0110110000000000,
+        "TXFE_CFG3"               : 0b0110110000000000,
+        "TXPI_CFG0"               : 0b0000001100000000,
+        "TXPI_CFG1"               : 0b0001000000000000,
+        "TXSWBST_EN"              : 0b0,
+        "TX_PI_BIASSET"           : 0,
+        # RX equaliser, 1 = LPM and 0 = DFE. The wizard picks DFE at every rate. LPM is kept
+        # for 5G/10G only because those are known-good in the field.
+        "RXLPMEN"                 : 1,
+    }
+
     def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity = 0, rx_polarity = 0):
         # Interfaces.
         self.tx_data   = tx_data   = Signal(64)
@@ -65,13 +121,17 @@ class USP_GTY_10G_BASER(LiteXModule):
         drp_mux.add_interface(self.drp)
 
         # GTYE4_CHANNEL instance -------------------------------------------------------------------
+        # Divides the reference clock to at most 25 MHz for internal calibration. Depends on the
+        # reference clock, not the line rate.
+        clk25_div = min(math.ceil(pll.config["clkin"]/25e6), 32)
+
         rxphaligndone = Signal()
         self.gty_params = dict(
             p_ACJTAG_DEBUG_MODE            = 0b0,
             p_ACJTAG_MODE                  = 0b0,
             p_ACJTAG_RESET                 = 0b0,
             p_ADAPT_CFG0                   = 0b0000000000000000,
-            p_ADAPT_CFG1                   = 0b1111101100011100,
+            p_ADAPT_CFG1                   = self.rate_config["ADAPT_CFG1"],
             p_ADAPT_CFG2                   = 0b0000000000000000,
             p_ALIGN_COMMA_DOUBLE           = "FALSE",
             p_ALIGN_COMMA_ENABLE           = 0b1111111111,
@@ -102,13 +162,13 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_CHAN_BOND_SEQ_2_ENABLE       = 0b1111,
             p_CHAN_BOND_SEQ_2_USE          = "FALSE",
             p_CHAN_BOND_SEQ_LEN            = 1,
-            p_CH_HSPMUX                    = 0b0010000000100000,
-            p_CKCAL1_CFG_0                 = 0b1100000011000000,
-            p_CKCAL1_CFG_1                 = 0b0001000011000000,
+            p_CH_HSPMUX                    = self.rate_config["CH_HSPMUX"],
+            p_CKCAL1_CFG_0                 = self.rate_config["CKCAL1_CFG_0"],
+            p_CKCAL1_CFG_1                 = self.rate_config["CKCAL1_CFG_1"],
             p_CKCAL1_CFG_2                 = 0b0010000000001000,
             p_CKCAL1_CFG_3                 = 0b0000000000000000,
-            p_CKCAL2_CFG_0                 = 0b1100000011000000,
-            p_CKCAL2_CFG_1                 = 0b1000000011000000,
+            p_CKCAL2_CFG_0                 = self.rate_config["CKCAL2_CFG_0"],
+            p_CKCAL2_CFG_1                 = self.rate_config["CKCAL2_CFG_1"],
             p_CKCAL2_CFG_2                 = 0b0001000000000000,
             p_CKCAL2_CFG_3                 = 0b0000000000000000,
             p_CKCAL2_CFG_4                 = 0b0000000000000000,
@@ -217,9 +277,9 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_PCIE3_CLK_COR_MIN_LAT        = 0b00000,
             p_PCIE3_CLK_COR_THRSH_TIMER    = 0b001000,
             p_PCIE_64B_DYN_CLKSW_DIS       = "FALSE",
-            p_PCIE_BUFG_DIV_CTRL           = 0b0011010100000000,
+            p_PCIE_BUFG_DIV_CTRL           = self.rate_config["PCIE_BUFG_DIV_CTRL"],
             p_PCIE_GEN4_64BIT_INT_EN       = "FALSE",
-            p_PCIE_PLL_SEL_MODE_GEN12      = 0b10,
+            p_PCIE_PLL_SEL_MODE_GEN12      = self.rate_config["PCIE_PLL_SEL_MODE_GEN12"],
             p_PCIE_PLL_SEL_MODE_GEN3       = 0b10,
             p_PCIE_PLL_SEL_MODE_GEN4       = 0b10,
             p_PCIE_RXPCS_CFG_GEN3          = 0b0000101010100101,
@@ -231,12 +291,12 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_PD_TRANS_TIME_FROM_P2        = 0b000000111100,
             p_PD_TRANS_TIME_NONE_P2        = 0b00011001,
             p_PD_TRANS_TIME_TO_P2          = 0b01100100,
-            p_PREIQ_FREQ_BST               = 1,
+            p_PREIQ_FREQ_BST               = self.rate_config["PREIQ_FREQ_BST"],
             p_RATE_SW_USE_DRP              = 0b1,
             p_RCLK_SIPO_DLY_ENB            = 0b0,
             p_RCLK_SIPO_INV_EN             = 0b0,
-            p_RTX_BUF_CML_CTRL             = 0b011,
-            p_RTX_BUF_TERM_CTRL            = 0b00,
+            p_RTX_BUF_CML_CTRL             = self.rate_config["RTX_BUF_CML_CTRL"],
+            p_RTX_BUF_TERM_CTRL            = self.rate_config["RTX_BUF_TERM_CTRL"],
             p_RXBUFRESET_TIME              = 0b00011,
             p_RXBUF_ADDR_MODE              = "FAST",
             p_RXBUF_EIDLE_HI_CNT           = 0b1000,
@@ -255,14 +315,14 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RXCDR_CFG0_GEN3              = 0b0000000000000011,
             p_RXCDR_CFG1                   = 0b0000000000000000,
             p_RXCDR_CFG1_GEN3              = 0b0000000000000000,
-            p_RXCDR_CFG2                   = 0b0000001001101001,
-            p_RXCDR_CFG2_GEN2              = 0b1001101001,
-            p_RXCDR_CFG2_GEN3              = 0b0000001001101001,
+            p_RXCDR_CFG2                   = self.rate_config["RXCDR_CFG2"],
+            p_RXCDR_CFG2_GEN2              = self.rate_config["RXCDR_CFG2_GEN2"],
+            p_RXCDR_CFG2_GEN3              = self.rate_config["RXCDR_CFG2_GEN3"],
             p_RXCDR_CFG2_GEN4              = 0b0000000101100100,
-            p_RXCDR_CFG3                   = 0b0000000000010010,
-            p_RXCDR_CFG3_GEN2              = 0b010010,
-            p_RXCDR_CFG3_GEN3              = 0b0000000000010010,
-            p_RXCDR_CFG3_GEN4              = 0b0000000000010010,
+            p_RXCDR_CFG3                   = self.rate_config["RXCDR_CFG3"],
+            p_RXCDR_CFG3_GEN2              = self.rate_config["RXCDR_CFG3_GEN2"],
+            p_RXCDR_CFG3_GEN3              = self.rate_config["RXCDR_CFG3_GEN3"],
+            p_RXCDR_CFG3_GEN4              = self.rate_config["RXCDR_CFG3_GEN4"],
             p_RXCDR_CFG4                   = 0b0101110011110110,
             p_RXCDR_CFG4_GEN3              = 0b0101110011110110,
             p_RXCDR_CFG5                   = 0b1011010001101011,
@@ -278,13 +338,13 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RXCFOK_CFG0                  = 0b0000000000000000,
             p_RXCFOK_CFG1                  = 0b1000000000010101,
             p_RXCFOK_CFG2                  = 0b0000001010101110,
-            p_RXCKCAL1_IQ_LOOP_RST_CFG     = 0b0000000000000000,
-            p_RXCKCAL1_I_LOOP_RST_CFG      = 0b0000000000000000,
-            p_RXCKCAL1_Q_LOOP_RST_CFG      = 0b0000000000000000,
-            p_RXCKCAL2_DX_LOOP_RST_CFG     = 0b0000000000000000,
-            p_RXCKCAL2_D_LOOP_RST_CFG      = 0b0000000000000000,
-            p_RXCKCAL2_S_LOOP_RST_CFG      = 0b0000000000000000,
-            p_RXCKCAL2_X_LOOP_RST_CFG      = 0b0000000000000000,
+            p_RXCKCAL1_IQ_LOOP_RST_CFG     = self.rate_config["RXCKCAL1_IQ_LOOP_RST_CFG"],
+            p_RXCKCAL1_I_LOOP_RST_CFG      = self.rate_config["RXCKCAL1_I_LOOP_RST_CFG"],
+            p_RXCKCAL1_Q_LOOP_RST_CFG      = self.rate_config["RXCKCAL1_Q_LOOP_RST_CFG"],
+            p_RXCKCAL2_DX_LOOP_RST_CFG     = self.rate_config["RXCKCAL2_DX_LOOP_RST_CFG"],
+            p_RXCKCAL2_D_LOOP_RST_CFG      = self.rate_config["RXCKCAL2_D_LOOP_RST_CFG"],
+            p_RXCKCAL2_S_LOOP_RST_CFG      = self.rate_config["RXCKCAL2_S_LOOP_RST_CFG"],
+            p_RXCKCAL2_X_LOOP_RST_CFG      = self.rate_config["RXCKCAL2_X_LOOP_RST_CFG"],
             p_RXDFELPMRESET_TIME           = 0b0001111,
             p_RXDFELPM_KL_CFG0             = 0b000000000000000,
             p_RXDFELPM_KL_CFG1             = 0b1010000010000010,
@@ -324,8 +384,8 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RXDFE_HF_CFG1                = 0b1000000000000010,
             p_RXDFE_KH_CFG0                = 0b1000000000000000,
             p_RXDFE_KH_CFG1                = 0b1111111000000000,
-            p_RXDFE_KH_CFG2                = 0b0000001000000000,
-            p_RXDFE_KH_CFG3                = 0b0100000100000001,
+            p_RXDFE_KH_CFG2                = self.rate_config["RXDFE_KH_CFG2"],
+            p_RXDFE_KH_CFG3                = self.rate_config["RXDFE_KH_CFG3"],
             p_RXDFE_OS_CFG0                = 0b0010000000000000,
             p_RXDFE_OS_CFG1                = 0b1000000000000000,
             p_RXDFE_UT_CFG0                = 0b0000000000000000,
@@ -348,15 +408,15 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RXOOB_CFG                    = 0b000000110,
             p_RXOOB_CLK_CFG                = "PMA",
             p_RXOSCALRESET_TIME            = 0b00011,
-            p_RXOUT_DIV                    = 1,
+            p_RXOUT_DIV                    = pll.config["d"],
             p_RXPCSRESET_TIME              = 0b00011,
             p_RXPHBEACON_CFG               = 0b0000000000000000,
             p_RXPHDLY_CFG                  = 0b0010000001110000,
             p_RXPHSAMP_CFG                 = 0b0010000100000000,
             p_RXPHSLIP_CFG                 = 0b1001100100110011,
             p_RXPH_MONITOR_SEL             = 0b00000,
-            p_RXPI_CFG0                    = 0b0000000001010100,
-            p_RXPI_CFG1                    = 0b0000000011111100,
+            p_RXPI_CFG0                    = self.rate_config["RXPI_CFG0"],
+            p_RXPI_CFG1                    = self.rate_config["RXPI_CFG1"],
             p_RXPMACLK_SEL                 = "DATA",
             p_RXPMARESET_TIME              = 0b00011,
             p_RXPRBS_ERR_LOOPBACK          = 0b0,
@@ -371,7 +431,7 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RX_BIAS_CFG0                 = 0b0001001010110000,
             p_RX_BUFFER_CFG                = 0b000000,
             p_RX_CAPFF_SARC_ENB            = 0b0,
-            p_RX_CLK25_DIV                 = 7,
+            p_RX_CLK25_DIV                 = clk25_div,
             p_RX_CLKMUX_EN                 = 0b1,
             p_RX_CLK_SLIP_OVRD             = 0b00000,
             p_RX_CM_BUF_CFG                = 0b1010,
@@ -406,8 +466,8 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RX_INT_DATAWIDTH             = 2,
             p_RX_PMA_POWER_SAVE            = 0b0,
             p_RX_PMA_RSV0                  = 0b0000000000101111,
-            p_RX_PROGDIV_CFG               = 33.0,
-            p_RX_PROGDIV_RATE              = 0b0000000000000001,
+            p_RX_PROGDIV_CFG               = self.rate_config["PROGDIV_CFG"],
+            p_RX_PROGDIV_RATE              = self.rate_config["PROGDIV_RATE"],
             p_RX_RESLOAD_CTRL              = 0b0000,
             p_RX_RESLOAD_OVRD              = 0b0,
             p_RX_SAMPLE_PERIOD             = 0b111,
@@ -423,11 +483,11 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_RX_TUNE_AFE_OS               = 0b10,
             p_RX_VREG_CTRL                 = 0b010,
             p_RX_VREG_PDB                  = 0b1,
-            p_RX_WIDEMODE_CDR              = 0b01,
+            p_RX_WIDEMODE_CDR              = self.rate_config["RX_WIDEMODE_CDR"],
             p_RX_WIDEMODE_CDR_GEN3         = 0b00,
             p_RX_WIDEMODE_CDR_GEN4         = 0b01,
             p_RX_XCLK_SEL                  = "RXDES",
-            p_RX_XMODE_SEL                 = 0b1,
+            p_RX_XMODE_SEL                 = self.rate_config["RX_XMODE_SEL"],
             p_SAMPLE_CLK_PHASE             = 0b0,
             p_SAS_12G_MODE                 = 0b0,
             p_SATA_BURST_SEQ_LEN           = 0b1111,
@@ -459,23 +519,23 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_TXBUF_RESET_ON_RATE_CHANGE   = "TRUE",
             p_TXDLY_CFG                    = 0b1000000000010000,
             p_TXDLY_LCFG                   = 0b0000000000110000,
-            p_TXDRV_FREQBAND               = 0b0,
-            p_TXFE_CFG0                    = 0b0000001111000010,
-            p_TXFE_CFG1                    = 0b0110110000000000,
-            p_TXFE_CFG2                    = 0b0110110000000000,
-            p_TXFE_CFG3                    = 0b0110110000000000,
+            p_TXDRV_FREQBAND               = self.rate_config["TXDRV_FREQBAND"],
+            p_TXFE_CFG0                    = self.rate_config["TXFE_CFG0"],
+            p_TXFE_CFG1                    = self.rate_config["TXFE_CFG1"],
+            p_TXFE_CFG2                    = self.rate_config["TXFE_CFG2"],
+            p_TXFE_CFG3                    = self.rate_config["TXFE_CFG3"],
             p_TXFIFO_ADDR_CFG              = "LOW",
             p_TXGBOX_FIFO_INIT_RD_ADDR     = 4,
             p_TXGEARBOX_EN                 = "TRUE",
-            p_TXOUT_DIV                    = 1,
+            p_TXOUT_DIV                    = pll.config["d"],
             p_TXPCSRESET_TIME              = 0b00011,
             p_TXPHDLY_CFG0                 = 0b0110000001110000,
             p_TXPHDLY_CFG1                 = 0b0000000000001111,
             p_TXPH_CFG                     = 0b0000011100100011,
             p_TXPH_CFG2                    = 0b0000000000000000,
             p_TXPH_MONITOR_SEL             = 0b00000,
-            p_TXPI_CFG0                    = 0b0000001100000000,
-            p_TXPI_CFG1                    = 0b0001000000000000,
+            p_TXPI_CFG0                    = self.rate_config["TXPI_CFG0"],
+            p_TXPI_CFG1                    = self.rate_config["TXPI_CFG1"],
             p_TXPI_GRAY_SEL                = 0b0,
             p_TXPI_INVSTROBE_SEL           = 0b0,
             p_TXPI_PPM                     = 0b0,
@@ -484,12 +544,12 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_TXPMARESET_TIME              = 0b00011,
             p_TXREFCLKDIV2_SEL             = 0b0,
             p_TXSWBST_BST                  = 0b1,
-            p_TXSWBST_EN                   = 0b0,
+            p_TXSWBST_EN                   = self.rate_config["TXSWBST_EN"],
             p_TXSWBST_MAG                  = 4,
             p_TXSYNC_MULTILANE             = 0b0,
             p_TXSYNC_OVRD                  = 0b0,
             p_TXSYNC_SKIP_DA               = 0b0,
-            p_TX_CLK25_DIV                 = 7,
+            p_TX_CLK25_DIV                 = clk25_div,
             p_TX_CLKMUX_EN                 = 0b1,
             p_TX_DATA_WIDTH                = 64,
             p_TX_DCC_LOOP_RST_CFG          = 0b0000000000000100,
@@ -519,14 +579,14 @@ class USP_GTY_10G_BASER(LiteXModule):
             p_TX_MARGIN_LOW_4              = 0b1000000,
             p_TX_PHICAL_CFG0               = 0b0000000000100000,
             p_TX_PHICAL_CFG1               = 0b0000000001000000,
-            p_TX_PI_BIASSET                = 0,
+            p_TX_PI_BIASSET                = self.rate_config["TX_PI_BIASSET"],
             p_TX_PMADATA_OPT               = 0b0,
             p_TX_PMA_POWER_SAVE            = 0b0,
             p_TX_PMA_RSV0                  = 0b0000000000000000,
             p_TX_PMA_RSV1                  = 0b0000000000000000,
             p_TX_PROGCLK_SEL               = "PREPI",
-            p_TX_PROGDIV_CFG               = 33.0,
-            p_TX_PROGDIV_RATE              = 0b0000000000000001,
+            p_TX_PROGDIV_CFG               = self.rate_config["PROGDIV_CFG"],
+            p_TX_PROGDIV_RATE              = self.rate_config["PROGDIV_RATE"],
             p_TX_RXDETECT_CFG              = 0b00000000110010,
             p_TX_RXDETECT_REF              = 5,
             p_TX_SAMPLE_PERIOD             = 0b111,
@@ -680,7 +740,7 @@ class USP_GTY_10G_BASER(LiteXModule):
 
             # RX AFE.
             i_RXDFEXYDEN      = 1,
-            i_RXLPMEN         = 1,
+            i_RXLPMEN         = self.rate_config["RXLPMEN"],
 
             # RX clock.
             i_RXRATE          = 0b000,
@@ -746,3 +806,80 @@ class USP_GTY_10G_BASER(LiteXModule):
 
     def do_finalize(self):
         self.specials += Instance("GTYE4_CHANNEL", **self.gty_params)
+
+
+# USP_GTY_5G_BASER ---------------------------------------------------------------------------------
+
+class PMA_USP_GTY_5G_BASER(PMA_USP_GTY_10G_BASER):
+    """UltraScale+ GTY transceiver wrapper for use with 5GbE (5GBASE-R, 5.15625 Gb/s).
+
+    Identical to the 10GbE wrapper apart from the attributes below and the channel output divider,
+    which follows the PLL: liteiclink solves both rates on the same QPLL VCO (10.3125 GHz, N=66,
+    M=1 from a 156.25 MHz reference) and separates them with d=1 against d=2. Values are from
+    Vivado's transceiver wizard at 5.15625 Gb/s.
+    """
+    rate_config = dict(PMA_USP_GTY_10G_BASER.rate_config,
+        RXCDR_CFG2              = 0b0000001001011001,
+        RXCDR_CFG2_GEN2         = 0b1001011001,
+        RXCDR_CFG2_GEN3         = 0b0000001001011001,
+        ADAPT_CFG1              = 0b1111100000011100,
+        PROGDIV_CFG             = 66.0,
+        PCIE_BUFG_DIV_CTRL      = 0b0001000000000000,
+        PCIE_PLL_SEL_MODE_GEN12 = 0b00,
+    )
+
+
+# USP_GTY_25G_BASER --------------------------------------------------------------------------------
+
+class PMA_USP_GTY_25G_BASER(PMA_USP_GTY_10G_BASER):
+    """UltraScale+ GTY transceiver wrapper for 25GbE (25GBASE-R, 25.78125 Gb/s).
+
+    Values are from gtwizard_ultrascale (v1.7, Vivado 2026.1), 64-bit user data width and the
+    64B66B async gearbox. They are independent of the reference clock: the integer-N
+    (161.1328125 MHz) and fractional-N (156.25 MHz) configurations differ only in GTYE4_COMMON.
+
+    The channel output divider stays at d=1, but the QPLL output goes full-rate and PROGDIV
+    becomes 16.5 with PROGDIV_RATE=0, giving the 390.625 MHz user clock.
+    """
+    rate_config = dict(PMA_USP_GTY_10G_BASER.rate_config,
+        RXCDR_CFG2               = 0b0000000111101001,
+        ADAPT_CFG1               = 0b1111101100011100,
+        PROGDIV_CFG              = 16.5,
+        PROGDIV_RATE             = 0,
+        CH_HSPMUX                = 0b1001000010010000,
+        CKCAL1_CFG_0             = 0b0100000001000000,
+        CKCAL1_CFG_1             = 0b0001000001000000,
+        CKCAL2_CFG_0             = 0b0100000001000000,
+        CKCAL2_CFG_1             = 0b0000000001000000,
+        PREIQ_FREQ_BST           = 0b0000000000000011,
+        RTX_BUF_CML_CTRL         = 0b0000000000000111,
+        RTX_BUF_TERM_CTRL        = 0b0000000000000011,
+        RXCDR_CFG3               = 0b0000000000010000,
+        RXCDR_CFG3_GEN2          = 0b010000,
+        RXCDR_CFG3_GEN3          = 0b0000000000010000,
+        RXCDR_CFG3_GEN4          = 0b0000000000010000,
+        RXCKCAL1_IQ_LOOP_RST_CFG = 0b0000000000000100,
+        RXCKCAL1_I_LOOP_RST_CFG  = 0b0000000000000100,
+        RXCKCAL1_Q_LOOP_RST_CFG  = 0b0000000000000100,
+        RXCKCAL2_DX_LOOP_RST_CFG = 0b0000000000000100,
+        RXCKCAL2_D_LOOP_RST_CFG  = 0b0000000000000100,
+        RXCKCAL2_S_LOOP_RST_CFG  = 0b0000000000000100,
+        RXCKCAL2_X_LOOP_RST_CFG  = 0b0000000000000100,
+        RXDFE_KH_CFG2            = 0b0010100000011100,
+        RXDFE_KH_CFG3            = 0b0100000100100000,
+        RXPI_CFG0                = 0b0011000000000110,
+        RXPI_CFG1                = 0,
+        RX_WIDEMODE_CDR          = 0b0000000000000010,
+        RX_XMODE_SEL             = 0,
+        TXDRV_FREQBAND           = 0b0000000000000011,
+        TXFE_CFG0                = 0b0000001111000110,
+        TXFE_CFG1                = 0b1111100000000000,
+        TXFE_CFG2                = 0b1111100000000000,
+        TXFE_CFG3                = 0b1111100000000000,
+        TXPI_CFG0                = 0b0011000000000000,
+        TXPI_CFG1                = 0,
+        TXSWBST_EN               = 1,
+        TX_PI_BIASSET            = 0b0000000000000011,
+        # DFE is mandatory at this rate. LPM will link but runs at BER ~1e-4.
+        RXLPMEN                  = 0,
+    )

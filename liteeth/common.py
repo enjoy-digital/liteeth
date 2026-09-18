@@ -18,12 +18,38 @@ from litex.soc.interconnect.packet import Header, HeaderField
 
 # Ethernet Constants -------------------------------------------------------------------------------
 
+# Datapaths faster than this are likely to need extra pipeline stages to close timing. For example,
+# 10GBASE-R at 156.25MHz does not on most applicable devices, 25GBASE-R at 390.625MHz does. This is
+# a rough guess.
+eth_pipelining_clk_freq = 200e6
+
+def eth_needs_pipelining(phy):
+    """True if a PHY's receive clock is fast enough to need the extra pipeline stages."""
+    return getattr(phy, "rx_clk_freq", 0) > eth_pipelining_clk_freq
+
+
+def eth_needs_store_and_forward(phy):
+    """True if a PHY's datapath is fast enough to need store-and-forward packet FIFOs behind it.
+
+    PHYs can't be paused mid-frame in either direction, so at higher line rates with slower
+    internals, the PHY can neither be fed fast enough on transmit nor keep up on receive. This
+    heuristic is a rough guess based on typical data path throughputs.
+    """
+    return getattr(phy, "dw", 0)*getattr(phy, "tx_clk_freq", 0) >= 2.5e9
+
+
 eth_mtu_default      = 1530
 eth_mtu_jumboframe   = 9022
 eth_min_frame_length = 64
 eth_fcs_length       = 4
 eth_interpacket_gap  = 12
 eth_preamble         = 0xd555555555555555
+eth_preamble_length  = 8
+
+def eth_packet_fifo_depth(eth_mtu, dw):
+    """Depth in words of a packet FIFO able to hold one full frame, incl.  preamble and FCS."""
+    nbytes = eth_mtu + eth_preamble_length + eth_fcs_length
+    return 2**bits_for(ceil(nbytes/(dw//8)))
 
 ethernet_type_ip     = 0x800
 ethernet_type_arp    = 0x806

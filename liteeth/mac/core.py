@@ -13,8 +13,10 @@ from migen.genlib.cdc import PulseSynchronizer
 from litex.gen import *
 
 from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SINK
+from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
+from liteeth.packet import PacketDropFIFO
 from liteeth.mac import crc, gap, last_be, padding, preamble
 from liteeth.mac.common import *
 
@@ -38,6 +40,7 @@ class LiteEthMACCore(LiteXModule):
     - rx_cdc_depth     : RX CDC FIFO depth.
     - rx_cdc_buffered  : Use a buffered RX CDC FIFO.
     - eth_mtu          : Maximum Ethernet frame size used by padding checks.
+    - with_store_and_forward: Store-and-forward packet FIFOs at PHY: True, False, or 'auto'
     """
     def __init__(self, phy, dw,
         with_sys_datapath = False,
@@ -48,6 +51,7 @@ class LiteEthMACCore(LiteXModule):
         rx_cdc_depth      = 32,
         rx_cdc_buffered   = False,
         eth_mtu           = eth_mtu_default,
+        with_store_and_forward = "auto",
         ):
 
         # Endpoints.
@@ -77,6 +81,12 @@ class LiteEthMACCore(LiteXModule):
             with_preamble_crc = phy.with_preamble_crc
         if hasattr(phy, "with_padding"):
             with_padding = phy.with_padding
+
+        # Store-and-forward packet FIFOs at the PHY interface.
+        assert with_store_and_forward in [True, False, "auto"]
+        if with_store_and_forward == "auto":
+            with_store_and_forward = eth_needs_store_and_forward(phy)
+        self.with_store_and_forward = with_store_and_forward
 
         # CSRs.
         # -----
@@ -148,6 +158,23 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
 
+            def add_packet_fifo(self):
+                """Hold each frame whole before starting it, so the PHY can be fed at line rate."""
+                if eth_needs_pipelining(phy):
+                    tx_buffer = stream.Buffer(eth_phy_description(phy_dw), pipe_valid=True, pipe_ready=True)
+                    tx_buffer = ClockDomainsRenamer("eth_tx")(tx_buffer)
+                    self.submodules += tx_buffer
+                    self.pipeline.append(tx_buffer)
+
+                tx_packet_fifo = PacketFIFO(eth_phy_description(phy_dw),
+                    payload_depth = eth_packet_fifo_depth(eth_mtu, phy_dw),
+                    param_depth   = 4,
+                    buffered      = True,
+                )
+                tx_packet_fifo = ClockDomainsRenamer("eth_tx")(tx_packet_fifo)
+                self.submodules += tx_packet_fifo
+                self.pipeline.append(tx_packet_fifo)
+
             def add_domain_switch(self):
                 """Add CDC/converter stages in the order required by the data widths."""
                 dw = core_dw
@@ -181,6 +208,9 @@ class LiteEthMACCore(LiteXModule):
         # Gap insertion has to occur in phy tx domain to ensure gap is correctly maintained.
         if not getattr(phy, "integrated_ifg_inserter", False):
             tx_datapath.add_gap()
+        # Packet FIFO must go last so that it can't be stalled.
+        if with_store_and_forward:
+            tx_datapath.add_packet_fifo()
         # End at the PHY sink endpoint.
         tx_datapath.pipeline.append(phy)
 
@@ -195,6 +225,8 @@ class LiteEthMACCore(LiteXModule):
                 if with_preamble_crc:
                     self.preamble_errors = CSRStatus(32, description="Preamble error count.")
                     self.crc_errors      = CSRStatus(32, description="CRC error count.")
+                if with_store_and_forward:
+                    self.drops = CSRStatus(32, description="Receive packet drop count.")
 
             def add_preamble(self):
                 """Add preamble checking and synchronize the error counter."""
@@ -216,6 +248,15 @@ class LiteEthMACCore(LiteXModule):
                 rx_crc = ClockDomainsRenamer(cd_rx)(rx_crc)
                 self.submodules += rx_crc
                 self.pipeline.append(rx_crc)
+
+                # source.error is combinational from last_be through the per-lane CRC engine
+                # select. Buffering here avoids disturbing error/last alignment inside the checker.
+                if eth_needs_pipelining(phy):
+                    rx_crc_buffer = stream.Buffer(eth_phy_description(datapath_dw),
+                        pipe_valid=True, pipe_ready=True)
+                    rx_crc_buffer = ClockDomainsRenamer(cd_rx)(rx_crc_buffer)
+                    self.submodules += rx_crc_buffer
+                    self.pipeline.append(rx_crc_buffer)
 
                 # Synchronize CRC error to sys domain.
                 ps = PulseSynchronizer(cd_rx, "sys")
@@ -257,6 +298,27 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += rx_cdc
                 self.pipeline.append(rx_cdc)
 
+            def add_packet_drop_fifo(self, dw):
+                """Buffer whole frames ahead of the CDC, dropping if stalled."""
+                if eth_needs_pipelining(phy):
+                    rx_buffer = stream.Buffer(eth_phy_description(dw), pipe_valid=True, pipe_ready=False)
+                    rx_buffer = ClockDomainsRenamer("eth_rx")(rx_buffer)
+                    self.submodules += rx_buffer
+                    self.pipeline.append(rx_buffer)
+
+                rx_packet_fifo = PacketDropFIFO(eth_phy_description(dw),
+                    payload_depth = eth_packet_fifo_depth(eth_mtu, dw),
+                )
+                rx_packet_fifo = ClockDomainsRenamer("eth_rx")(rx_packet_fifo)
+                self.submodules += rx_packet_fifo
+                self.pipeline.append(rx_packet_fifo)
+
+                # Synchronize the drop count to sys.
+                ps = PulseSynchronizer("eth_rx", "sys")
+                self.submodules += ps
+                self.comb += ps.i.eq(rx_packet_fifo.drop)
+                self.sync += If(ps.o, self.drops.status.eq(self.drops.status + 1))
+
             def add_domain_switch(self):
                 """Add last_be/converter/CDC stages in the order required by the data widths."""
                 dw = phy_dw
@@ -264,6 +326,8 @@ class LiteEthMACCore(LiteXModule):
                     dw = core_dw
                     self.add_last_be()
                     self.add_converter("eth_rx")
+                if with_store_and_forward:
+                    self.add_packet_drop_fifo(dw)
                 self.add_cdc(dw)
                 if phy_dw > core_dw:
                     self.add_converter("sys")

@@ -33,6 +33,7 @@ class LiteEthIPCore(LiteXModule):
         eth_mtu           = eth_mtu_default,
         gateway_ip        = None,
         netmask           = None,
+        with_store_and_forward = "auto",
     ):
         # Parameters.
         # -----------
@@ -53,6 +54,7 @@ class LiteEthIPCore(LiteXModule):
             rx_cdc_depth      = rx_cdc_depth,
             rx_cdc_buffered   = rx_cdc_buffered,
             eth_mtu           = eth_mtu,
+            with_store_and_forward = with_store_and_forward,
         )
 
         # ARP.
@@ -124,6 +126,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
         eth_mtu           = eth_mtu_default,
         gateway_ip        = None,
         netmask           = None,
+        with_store_and_forward = "auto",
     ):
         # Parameters.
         # -----------
@@ -155,6 +158,7 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             eth_mtu           = eth_mtu,
             gateway_ip        = gateway_ip,
             netmask           = netmask,
+            with_store_and_forward = with_store_and_forward,
         )
         # UDP.
         # ----
@@ -162,4 +166,6 @@ class LiteEthUDPIPCore(LiteEthIPCore):
             ip         = self.ip,
             ip_address = ip_address,
             dw         = dw,
+            eth_mtu    = eth_mtu,
+            with_store_and_forward = self.mac.core.with_store_and_forward,
         )
