@@ -14,75 +14,30 @@ from litex.soc.interconnect.csr import CSRStorage, CSRStatus, CSRField
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import PCS
 
-# GW5 1000BASE-X PHY -------------------------------------------------------------------------------
+# GW5 Raw SerDes -----------------------------------------------------------------------------------
 
-class GW5_1000BASEX(LiteXModule):
-    """GW5AST-138B 1000BASE-X PHY on Q1 lane 0 or 1, using a 100 MHz Q1 REFCLK1.
+class GW5SerDes(LiteXModule):
+    """Raw 1.25 Gb/s, 10-bit interface on GW5AST-138B Q1 lane 0 or 1.
 
-    The hard SerDes uses a raw 10-bit interface at 125 MHz. LiteEth implements the
-    8b/10b PCS and autonegotiation; the SerDes performs comma alignment. The embedded
-    CSR configuration initializes the analog/clocking blocks during FPGA configuration.
-    Dedicated serial and reference-clock pins are selected by the SerDes configuration,
-    as in Gowin's generated GTR12_QUAD wrapper.
+    The caller supplies the PCS and synchronizes resets to the TX/RX clocks.
+    The RX interface can have gaps; rx_valid qualifies rx_data. Neither this
+    interface nor hardware comma alignment guarantees deterministic latency.
     """
-    dw          = 8
-    linerate    = 1.25e9
-    tx_clk_freq = 125e6
-    rx_clk_freq = 125e6
-
-    def __init__(self, platform, with_csr=True, pcs_kwargs=None, lane=0):
+    def __init__(self, platform, lane=0):
         if platform.devicename != "GW5AST-138B":
-            raise ValueError("GW5_1000BASEX currently supports GW5AST-138B.")
+            raise ValueError("GW5SerDes currently supports GW5AST-138B.")
         if lane not in (0, 1):
-            raise ValueError("GW5_1000BASEX supports Q1 lanes 0 and 1.")
-
-        self.reset     = Signal()
-        self.pll_lock  = Signal()
-        self.cdr_lock  = Signal()
-        self.aligned   = Signal()
-        self.cd_eth_tx = ClockDomain()
-        self.cd_eth_rx = ClockDomain()
-
-        # PCS --------------------------------------------------------------------------------------
-        pcs_kwargs = {} if pcs_kwargs is None else dict(pcs_kwargs)
-        pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
-        self.pcs = pcs = PCS(lsb_first=True, **pcs_kwargs)
-        self.link_up = pcs.link_up
-        if with_csr:
-            self.add_csr()
-
-        # # #
-
-        # MAC Interface ----------------------------------------------------------------------------
-        # Register the MAC boundary to keep the 125 MHz PCS paths local.
-        self.tx_buffer = tx_buffer = ClockDomainsRenamer("eth_tx")(
-            stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
-        self.rx_buffer = rx_buffer = ClockDomainsRenamer("eth_rx")(
-            stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
-        self.sink   = tx_buffer.sink
-        self.source = rx_buffer.source
-        self.comb += [
-            tx_buffer.source.connect(pcs.sink),
-            pcs.source.connect(rx_buffer.sink),
-        ]
-
-        # SerDes Datapath --------------------------------------------------------------------------
-        tx_data  = Signal(80)
-        rx_data  = Signal(88)
-        rx_valid = Signal()
-        rx_empty = Signal()
-        self.sync.eth_tx += tx_data.eq(pcs.tbi_tx)
-        self.sync.eth_rx += [
-            pcs.tbi_rx.eq(rx_data[:10]),
-            pcs.tbi_rx_ce.eq(rx_valid),
-        ]
-
-        # Clocking / Reset -------------------------------------------------------------------------
-        reset = self.reset | ResetSignal("sys")
-        self.specials += [
-            AsyncResetSynchronizer(self.cd_eth_tx, reset | ~self.pll_lock),
-            AsyncResetSynchronizer(self.cd_eth_rx, reset | ~self.cdr_lock),
-        ]
+            raise ValueError("GW5SerDes supports Q1 lanes 0 and 1.")
+        self.reset    = Signal()
+        self.tx_clk   = Signal()
+        self.rx_clk   = Signal()
+        self.tx_data  = Signal(10)
+        self.rx_data  = Signal(88)
+        self.rx_valid = Signal()
+        self.rx_empty = Signal()
+        self.pll_lock = Signal()
+        self.cdr_lock = Signal()
+        self.aligned  = Signal()
 
         # SerDes -----------------------------------------------------------------------------------
         # Unused fabric controls are tied low; the CSR configuration selects their internal controls.
@@ -154,19 +109,19 @@ class GW5_1000BASEX(LiteXModule):
                 f"i_FABRIC_LN{n}_TX_VLD_IN"     : Constant(0, 1),
             })
         serdes_params.update({
-            f"i_FABRIC_LN{lane}_RSTN_I"         : ~reset,
-            f"i_LANE{lane}_PCS_TX_RST"          : reset,
-            f"i_LANE{lane}_PCS_RX_RST"          : reset,
-            f"i_LANE{lane}_FABRIC_TX_CLK"       : ClockSignal("eth_tx"),
-            f"i_LANE{lane}_FABRIC_RX_CLK"       : ClockSignal("eth_rx"),
-            f"i_FABRIC_LN{lane}_TXDATA_I"       : tx_data,
+            f"i_FABRIC_LN{lane}_RSTN_I"         : ~self.reset,
+            f"i_LANE{lane}_PCS_TX_RST"          : self.reset,
+            f"i_LANE{lane}_PCS_RX_RST"          : self.reset,
+            f"i_LANE{lane}_FABRIC_TX_CLK"       : self.tx_clk,
+            f"i_LANE{lane}_FABRIC_RX_CLK"       : self.rx_clk,
+            f"i_FABRIC_LN{lane}_TXDATA_I"       : Cat(self.tx_data, Constant(0, 70)),
             f"i_FABRIC_LN{lane}_TX_VLD_IN"      : 1,
-            f"i_LANE{lane}_RX_IF_FIFO_RDEN"     : ~rx_empty,
-            f"o_LANE{lane}_PCS_TX_O_FABRIC_CLK" : self.cd_eth_tx.clk,
-            f"o_LANE{lane}_PCS_RX_O_FABRIC_CLK" : self.cd_eth_rx.clk,
-            f"o_FABRIC_LN{lane}_RXDATA_O"       : rx_data,
-            f"o_FABRIC_LN{lane}_RX_VLD_OUT"     : rx_valid,
-            f"o_LANE{lane}_RX_IF_FIFO_EMPTY"    : rx_empty,
+            f"i_LANE{lane}_RX_IF_FIFO_RDEN"     : ~self.rx_empty,
+            f"o_LANE{lane}_PCS_TX_O_FABRIC_CLK" : self.tx_clk,
+            f"o_LANE{lane}_PCS_RX_O_FABRIC_CLK" : self.rx_clk,
+            f"o_FABRIC_LN{lane}_RXDATA_O"       : self.rx_data,
+            f"o_FABRIC_LN{lane}_RX_VLD_OUT"     : self.rx_valid,
+            f"o_LANE{lane}_RX_IF_FIFO_EMPTY"    : self.rx_empty,
             f"o_FABRIC_LANE{lane}_CMU_OK_O"     : self.pll_lock,
             f"o_FABRIC_LN{lane}_PMA_RX_LOCK_O"  : self.cdr_lock,
             f"o_LANE{lane}_ALIGN_LINK"          : self.aligned,
@@ -180,6 +135,90 @@ class GW5_1000BASEX(LiteXModule):
             'puts -nonewline $serdes_csr {' + _serdes_csr[lane] + '}',
             'close $serdes_csr',
             'set_csr gw5_1000basex.csr',
+        ]
+
+
+# GW5 1000BASE-X PHY --------------------------------------------------------------------------------
+
+class GW5_1000BASEX(LiteXModule):
+    """GW5AST-138B 1000BASE-X PHY on Q1 lane 0 or 1, using a 100 MHz Q1 REFCLK1.
+
+    The hard SerDes uses a raw 10-bit interface at 125 MHz. LiteEth implements the
+    8b/10b PCS and autonegotiation; the SerDes performs comma alignment. The embedded
+    CSR configuration initializes the analog/clocking blocks during FPGA configuration.
+    Dedicated serial and reference-clock pins are selected by the SerDes configuration,
+    as in Gowin's generated GTR12_QUAD wrapper.
+    """
+    dw          = 8
+    linerate    = 1.25e9
+    tx_clk_freq = 125e6
+    rx_clk_freq = 125e6
+
+    def __init__(self, platform, with_csr=True, pcs_kwargs=None, lane=0):
+        if platform.devicename != "GW5AST-138B":
+            raise ValueError("GW5_1000BASEX currently supports GW5AST-138B.")
+        if lane not in (0, 1):
+            raise ValueError("GW5_1000BASEX supports Q1 lanes 0 and 1.")
+
+        self.reset     = Signal()
+        self.pll_lock  = Signal()
+        self.cdr_lock  = Signal()
+        self.aligned   = Signal()
+        self.cd_eth_tx = ClockDomain()
+        self.cd_eth_rx = ClockDomain()
+
+        # PCS --------------------------------------------------------------------------------------
+        pcs_kwargs = {} if pcs_kwargs is None else dict(pcs_kwargs)
+        pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
+        self.pcs = pcs = PCS(lsb_first=True, **pcs_kwargs)
+        self.link_up = pcs.link_up
+        if with_csr:
+            self.add_csr()
+
+        # # #
+
+        # MAC Interface ----------------------------------------------------------------------------
+        # Register the MAC boundary to keep the 125 MHz PCS paths local.
+        self.tx_buffer = tx_buffer = ClockDomainsRenamer("eth_tx")(
+            stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
+        self.rx_buffer = rx_buffer = ClockDomainsRenamer("eth_rx")(
+            stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
+        self.sink   = tx_buffer.sink
+        self.source = rx_buffer.source
+        self.comb += [
+            tx_buffer.source.connect(pcs.sink),
+            pcs.source.connect(rx_buffer.sink),
+        ]
+
+        # SerDes Datapath --------------------------------------------------------------------------
+        tx_data  = Signal(10)
+        rx_data  = Signal(88)
+        rx_valid = Signal()
+        self.sync.eth_tx += tx_data.eq(pcs.tbi_tx)
+        self.sync.eth_rx += [
+            pcs.tbi_rx.eq(rx_data[:10]),
+            pcs.tbi_rx_ce.eq(rx_valid),
+        ]
+
+        # Clocking / Reset -------------------------------------------------------------------------
+        reset = self.reset | ResetSignal("sys")
+        self.specials += [
+            AsyncResetSynchronizer(self.cd_eth_tx, reset | ~self.pll_lock),
+            AsyncResetSynchronizer(self.cd_eth_rx, reset | ~self.cdr_lock),
+        ]
+
+        # Raw SerDes -------------------------------------------------------------------------------
+        self.serdes = serdes = GW5SerDes(platform, lane=lane)
+        self.comb += [
+            serdes.reset.eq(reset),
+            serdes.tx_data.eq(tx_data),
+            rx_data.eq(serdes.rx_data),
+            rx_valid.eq(serdes.rx_valid),
+            self.cd_eth_tx.clk.eq(serdes.tx_clk),
+            self.cd_eth_rx.clk.eq(serdes.rx_clk),
+            self.pll_lock.eq(serdes.pll_lock),
+            self.cdr_lock.eq(serdes.cdr_lock),
+            self.aligned.eq(serdes.aligned),
         ]
 
     def add_csr(self):
