@@ -24,7 +24,7 @@ from litex.soc.interconnect.packet import *
 
 from liteeth.mac.common import LiteEthLastHandler
 
-from liteeth.packet import Depacketizer, Packetizer
+from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # Etherbone Packet ---------------------------------------------------------------------------------
 
