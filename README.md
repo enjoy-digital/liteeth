@@ -32,6 +32,7 @@ PHY:
   - MII, RMII 100Mbps PHYs.
   - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
   - SGMII / 2500BaseX 3.125Gbps PHYs.
+  - SGMII / 1000BaseX over LVDS SelectIO 1Gbps PHYs (Titanium, UltraScale/UltraScale+).
 
 | -     | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
 |-------|-----|------|----------|-------|----------|----------|---------------|
@@ -40,6 +41,7 @@ PHY:
 | GMII  |     |     |      X    |       |          |     X    |       X       |
 | RGMII |     |  X  |      X    |   X   |     X    |     X    |       X       |
 | SGMII |     |     |           |       |          |     X    |       X       |
+| LVDS  |     |     |           |       |     X    |          |       X       |
 
 
 Core:
