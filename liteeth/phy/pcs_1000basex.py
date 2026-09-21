@@ -282,8 +282,25 @@ class PCSRX(LiteXModule):
 # PCS ----------------------------------------------------------------------------------------------
 
 class PCS(LiteXModule):
+    """1000BASE-X / SGMII PCS.
+
+    sgmii selects the Auto-Negotiation flavour:
+    - None  : detected from the link partner (bit 0 of its configuration word). The first
+              configuration words sent are 1000BASE-X ones.
+    - True  : SGMII MAC side from the start. Required by SGMII PHYs that only complete
+              Auto-Negotiation with SGMII configuration words.
+    - False : 1000BASE-X only.
+    """
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, eth_tx_clk_freq=125e6, with_csr=False):
+    def __init__(self, lsb_first=False,
+        sgmii           = None,
+        check_period    = 6e-3,
+        breaklink_time  = 10e-3,
+        more_ack_time   = 10e-3,
+        sgmii_ack_time  = 1.6e-3,
+        eth_tx_clk_freq = 125e6,
+        with_csr        = False,
+    ):
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -350,11 +367,16 @@ class PCS(LiteXModule):
         sgmii_speed_valid = Signal()
         sgmii_tx_speed    = Signal(2)
         sgmii_rx_speed    = Signal(2)
+        if sgmii is None:
+            self.comb += is_sgmii.eq(self.lp_abi.o[0])
+        else:
+            self.comb += is_sgmii.eq(int(sgmii))
         self.comb += [
-            is_sgmii.eq(self.lp_abi.o[0]),
-            sgmii_speed_valid.eq(self.lp_abi.o[10:12] != 0b11),
+            # Speed 0b11 is reserved and an empty register means nothing received yet: 1000 Mbps.
+            sgmii_speed_valid.eq((self.lp_abi.o[10:12] != 0b11) & (self.lp_abi.o != 0)),
             sgmii_tx_speed.eq(Mux(sgmii_speed_valid, self.lp_abi.o[10:12], SGMII_1000MBPS_SPEED)),
-            sgmii_rx_speed.eq(Mux(self.lp_abi.i[10:12] != 0b11, self.lp_abi.i[10:12], SGMII_1000MBPS_SPEED)),
+            sgmii_rx_speed.eq(Mux((self.lp_abi.i[10:12] != 0b11) & (self.lp_abi.i != 0),
+                self.lp_abi.i[10:12], SGMII_1000MBPS_SPEED)),
             # Detect that link is down:
             # - 1000BASE-X : linkup can be inferred by non-empty reg.
             # - SGMII      : linkup is indicated with bit 15.

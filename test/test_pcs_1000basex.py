@@ -157,12 +157,13 @@ class TestPCSSGMIITimer(unittest.TestCase):
 # Test PCS Autoneg Config --------------------------------------------------------------------------
 
 class TestPCSAutonegConfig(unittest.TestCase):
-    def make_dut(self):
+    def make_dut(self, **kwargs):
         return PCS(
             check_period=8/125e6,
             breaklink_time=1/125e6,
             more_ack_time=1/125e6,
             sgmii_ack_time=1/125e6,
+            **kwargs
         )
 
     def test_1000basex_advertises_full_duplex(self):
@@ -174,6 +175,24 @@ class TestPCSAutonegConfig(unittest.TestCase):
             yield
             yield
             self.assertEqual((yield dut.tx.config_reg), 0x0020)
+            self.assertEqual((yield dut.tx.sgmii_speed), SGMII_1000MBPS_SPEED)
+            self.assertEqual((yield dut.rx.sgmii_speed), SGMII_1000MBPS_SPEED)
+
+        run_simulation(dut, generator(), clocks={
+            "sys":    10,
+            "eth_tx": 10,
+            "eth_rx": 10,
+        })
+
+    def test_forced_sgmii_advertises_sgmii_1000_full_duplex(self):
+        dut = self.make_dut(sgmii=True)
+
+        def generator():
+            yield dut.config_empty.eq(0)
+            yield dut.lp_abi.o.eq(0x0000) # Nothing received yet.
+            yield
+            yield
+            self.assertEqual((yield dut.tx.config_reg), 0x1801)
             self.assertEqual((yield dut.tx.sgmii_speed), SGMII_1000MBPS_SPEED)
             self.assertEqual((yield dut.rx.sgmii_speed), SGMII_1000MBPS_SPEED)
 
