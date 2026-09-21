@@ -29,8 +29,10 @@ class GW5SerDes(LiteXModule):
         if lane not in (0, 1):
             raise ValueError("GW5SerDes supports Q1 lanes 0 and 1.")
         self.reset    = Signal()
-        self.tx_clk   = Signal()
-        self.rx_clk   = Signal()
+        # GowinSynthesis otherwise merges equivalent registers driven by the
+        # independent TX and recovered RX clock outputs of the GTR primitive.
+        self.tx_clk   = Signal(attr={("syn_keep", 1)})
+        self.rx_clk   = Signal(attr={("syn_keep", 1)})
         self.tx_data  = Signal(10)
         self.rx_data  = Signal(88)
         self.rx_valid = Signal()
