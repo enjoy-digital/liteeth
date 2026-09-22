@@ -22,6 +22,8 @@ class GW5SerDes(LiteXModule):
     The caller supplies the PCS and synchronizes resets to the TX/RX clocks.
     The RX interface can have gaps; rx_valid qualifies rx_data. Neither this
     interface nor hardware comma alignment guarantees deterministic latency.
+    rx_fifo_level/tx_fifo_level expose the interface FIFO occupancies for
+    latency diagnostics; they are in the RX and TX clock domains.
     """
     def __init__(self, platform, lane=0):
         if platform.devicename != "GW5AST-138B":
@@ -40,6 +42,8 @@ class GW5SerDes(LiteXModule):
         self.pll_lock = Signal()
         self.cdr_lock = Signal()
         self.aligned  = Signal()
+        self.rx_fifo_level = Signal(5)
+        self.tx_fifo_level = Signal(5)
 
         # SerDes -----------------------------------------------------------------------------------
         # Unused fabric controls are tied low; the CSR configuration selects their internal controls.
@@ -127,6 +131,8 @@ class GW5SerDes(LiteXModule):
             f"o_FABRIC_LANE{lane}_CMU_OK_O"     : self.pll_lock,
             f"o_FABRIC_LN{lane}_PMA_RX_LOCK_O"  : self.cdr_lock,
             f"o_LANE{lane}_ALIGN_LINK"          : self.aligned,
+            f"o_LANE{lane}_RX_IF_FIFO_RDUSEWD"  : self.rx_fifo_level,
+            f"o_LANE{lane}_TX_IF_FIFO_WRUSEWD"  : self.tx_fifo_level,
         })
         self.specials += Instance("GTR12_QUAD", **serdes_params)
 
