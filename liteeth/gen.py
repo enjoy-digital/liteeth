@@ -312,6 +312,7 @@ class PHYCore(SoCMini):
             # 7-Series GTP/GTX.
             liteeth_phys.A7_1000BASEX,
             liteeth_phys.A7_2500BASEX,
+            liteeth_phys.A7_5000BASEX,
             liteeth_phys.K7_1000BASEX,
             liteeth_phys.K7_2500BASEX,
             # Ultrascale GTHE3.
@@ -325,7 +326,7 @@ class PHYCore(SoCMini):
         ]:
             ethphy_pads = platform.request("sgmii")
             # Artix7.
-            if phy in [liteeth_phys.A7_1000BASEX, liteeth_phys.A7_2500BASEX]:
+            if phy in [liteeth_phys.A7_1000BASEX, liteeth_phys.A7_2500BASEX, liteeth_phys.A7_5000BASEX]:
                 refclk_freq = core_config.get("refclk_freq", 0)
                 assert refclk_freq in [125e6, 156.25e6]
                 # QPLL.
@@ -338,6 +339,7 @@ class PHYCore(SoCMini):
                         fbdiv      = {
                             liteeth_phys.A7_1000BASEX : 4,
                             liteeth_phys.A7_2500BASEX : 5,
+                            liteeth_phys.A7_5000BASEX : 5,
                         }[phy],
                         fbdiv_45   = {
                             125e6    : 5,

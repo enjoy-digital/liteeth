@@ -279,19 +279,473 @@ class PCSRX(LiteXModule):
             NextState("START")
         )
 
+# Four-Symbol PCS TX -------------------------------------------------------------------------------
+
+class PCSTX4(LiteXModule):
+    """Four-symbol/cycle 1000BASE-X-style transmitter.
+
+    This keeps the Clause-36 code-group stream used by :class:`PCSTX`, but
+    emits four 8b/10b symbols per clock.  It is intended for experimental
+    5Gb/s MAC operation over a 6.25Gb/s serial link with a 40-bit GTP
+    interface.
+    """
+    def __init__(self, lsb_first=False):
+        self.config_valid = Signal()
+        self.config_reg   = Signal(16)
+        self.sgmii_speed  = Signal(2)
+        self.sink         = sink = stream.Endpoint(eth_phy_description(32))
+
+        self.encoder = Encoder(nwords=4, lsb_first=lsb_first)
+
+        # # #
+
+        ctype = Signal()
+        d     = self.encoder.d
+        k     = self.encoder.k
+
+        # Two legal idle ordered sets.  Keeping the pair boundaries at lanes
+        # 0/2 also makes /S/ naturally start on an even code-group boundary.
+        self.comb += [
+            d[0].eq(K(28, 5)), k[0].eq(1),
+            d[1].eq(D( 5, 6)), k[1].eq(0),
+            d[2].eq(K(28, 5)), k[2].eq(1),
+            d[3].eq(D( 5, 6)), k[3].eq(0),
+        ]
+
+        self.fsm = fsm = FSM(reset_state="IDLE")
+        fsm.act("IDLE",
+            If(self.config_valid,
+                d[0].eq(K(28, 5)), k[0].eq(1),
+                d[1].eq(Mux(ctype, D(2, 2), D(21, 5))), k[1].eq(0),
+                d[2].eq(self.config_reg[:8]),            k[2].eq(0),
+                d[3].eq(self.config_reg[8:]),            k[3].eq(0),
+                NextValue(ctype, ~ctype),
+            ).Elif(sink.valid,
+                sink.ready.eq(1),
+                # /S/ replaces the first preamble byte, as in the 8-bit PCS.
+                d[0].eq(K(27, 7)),       k[0].eq(1),
+                d[1].eq(sink.data[8:16]), k[1].eq(0),
+                d[2].eq(sink.data[16:24]), k[2].eq(0),
+                d[3].eq(sink.data[24:32]), k[3].eq(0),
+                If(sink.last,
+                    Case(sink.last_be, {
+                        0b0001 : [
+                            d[1].eq(K(29, 7)), k[1].eq(1),
+                            d[2].eq(K(23, 7)), k[2].eq(1),
+                            d[3].eq(K(23, 7)), k[3].eq(1),
+                        ],
+                        0b0010 : [
+                            d[2].eq(K(29, 7)), k[2].eq(1),
+                            d[3].eq(K(23, 7)), k[3].eq(1),
+                        ],
+                        0b0100 : [
+                            d[3].eq(K(29, 7)), k[3].eq(1),
+                            NextState("EXTEND-ODD"),
+                        ],
+                        0b1000 : NextState("TERMINATE-EVEN"),
+                    })
+                ).Else(
+                    NextState("DATA")
+                )
+            )
+        )
+        fsm.act("DATA",
+            If(sink.valid,
+                sink.ready.eq(1),
+                d[0].eq(sink.data[ 0: 8]), k[0].eq(0),
+                d[1].eq(sink.data[ 8:16]), k[1].eq(0),
+                d[2].eq(sink.data[16:24]), k[2].eq(0),
+                d[3].eq(sink.data[24:32]), k[3].eq(0),
+                If(sink.last,
+                    Case(sink.last_be, {
+                        0b0001 : [
+                            d[1].eq(K(29, 7)), k[1].eq(1),
+                            d[2].eq(K(23, 7)), k[2].eq(1),
+                            d[3].eq(K(23, 7)), k[3].eq(1),
+                            NextState("IDLE"),
+                        ],
+                        0b0010 : [
+                            d[2].eq(K(29, 7)), k[2].eq(1),
+                            d[3].eq(K(23, 7)), k[3].eq(1),
+                            NextState("IDLE"),
+                        ],
+                        0b0100 : [
+                            d[3].eq(K(29, 7)), k[3].eq(1),
+                            NextState("EXTEND-ODD"),
+                        ],
+                        0b1000 : NextState("TERMINATE-EVEN"),
+                    })
+                )
+            ).Else(
+                # A gap inside a frame is not representable on the wire. End
+                # the frame deterministically and let the RX error accounting
+                # expose any upstream contract violation.
+                d[0].eq(K(29, 7)), k[0].eq(1),
+                d[1].eq(K(23, 7)), k[1].eq(1),
+                d[2].eq(K(28, 5)), k[2].eq(1),
+                d[3].eq(D( 5, 6)), k[3].eq(0),
+                NextState("IDLE"),
+            )
+        )
+        # /T/ in lane 3 needs two /R/ code groups before the next even-aligned
+        # idle pair. /T/ after lane 3 starts the following cycle in lane 0.
+        fsm.act("EXTEND-ODD",
+            d[0].eq(K(23, 7)), k[0].eq(1),
+            d[1].eq(K(23, 7)), k[1].eq(1),
+            d[2].eq(K(28, 5)), k[2].eq(1),
+            d[3].eq(D( 5, 6)), k[3].eq(0),
+            NextState("IDLE"),
+        )
+        fsm.act("TERMINATE-EVEN",
+            d[0].eq(K(29, 7)), k[0].eq(1),
+            d[1].eq(K(23, 7)), k[1].eq(1),
+            d[2].eq(K(28, 5)), k[2].eq(1),
+            d[3].eq(D( 5, 6)), k[3].eq(0),
+            NextState("IDLE"),
+        )
+
+
+# Four-Symbol PCS RX -------------------------------------------------------------------------------
+
+class PCSRX4(LiteXModule):
+    """Four-symbol/cycle receiver with arbitrary code-group phase support."""
+    def __init__(self, lsb_first=False):
+        self.seen_valid_ci   = Signal()
+        self.seen_config_reg = Signal()
+        self.config_reg      = Signal(16)
+        self.sgmii_speed     = Signal(2)
+        self.input           = Signal(40)
+        self.source          = source = stream.Endpoint(eth_phy_description(32))
+        self.overflow        = Signal()
+        self.code_error      = Signal(4)
+        self.disparity_error = Signal(4)
+
+        self.decoders = decoders = [Decoder(lsb_first=lsb_first, sync=False) for _ in range(4)]
+        self.submodules += decoders
+        for lane, decoder in enumerate(decoders):
+            self.comb += decoder.input.eq(self.input[10*lane:10*(lane + 1)])
+
+        # Track received running disparity across all four symbols. Decoder's
+        # invalid output catches malformed population counts; this additionally
+        # reports a legal positive/negative symbol received with the wrong RD.
+        rx_disparity = Signal()
+        disparities  = [Signal() for _ in range(5)]
+        self.comb += disparities[0].eq(rx_disparity)
+        for lane in range(4):
+            ones = Signal(4)
+            self.comb += [
+                ones.eq(Reduce("ADD", [self.input[10*lane + bit] for bit in range(10)])),
+                self.code_error[lane].eq(decoders[lane].invalid),
+                self.disparity_error[lane].eq(
+                    ((ones > 5) & disparities[lane]) |
+                    ((ones < 5) & ~disparities[lane])
+                ),
+                disparities[lane + 1].eq(Mux(
+                    ones == 5,
+                    disparities[lane],
+                    ones > 5,
+                )),
+            ]
+        self.sync += rx_disparity.eq(disparities[4])
+
+        # Register decoded symbols once before the parallel control parser.
+        # Besides matching the packet aligner's existing history window, this
+        # prevents a four-symbol Clause-37 parse from becoming a direct GTP to
+        # state-register path at the 156.25MHz experimental 5G PCS rate.
+        prev_d       = [Signal(8) for _ in range(4)]
+        prev_k       = [Signal() for _ in range(4)]
+        prev_invalid = [Signal() for _ in range(4)]
+        for lane, decoder in enumerate(decoders):
+            self.sync += [
+                prev_d[lane].eq(decoder.d),
+                prev_k[lane].eq(decoder.k),
+                prev_invalid[lane].eq(decoder.invalid),
+            ]
+
+        # Parallel Clause-37 configuration/idle parser.  The four combinatorial
+        # steps preserve parser state across 40-bit boundaries.
+        CTRL_K, CTRL_C_OR_IDLE, CTRL_LO, CTRL_HI = range(4)
+        ctrl_state = Signal(2)
+        ctrl_reg   = Signal(16)
+        states     = [Signal(2) for _ in range(5)]
+        regs       = [Signal(16) for _ in range(5)]
+        seen_ci    = [Signal() for _ in range(4)]
+        seen_cfg   = [Signal() for _ in range(4)]
+        self.ctrl_state = ctrl_state
+        self.comb += [states[0].eq(ctrl_state), regs[0].eq(ctrl_reg)]
+        for lane in range(4):
+            data    = prev_d[lane]
+            is_k    = prev_k[lane]
+            invalid = prev_invalid[lane]
+            self.comb += [
+                states[lane + 1].eq(CTRL_K),
+                regs[lane + 1].eq(regs[lane]),
+                seen_ci[lane].eq(0),
+                seen_cfg[lane].eq(0),
+                Case(states[lane], {
+                    CTRL_K : If(is_k & (data == K(28, 5)) & ~invalid,
+                        states[lane + 1].eq(CTRL_C_OR_IDLE)
+                    ),
+                    CTRL_C_OR_IDLE : If(~is_k & ~invalid,
+                        If((data == D(21, 5)) | (data == D(2, 2)),
+                            states[lane + 1].eq(CTRL_LO),
+                            seen_ci[lane].eq(1),
+                        ).Elif((data == D(5, 6)) | (data == D(16, 2)),
+                            states[lane + 1].eq(CTRL_K),
+                            seen_ci[lane].eq(1),
+                        )
+                    ).Elif(is_k & (data == K(28, 5)) & ~invalid,
+                        states[lane + 1].eq(CTRL_C_OR_IDLE)
+                    ),
+                    CTRL_LO : If(~is_k & ~invalid,
+                        regs[lane + 1][:8].eq(data),
+                        states[lane + 1].eq(CTRL_HI),
+                    ),
+                    CTRL_HI : If(~is_k & ~invalid,
+                        regs[lane + 1][8:].eq(data),
+                        states[lane + 1].eq(CTRL_K),
+                        seen_cfg[lane].eq(1),
+                    ),
+                })
+            ]
+        self.sync += [
+            ctrl_state.eq(states[4]),
+            ctrl_reg.eq(regs[4]),
+            self.config_reg.eq(regs[4]),
+        ]
+        self.comb += [
+            self.seen_valid_ci.eq(Cat(*seen_ci) != 0),
+            self.seen_config_reg.eq(Cat(*seen_cfg) != 0),
+        ]
+
+        # Keep one previous decoded word.  A phase-selectable 8-symbol window
+        # then presents packet bytes in 32-bit MAC word order for any /S/ lane.
+        start_found = Signal()
+        start_phase = Signal(2)
+        start_conditions = [
+            decoder.k & (decoder.d == K(27, 7)) & ~decoder.invalid
+            for decoder in decoders
+        ]
+        self.comb += [
+            start_found.eq(0),
+            start_phase.eq(0),
+            If(start_conditions[0], start_found.eq(1), start_phase.eq(0)
+            ).Elif(start_conditions[1], start_found.eq(1), start_phase.eq(1)
+            ).Elif(start_conditions[2], start_found.eq(1), start_phase.eq(2)
+            ).Elif(start_conditions[3], start_found.eq(1), start_phase.eq(3))
+        ]
+
+        in_packet    = Signal()
+        first_word   = Signal()
+        phase        = Signal(2)
+        self.in_packet  = in_packet
+        self.first_word = first_word
+        self.phase      = phase
+        window_valid = Signal()
+        window_d     = [Signal(8) for _ in range(4)]
+        window_k     = [Signal() for _ in range(4)]
+        window_bad   = [Signal() for _ in range(4)]
+
+        first_cases = {
+            0 : [
+                window_d[0].eq(0x55), window_k[0].eq(0), window_bad[0].eq(0),
+                window_d[1].eq(prev_d[1]), window_k[1].eq(prev_k[1]), window_bad[1].eq(prev_invalid[1]),
+                window_d[2].eq(prev_d[2]), window_k[2].eq(prev_k[2]), window_bad[2].eq(prev_invalid[2]),
+                window_d[3].eq(prev_d[3]), window_k[3].eq(prev_k[3]), window_bad[3].eq(prev_invalid[3]),
+            ],
+            1 : [
+                window_d[0].eq(0x55), window_k[0].eq(0), window_bad[0].eq(0),
+                window_d[1].eq(prev_d[2]), window_k[1].eq(prev_k[2]), window_bad[1].eq(prev_invalid[2]),
+                window_d[2].eq(prev_d[3]), window_k[2].eq(prev_k[3]), window_bad[2].eq(prev_invalid[3]),
+                window_d[3].eq(decoders[0].d), window_k[3].eq(decoders[0].k), window_bad[3].eq(decoders[0].invalid),
+            ],
+            2 : [
+                window_d[0].eq(0x55), window_k[0].eq(0), window_bad[0].eq(0),
+                window_d[1].eq(prev_d[3]), window_k[1].eq(prev_k[3]), window_bad[1].eq(prev_invalid[3]),
+                window_d[2].eq(decoders[0].d), window_k[2].eq(decoders[0].k), window_bad[2].eq(decoders[0].invalid),
+                window_d[3].eq(decoders[1].d), window_k[3].eq(decoders[1].k), window_bad[3].eq(decoders[1].invalid),
+            ],
+            3 : [
+                window_d[0].eq(0x55), window_k[0].eq(0), window_bad[0].eq(0),
+                window_d[1].eq(decoders[0].d), window_k[1].eq(decoders[0].k), window_bad[1].eq(decoders[0].invalid),
+                window_d[2].eq(decoders[1].d), window_k[2].eq(decoders[1].k), window_bad[2].eq(decoders[1].invalid),
+                window_d[3].eq(decoders[2].d), window_k[3].eq(decoders[2].k), window_bad[3].eq(decoders[2].invalid),
+            ],
+        }
+        steady_cases = {}
+        for p in range(4):
+            symbols = list(zip(prev_d[p:], prev_k[p:], prev_invalid[p:])) + [
+                (decoder.d, decoder.k, decoder.invalid) for decoder in decoders[:p]
+            ]
+            steady_cases[p] = []
+            for lane, (data, is_k, invalid) in enumerate(symbols):
+                steady_cases[p] += [
+                    window_d[lane].eq(data),
+                    window_k[lane].eq(is_k),
+                    window_bad[lane].eq(invalid),
+                ]
+
+        self.comb += [
+            window_valid.eq(in_packet),
+            *[window_d[n].eq(0) for n in range(4)],
+            *[window_k[n].eq(0) for n in range(4)],
+            *[window_bad[n].eq(0) for n in range(4)],
+            If(first_word,
+                Case(phase, first_cases)
+            ).Else(
+                Case(phase, steady_cases)
+            )
+        ]
+
+        # Find the first /T/ or malformed symbol in the aligned word.
+        word_data  = Signal(32)
+        word_term  = Signal()
+        word_error = Signal()
+        word_count = Signal(3, reset=4)
+        self.comb += [
+            word_data.eq(Cat(*window_d)),
+            word_term.eq(0),
+            word_error.eq(0),
+            word_count.eq(4),
+            If(window_bad[0] | window_k[0],
+                word_term.eq(1), word_count.eq(0),
+                word_error.eq(window_bad[0] | (window_d[0] != K(29, 7))),
+            ).Elif(window_bad[1] | window_k[1],
+                word_term.eq(1), word_count.eq(1),
+                word_error.eq(window_bad[1] | (window_d[1] != K(29, 7))),
+            ).Elif(window_bad[2] | window_k[2],
+                word_term.eq(1), word_count.eq(2),
+                word_error.eq(window_bad[2] | (window_d[2] != K(29, 7))),
+            ).Elif(window_bad[3] | window_k[3],
+                word_term.eq(1), word_count.eq(3),
+                word_error.eq(window_bad[3] | (window_d[3] != K(29, 7))),
+            )
+        ]
+
+        # A held word supplies look-ahead for /T/ in lane zero.  Partial final
+        # words are emitted on the following idle cycle, which the Ethernet IFG
+        # always provides.
+        hold_valid   = Signal()
+        hold_last    = Signal()
+        hold_data    = Signal(32)
+        hold_last_be = Signal(4)
+        hold_error   = Signal(4)
+
+        emit_valid   = Signal()
+        emit_data    = Signal(32)
+        emit_last    = Signal()
+        emit_last_be = Signal(4)
+        emit_error   = Signal(4)
+        count_to_be  = Array([0, 0b0001, 0b0010, 0b0100, 0b1000])
+        self.comb += [
+            emit_valid.eq(0), emit_data.eq(0), emit_last.eq(0),
+            emit_last_be.eq(0), emit_error.eq(0),
+            If(hold_last,
+                emit_valid.eq(hold_valid),
+                emit_data.eq(hold_data),
+                emit_last.eq(1),
+                emit_last_be.eq(hold_last_be),
+                emit_error.eq(hold_error),
+            ).Elif(window_valid,
+                If(~word_term,
+                    If(hold_valid,
+                        emit_valid.eq(1),
+                        emit_data.eq(hold_data),
+                        emit_error.eq(hold_error),
+                    )
+                ).Elif(word_count == 0,
+                    If(hold_valid,
+                        emit_valid.eq(1),
+                        emit_data.eq(hold_data),
+                        emit_last.eq(1),
+                        emit_last_be.eq(0b1000),
+                        emit_error.eq(hold_error | Mux(word_error, 0b1000, 0)),
+                    )
+                ).Else(
+                    If(hold_valid,
+                        emit_valid.eq(1),
+                        emit_data.eq(hold_data),
+                        emit_error.eq(hold_error),
+                    )
+                )
+            )
+        ]
+
+        self.fifo = fifo = stream.SyncFIFO(eth_phy_description(32), depth=8, buffered=True)
+        self.comb += [
+            fifo.sink.valid.eq(emit_valid),
+            fifo.sink.data.eq(emit_data),
+            fifo.sink.last.eq(emit_last),
+            fifo.sink.last_be.eq(emit_last_be),
+            fifo.sink.error.eq(emit_error),
+            fifo.source.connect(source),
+        ]
+
+        self.sync += [
+            If(start_found & ~in_packet & ~hold_last,
+                in_packet.eq(1),
+                first_word.eq(1),
+                phase.eq(start_phase),
+            ).Elif(window_valid,
+                first_word.eq(0),
+                If(word_term, in_packet.eq(0)),
+            ),
+            If(hold_last,
+                hold_valid.eq(0),
+                hold_last.eq(0),
+            ).Elif(window_valid,
+                If(~word_term,
+                    hold_valid.eq(1),
+                    hold_last.eq(0),
+                    hold_data.eq(word_data),
+                    hold_last_be.eq(0),
+                    hold_error.eq(0),
+                ).Elif(word_count == 0,
+                    hold_valid.eq(0),
+                    hold_last.eq(0),
+                ).Else(
+                    hold_valid.eq(1),
+                    hold_last.eq(1),
+                    hold_data.eq(word_data),
+                    hold_last_be.eq(count_to_be[word_count]),
+                    hold_error.eq(Mux(word_error, count_to_be[word_count], 0)),
+                )
+            ),
+            If(emit_valid & ~fifo.sink.ready,
+                self.overflow.eq(1)
+            )
+        ]
+
 # PCS ----------------------------------------------------------------------------------------------
 
 class PCS(LiteXModule):
     autocsr_exclude = {"ev"}
-    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3, more_ack_time=10e-3, sgmii_ack_time=1.6e-3, eth_tx_clk_freq=125e6, with_csr=False):
-        self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
-        self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
+    def __init__(self, lsb_first=False, check_period=6e-3, breaklink_time=10e-3,
+        more_ack_time=10e-3, sgmii_ack_time=1.6e-3, eth_tx_clk_freq=125e6,
+        with_csr=False, dw=8):
+        if dw not in [8, 32]:
+            raise ValueError("1000BASE-X PCS data width must be 8 or 32 bits")
+        tx_cls  = {8: PCSTX, 32: PCSTX4}[dw]
+        rx_cls  = {8: PCSRX, 32: PCSRX4}[dw]
+        self.tx = ClockDomainsRenamer("eth_tx")(tx_cls(lsb_first=lsb_first))
+        self.rx = ClockDomainsRenamer("eth_rx")(rx_cls(lsb_first=lsb_first))
 
-        self.tbi_tx    = self.tx.encoder.output[0]
-        self.tbi_rx    = self.rx.decoder.input
-        self.tbi_rx_ce = self.rx.decoder.ce
-        self.sink      = stream.Endpoint(eth_phy_description(8))
-        self.source    = stream.Endpoint(eth_phy_description(8))
+        self.tbi_tx = Signal(10*(dw//8))
+        self.tbi_rx = Signal(10*(dw//8))
+        if dw == 8:
+            self.comb += [
+                self.tbi_tx.eq(self.tx.encoder.output[0]),
+                self.rx.decoder.input.eq(self.tbi_rx),
+            ]
+            self.tbi_rx_ce = self.rx.decoder.ce
+        else:
+            self.comb += [
+                self.tbi_tx.eq(Cat(*self.tx.encoder.output)),
+                self.rx.input.eq(self.tbi_rx),
+            ]
+            self.tbi_rx_ce = Signal(reset=1)
+        self.sink      = stream.Endpoint(eth_phy_description(dw))
+        self.source    = stream.Endpoint(eth_phy_description(dw))
 
         self.link_up = Signal()
         self.restart = Signal()
@@ -309,10 +763,16 @@ class PCS(LiteXModule):
         self.autoneg_ack  = autoneg_ack  = Signal()
 
         # Sink -> TX / RX -> Source.
-        self.comb += [
-            self.sink.connect(self.tx.sink,     omit={"last_be", "error"}),
-            self.rx.source.connect(self.source, omit={"last_be"}),
-        ]
+        if dw == 8:
+            self.comb += [
+                self.sink.connect(self.tx.sink,     omit={"last_be", "error"}),
+                self.rx.source.connect(self.source, omit={"last_be"}),
+            ]
+        else:
+            self.comb += [
+                self.sink.connect(self.tx.sink, omit={"error"}),
+                self.rx.source.connect(self.source),
+            ]
 
         # Pulse Synchronizers.
         # --------------------

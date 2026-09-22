@@ -16,7 +16,9 @@ from liteeth.phy.pcs_1000basex import (
     PCSGearbox,
     PCSSGMIITimer,
     PCSRX,
+    PCSRX4,
     PCSTX,
+    PCSTX4,
     SGMII_10MBPS_SPEED,
     SGMII_100MBPS_SPEED,
     SGMII_1000MBPS_SPEED,
@@ -64,6 +66,45 @@ class PCSGearboxDUT(LiteXModule):
         self.clock_domains.cd_eth_rx      = ClockDomain("eth_rx")
         self.clock_domains.cd_eth_rx_half = ClockDomain("eth_rx_half")
         self.gearbox = PCSGearbox()
+
+
+class PCS4LoopbackDUT(LiteXModule):
+    def __init__(self, phase=0):
+        self.tx = PCSTX4()
+        self.rx = PCSRX4()
+
+        raw     = Cat(*self.tx.encoder.output)
+        raw_d   = Signal(40)
+        shifted = Signal(40)
+        self.sync += raw_d.eq(raw)
+        if phase == 0:
+            self.comb += shifted.eq(raw)
+        else:
+            # Move code group zero to the requested RX lane while preserving
+            # the continuous serial order across 40-bit word boundaries.
+            self.comb += shifted.eq(Cat(
+                raw_d[10*(4 - phase):],
+                raw[:10*(4 - phase)],
+            ))
+        self.comb += self.rx.input.eq(shifted)
+
+
+class PCS4AutonegLoopbackDUT(LiteXModule):
+    def __init__(self):
+        kwargs = dict(
+            dw=32,
+            check_period=16/156.25e6,
+            breaklink_time=1/156.25e6,
+            more_ack_time=1/156.25e6,
+            sgmii_ack_time=1/156.25e6,
+            eth_tx_clk_freq=156.25e6,
+        )
+        self.pcs_a = PCS(**kwargs)
+        self.pcs_b = PCS(**kwargs)
+        self.comb += [
+            self.pcs_a.tbi_rx.eq(self.pcs_b.tbi_tx),
+            self.pcs_b.tbi_rx.eq(self.pcs_a.tbi_tx),
+        ]
 
 
 # Test PCS Gearbox ---------------------------------------------------------------------------------
@@ -123,6 +164,106 @@ class TestPCSGearbox(unittest.TestCase):
             "eth_rx_half": 20,
         })
         self.assertEqual(observed[1:7], [2, 1, 4, 3, 6, 5])
+
+
+# Test Four-Symbol PCS ----------------------------------------------------------------------------
+
+class TestPCS4(unittest.TestCase):
+    @staticmethod
+    def packet_words(data):
+        for offset in range(0, len(data), 4):
+            chunk = data[offset:offset + 4]
+            yield (
+                sum(value << (8*byte) for byte, value in enumerate(chunk)),
+                offset + 4 >= len(data),
+                1 << (len(chunk) - 1),
+            )
+
+    def check_loopback(self, phase, length):
+        dut      = PCS4LoopbackDUT(phase=phase)
+        expected = [0x55] + [((17*n) + 3) & 0xff for n in range(1, length)]
+        received = []
+
+        def tx_generator():
+            for _ in range(16):
+                yield
+            for data, last, last_be in self.packet_words(expected):
+                yield dut.tx.sink.data.eq(data)
+                yield dut.tx.sink.last.eq(last)
+                yield dut.tx.sink.last_be.eq(last_be)
+                yield dut.tx.sink.valid.eq(1)
+                yield
+                while not (yield dut.tx.sink.ready):
+                    yield
+                yield dut.tx.sink.valid.eq(0)
+                yield dut.tx.sink.last.eq(0)
+                yield dut.tx.sink.last_be.eq(0)
+            for _ in range(64):
+                yield
+
+        def rx_generator():
+            yield dut.rx.source.ready.eq(1)
+            for cycle in range(256):
+                if cycle > 16:
+                    self.assertEqual((yield dut.rx.code_error), 0)
+                    self.assertEqual((yield dut.rx.disparity_error), 0)
+                if (yield dut.rx.source.valid):
+                    data    = (yield dut.rx.source.data)
+                    last    = (yield dut.rx.source.last)
+                    last_be = (yield dut.rx.source.last_be)
+                    count   = last_be.bit_length() if last else 4
+                    received.extend((data >> (8*byte)) & 0xff for byte in range(count))
+                    self.assertEqual((yield dut.rx.source.error), 0)
+                    if last:
+                        return
+                yield
+            self.fail("four-symbol PCS loopback timed out")
+
+        run_simulation(dut, [tx_generator(), rx_generator()])
+        self.assertEqual(received, expected)
+
+    def test_all_symbol_phases(self):
+        for phase in range(4):
+            with self.subTest(phase=phase):
+                self.check_loopback(phase=phase, length=64)
+
+    def test_all_last_byte_positions(self):
+        for length in range(61, 65):
+            with self.subTest(length=length):
+                self.check_loopback(phase=0, length=length)
+
+    def test_pcs_32bit_interface(self):
+        dut = PCS(
+            dw=32,
+            check_period=32/156.25e6,
+            breaklink_time=1/156.25e6,
+            more_ack_time=1/156.25e6,
+            sgmii_ack_time=1/156.25e6,
+        )
+        self.assertEqual(len(dut.tbi_tx), 40)
+        self.assertEqual(len(dut.tbi_rx), 40)
+        self.assertEqual(len(dut.sink.data), 32)
+        self.assertEqual(len(dut.source.data), 32)
+
+    def test_parallel_pcs_autonegotiation(self):
+        dut = PCS4AutonegLoopbackDUT()
+
+        def generator():
+            for _ in range(120):
+                yield
+            self.assertEqual((yield dut.pcs_a.link_up), 1)
+            self.assertEqual((yield dut.pcs_b.link_up), 1)
+            self.assertEqual((yield dut.pcs_a.lp_abi.o), 0x4020)
+            self.assertEqual((yield dut.pcs_b.lp_abi.o), 0x4020)
+
+        run_simulation(dut, {"eth_tx": [generator()]}, clocks={
+            "eth_tx": 10,
+            "eth_rx": 10,
+        })
+
+    def test_rejects_unsupported_width(self):
+        with self.assertRaisesRegex(ValueError, "8 or 32"):
+            PCS(dw=16)
 
 
 # Test PCS SGMII Timer -----------------------------------------------------------------------------

@@ -32,6 +32,7 @@ PHY:
   - MII, RMII 100Mbps PHYs.
   - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
   - SGMII / 2500BaseX 3.125Gbps PHYs.
+  - Experimental Artix-7 5000BaseX 6.25Gbaud PHY with a four-symbol-wide PCS.
 
 | -     | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
 |-------|-----|------|----------|-------|----------|----------|---------------|
