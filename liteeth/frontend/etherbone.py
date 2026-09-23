@@ -62,7 +62,7 @@ class LiteEthEtherbonePacketTX(LiteXModule):
         fsm.act("SEND",
             packetizer.source.connect(source),
             source.src_port.eq(udp_port),
-            source.dst_port.eq(udp_port),
+            source.dst_port.eq(sink.src_port),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length + etherbone_packet_header.length),
             If(source.valid & source.last & source.ready,
@@ -342,12 +342,16 @@ class LiteEthEtherboneRecord(LiteXModule):
         if endianness == "big":
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
-        # Save last ip address.
+        # Save last ip address/src port.
         first = Signal(reset=1)
         last_ip_address = Signal(32, reset_less=True)
+        last_src_port   = Signal(16, reset_less=True)
         self.sync += [
             If(sink.valid & sink.ready,
-                If(first, last_ip_address.eq(sink.ip_address)),
+                If(first,
+                    last_ip_address.eq(sink.ip_address),
+                    last_src_port.eq(sink.src_port),
+                ),
                 first.eq(sink.last)
             )
         ]
@@ -361,7 +365,8 @@ class LiteEthEtherboneRecord(LiteXModule):
             source.length.eq(etherbone_record_header.length +
                 (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
                 (sender.source.rcount != 0)*4 + sender.source.rcount*4),
-            source.ip_address.eq(last_ip_address)
+            source.ip_address.eq(last_ip_address),
+            source.src_port.eq(last_src_port),
         ]
         if endianness == "big":
             self.comb += packetizer.sink.data.eq(reverse_bytes(sender.source.data))
