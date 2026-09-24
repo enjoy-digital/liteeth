@@ -16,7 +16,7 @@ from litex.soc.interconnect.stream import BufferizeEndpoints, DIR_SINK
 from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
-from liteeth.packet import PacketDropFIFO
+from liteeth.fifo import PacketDropFIFO
 from liteeth.mac import crc, gap, last_be, padding, preamble
 from liteeth.mac.common import *
 

@@ -12,7 +12,7 @@ from migen import *
 from litex.soc.interconnect import stream
 
 from liteeth.common import eth_mtu_default, eth_needs_store_and_forward, eth_packet_fifo_depth
-from liteeth.packet import PacketDropFIFO
+from liteeth.fifo import PacketDropFIFO
 
 # Test PacketDropFIFO ------------------------------------------------------------------------------
 

@@ -11,7 +11,8 @@ from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
-from liteeth.packet import Depacketizer, PacketDropFIFO, Packetizer
+from liteeth.fifo import PacketDropFIFO
+from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # UDP Crossbar -------------------------------------------------------------------------------------
 

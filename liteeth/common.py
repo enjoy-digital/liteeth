@@ -349,11 +349,15 @@ def eth_etherbone_mmap_description(dw):
     ]
     return EndpointDescription(payload_layout, param_layout)
 
-# TTY
-def eth_tty_tx_description(dw):
+# TTY / Stream
+def eth_tty_tx_description(dw, with_last_be=False):
     payload_layout = [("data", dw)]
+    if with_last_be:
+        payload_layout += [("last_be", dw//8)]
     return EndpointDescription(payload_layout)
 
-def eth_tty_rx_description(dw):
+def eth_tty_rx_description(dw, with_last_be=False):
     payload_layout = [("data", dw), ("error", 1)]
+    if with_last_be:
+        payload_layout += [("last_be", dw//8)]
     return EndpointDescription(payload_layout)

@@ -26,6 +26,10 @@ class A7_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
     def __init__(self, qpll_channel, data_pads, sys_clk_freq, with_csr=True,
+        # PCS Parameters.
+        pcs_kwargs       = None,
+        with_pcs_buffers = False,
+
         # TX Parameters.
         tx_cm_type     = "PLL",
         tx_cm_buf_type = "BUFH",
@@ -36,10 +40,26 @@ class A7_1000BASEX(LiteXModule):
         rx_cm_buf_type = "BUFG",
         rx_polarity    = 0,
     ):
-        self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
+        pcs_kwargs = {} if pcs_kwargs is None else dict(pcs_kwargs)
+        pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
+        self.pcs = pcs = PCS(lsb_first=True, **pcs_kwargs)
 
-        self.sink    = pcs.sink
-        self.source  = pcs.source
+        # Optional pipeline cuts at the MAC boundary ease timing closure when
+        # the PCS runs at 312.5MHz. The TBI/autonegotiation path is unchanged.
+        if with_pcs_buffers:
+            self.tx_pcs_buffer = tx_pcs_buffer = ClockDomainsRenamer("eth_tx")(
+                stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
+            self.rx_pcs_buffer = rx_pcs_buffer = ClockDomainsRenamer("eth_rx")(
+                stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
+            self.sink   = tx_pcs_buffer.sink
+            self.source = rx_pcs_buffer.source
+            self.comb += [
+                tx_pcs_buffer.source.connect(pcs.sink),
+                pcs.source.connect(rx_pcs_buffer.sink),
+            ]
+        else:
+            self.sink   = pcs.sink
+            self.source = pcs.source
         self.link_up = pcs.link_up
 
         self.cd_eth_tx      = ClockDomain()
@@ -77,7 +97,6 @@ class A7_1000BASEX(LiteXModule):
         drprdy  = Signal()
         drpdo   = Signal(16)
         drpwe   = Signal()
-
 
         # Work around Python's 255 argument limitation.
         self.gtp_params = gtp_params = dict(

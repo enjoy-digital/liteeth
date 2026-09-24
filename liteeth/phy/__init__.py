@@ -43,5 +43,6 @@ from liteeth.phy.usp_gth_1000basex import USP_GTH_1000BASEX
 from liteeth.phy.usp_gth_1000basex import USP_GTH_2500BASEX
 from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
 from liteeth.phy.usp_gty_1000basex import USP_GTY_2500BASEX
+from liteeth.phy.us_lvds_1000basex import US_LVDS_1000BASEX
 
 from liteeth.phy.agilex_rgmii      import LiteEthPHYRGMII as LiteEthAgilexPHYRGMII
