@@ -196,10 +196,12 @@ class LiteEthUDPRX(LiteXModule):
         fsm.act("RECEIVE",
             depacketizer.source.connect(source, keep={"valid", "ready"}),
             source.last.eq(depacketizer.source.last | (count >= source.length)),
-            If(depacketizer.source.last_be,
+            # The UDP length ends the packet when reached: Ethernet padding can share the last data
+            # word and the padded frame's last_be must then be ignored. Otherwise (truncated
+            # packet), use the frame's last_be.
+            If(count < source.length,
                source.last_be.eq(depacketizer.source.last_be),
-            ).Elif(
-              source.last,
+            ).Else(
               Case(source.length & (dw//8 - 1), {
                   1         : source.last_be.eq(0b00000001),
                   2         : source.last_be.eq(0b00000010),
