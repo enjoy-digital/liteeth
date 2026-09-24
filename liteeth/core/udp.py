@@ -6,7 +6,8 @@
 
 from litex.gen import *
 
-from litex.soc.interconnect import stream
+from litex.soc.interconnect        import stream
+from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
@@ -38,7 +39,14 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         self.dw = dw
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
-    def get_port(self, udp_port, dw=8, cd="sys", depth=None):
+    def get_port(self, udp_port, dw=8, cd="sys", depth=None, tx_buffer_depth=None):
+        """Get a UDP user port of data width dw in clock domain cd.
+
+        When dw is narrower than the crossbar, the TX up-converter only provides a full-width word
+        every dw_crossbar/dw cycles, which PHYs that cannot pause a frame (ex XGMII) do not support.
+        tx_buffer_depth (in crossbar words) then adds a store-and-forward buffer after the converter
+        so packets are sent back-to-back: it must hold the largest packet sent on the port.
+        """
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
@@ -63,6 +71,15 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
             description_to   = eth_udp_user_description(self.dw)
         )
         self.comb += tx_cdc.source.connect(tx_converter.sink)
+
+        # Store-and-Forward Buffer (Optional).
+        if tx_buffer_depth is not None:
+            self.tx_buffer = tx_buffer = PacketFIFO(eth_udp_user_description(self.dw),
+                payload_depth = tx_buffer_depth,
+                param_depth   = 2,
+            )
+            self.comb += tx_converter.source.connect(tx_buffer.sink)
+            tx_converter = tx_buffer
 
         # Interface.
         self.comb += tx_converter.source.connect(internal_port.sink)
