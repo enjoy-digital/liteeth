@@ -137,6 +137,7 @@ class LiteEthIPTX(LiteXModule):
             packetizer.sink.version.eq(0x4),     # ipv4
             packetizer.sink.ihl.eq(ipv4_header.length//4),
             packetizer.sink.identification.eq(0),
+            packetizer.sink.flags_offset.eq(0),  # No fragmentation (DF not set).
             packetizer.sink.ttl.eq(0x80),
             packetizer.sink.sender_ip.eq(ip_address),
             checksum.header.eq(packetizer.header),
@@ -245,6 +246,8 @@ class LiteEthIPRX(LiteXModule):
                 If(((depacketizer.source.target_ip == ip_address) | with_broadcast) &
                    (depacketizer.source.version == 0x4) &
                    (depacketizer.source.ihl == 0x5) &
+                   # Reassembly is not supported: drop fragments (MF set or non-zero offset).
+                   ((depacketizer.source.flags_offset & ipv4_mf_offset_mask) == 0) &
                    (checksum.value == 0),
                    NextState("RECEIVE")
                 )
