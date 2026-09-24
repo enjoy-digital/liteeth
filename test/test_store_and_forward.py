@@ -4,15 +4,23 @@
 # Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
-import unittest
 import random
+import inspect
+import unittest
+
+from types import SimpleNamespace
 
 from migen import *
 
 from litex.soc.interconnect import stream
 
 from liteeth.common import eth_mtu_default, eth_needs_store_and_forward, eth_packet_fifo_depth
+from liteeth.core import LiteEthUDPIPCore
+from liteeth.core.udp import LiteEthUDP
 from liteeth.fifo import PacketDropFIFO
+from liteeth.mac.core import LiteEthMACCore
+
+from test.model import phy
 
 # Test PacketDropFIFO ------------------------------------------------------------------------------
 
@@ -22,7 +30,6 @@ drop_fifo_description = stream.EndpointDescription(
     payload_layout = [("data", DW)],
     param_layout   = [("tag",  16)],
 )
-
 
 class TestPacketDropFIFO(unittest.TestCase):
     def run_fifo(self, packets, depth, reader_gap=0, writer_gap=0, seed=42):
@@ -148,8 +155,7 @@ class TestPacketDropFIFO(unittest.TestCase):
         packets = self.gen(prng, 40, 1, 12)
         self.run_fifo(packets, depth=32, reader_gap=4, writer_gap=3)
 
-
-# Test depth sizing --------------------------------------------------------------------------------
+# Test Packet FIFO Depth ---------------------------------------------------------------------------
 
 class TestPacketFIFODepth(unittest.TestCase):
     def test_depth_holds_a_whole_frame(self):
@@ -160,12 +166,10 @@ class TestPacketFIFODepth(unittest.TestCase):
                 self.assertEqual(depth & (depth - 1), 0, "depth must be a power of two")
                 self.assertGreater(depth, words, "depth must leave room beyond one whole frame")
 
-
-# Test store-and-forward selection ----------------------------------------------------------------
+# Test Store-and-Forward Selection -----------------------------------------------------------------
 
 class TestStoreAndForwardAuto(unittest.TestCase):
     def test_throughput_from_width_and_clock(self):
-        from types import SimpleNamespace
         # XGMII sets its 64-bit width per instance; its class attribute says 8.
         self.assertTrue(eth_needs_store_and_forward(SimpleNamespace(dw=64, tx_clk_freq=156.25e6)))
         self.assertTrue(eth_needs_store_and_forward(SimpleNamespace(dw=8,  tx_clk_freq=312.5e6)))
@@ -174,11 +178,15 @@ class TestStoreAndForwardAuto(unittest.TestCase):
         self.assertFalse(eth_needs_store_and_forward(SimpleNamespace(dw=8)))
 
     FAST, SLOW = 312.5e6, 125e6
-    SETTINGS = [(FAST, "auto", True), (SLOW, "auto", False), (SLOW, True, True), (FAST, False, False)]
+    SETTINGS   = [
+        (FAST, "auto", True),
+        (SLOW, "auto", False),
+        (SLOW, True,   True),
+        (FAST, False,  False),
+    ]
 
     @staticmethod
     def model_phy(tx_clk_freq):
-        from test.model import phy
         model = phy.PHY(8, debug=False)
         model.tx_clk_freq = tx_clk_freq
         return model
@@ -190,29 +198,26 @@ class TestStoreAndForwardAuto(unittest.TestCase):
         return any(cls.contains(m, kind) for _, m in getattr(module, "_submodules", []))
 
     def test_mac_core(self):
-        from liteeth.mac.core import LiteEthMACCore
         for tx_clk_freq, setting, expected in self.SETTINGS:
-            core = LiteEthMACCore(phy=self.model_phy(tx_clk_freq), dw=8, with_store_and_forward=setting)
+            core = LiteEthMACCore(phy=self.model_phy(tx_clk_freq), dw=8,
+                with_store_and_forward=setting)
             self.assertEqual(core.with_store_and_forward, expected, (tx_clk_freq, setting))
             self.assertEqual(self.contains(core, PacketDropFIFO), expected, (tx_clk_freq, setting))
 
     def test_udp_ip_core(self):
-        from liteeth.core import LiteEthUDPIPCore
         for tx_clk_freq, setting, expected in self.SETTINGS:
             core = LiteEthUDPIPCore(phy=self.model_phy(tx_clk_freq), mac_address=0x10e2d5000000,
                 ip_address="192.168.1.50", clk_freq=int(100e6), with_store_and_forward=setting)
             self.assertEqual(core.mac.core.with_store_and_forward, expected, (tx_clk_freq, setting))
-            self.assertEqual(core.udp.crossbar.with_store_and_forward, expected, (tx_clk_freq, setting))
+            self.assertEqual(core.udp.crossbar.with_store_and_forward, expected,
+                (tx_clk_freq, setting))
 
     def test_udp_alone_defaults_to_no_fifos(self):
         # Standalone, LiteEthUDP cannot see the MAC, so it keeps upstream behaviour unless told.
-        import inspect
-        from liteeth.core.udp import LiteEthUDP
         params = inspect.signature(LiteEthUDP.__init__).parameters
         self.assertIs(params["with_store_and_forward"].default, False)
         self.assertNotIn("phy", params)
 
     def test_invalid_setting(self):
-        from liteeth.mac.core import LiteEthMACCore
         with self.assertRaises(AssertionError):
             LiteEthMACCore(phy=self.model_phy(self.FAST), dw=8, with_store_and_forward="yes")

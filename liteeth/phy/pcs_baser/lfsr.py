@@ -6,6 +6,7 @@
 
 from migen import *
 
+# Fibonacci LFSR -----------------------------------------------------------------------------------
 
 def fibonacci_lfsr(module, data_in, state_in, taps, feed_forward):
     """Unroll a two-tap Fibonacci shift register across a data word.
@@ -25,8 +26,8 @@ def fibonacci_lfsr(module, data_in, state_in, taps, feed_forward):
 
     Returns (data_out, state_out).
     """
-    width = len(state_in)
-    state = [state_in[i] for i in range(width)]
+    width    = len(state_in)
+    state    = [state_in[i] for i in range(width)]
     data_out = []
 
     for i in range(len(data_in)):

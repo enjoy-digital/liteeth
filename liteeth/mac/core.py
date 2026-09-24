@@ -30,27 +30,27 @@ class LiteEthMACCore(LiteXModule):
     padding, CRC/preamble and inter-frame gap stages.
 
     Parameters:
-    - phy              : PHY instance connected to the MAC.
-    - dw               : MAC-side data width.
-    - with_sys_datapath: Run formatting/checking stages in sys when enabled.
-    - with_preamble_crc: Enable preamble/CRC insertion and checking.
-    - with_padding     : Enable minimum-frame padding insertion and checking.
-    - tx_cdc_depth     : TX CDC FIFO depth.
-    - tx_cdc_buffered  : Use a buffered TX CDC FIFO.
-    - rx_cdc_depth     : RX CDC FIFO depth.
-    - rx_cdc_buffered  : Use a buffered RX CDC FIFO.
-    - eth_mtu          : Maximum Ethernet frame size used by padding checks.
-    - with_store_and_forward: Store-and-forward packet FIFOs at PHY: True, False, or 'auto'
+    - phy                   : PHY instance connected to the MAC.
+    - dw                    : MAC-side data width.
+    - with_sys_datapath     : Run formatting/checking stages in sys when enabled.
+    - with_preamble_crc     : Enable preamble/CRC insertion and checking.
+    - with_padding          : Enable minimum-frame padding insertion and checking.
+    - tx_cdc_depth          : TX CDC FIFO depth.
+    - tx_cdc_buffered       : Use a buffered TX CDC FIFO.
+    - rx_cdc_depth          : RX CDC FIFO depth.
+    - rx_cdc_buffered       : Use a buffered RX CDC FIFO.
+    - eth_mtu               : Maximum Ethernet frame size used by padding checks.
+    - with_store_and_forward: Store-and-forward packet FIFOs at the PHY: True, False or "auto".
     """
     def __init__(self, phy, dw,
-        with_sys_datapath = False,
-        with_preamble_crc = True,
-        with_padding      = True,
-        tx_cdc_depth      = 32,
-        tx_cdc_buffered   = False,
-        rx_cdc_depth      = 32,
-        rx_cdc_buffered   = False,
-        eth_mtu           = eth_mtu_default,
+        with_sys_datapath      = False,
+        with_preamble_crc      = True,
+        with_padding           = True,
+        tx_cdc_depth           = 32,
+        tx_cdc_buffered        = False,
+        rx_cdc_depth           = 32,
+        rx_cdc_buffered        = False,
+        eth_mtu                = eth_mtu_default,
         with_store_and_forward = "auto",
         ):
 

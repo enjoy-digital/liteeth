@@ -16,10 +16,10 @@ from litex.soc.interconnect.packet import Arbiter, Dispatcher
 
 class LiteEthCrossbar(LiteXModule):
     def __init__(self, master_port, dispatch_param, dw=8, with_pipelining=False):
-        self.users  = OrderedDict()
+        self.users           = OrderedDict()
+        self.master          = master_port(dw)
+        self.dispatch_param  = dispatch_param
         self.with_pipelining = with_pipelining
-        self.master = master_port(dw)
-        self.dispatch_param = dispatch_param
 
     # overload this in derived classes
     def get_port(self, *args, **kwargs):

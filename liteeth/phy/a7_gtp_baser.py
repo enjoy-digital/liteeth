@@ -1,17 +1,17 @@
 #
 # This file is part of LiteEth.
 #
-# Ported from A7_5000BASER on the feature/a7-5000baser # branch by # enjoy-digital. That PHY 
-# implementation drove a vendored Verilog PCS. This is adapted to a pure-LiteX BASE-R PCS.
+# Ported from A7_5000BASER on enjoy-digital's feature/a7-5000baser branch. That PHY implementation
+# drove a vendored Verilog PCS; this one is adapted to the pure-LiteX BASE-R PCS.
 #
 # Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
 # Copyright (c) 2026 Enjoy-Digital <enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
-from litex.gen import *
-
 from migen.genlib.cdc import MultiReg
+
+from litex.gen import *
 
 from litex.soc.interconnect.csr import CSRField, CSRStatus, CSRStorage
 

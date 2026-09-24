@@ -4,9 +4,6 @@
 # Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
-# XXX should this be changed to use the PRBS31 generator / checker in
-# litex.soc.cores.prbs?
-
 from migen import *
 
 from litex.gen import *

@@ -1,4 +1,3 @@
-
 #
 # This file is part of LiteEth.
 #
@@ -42,7 +41,7 @@ class PMA_USP_GTH_10G_BASER(LiteXModule):
         "PROGDIV_CFG"     : 16.5,
     }
 
-    def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity = 0, rx_polarity = 0):
+    def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity=0, rx_polarity=0):
         # Interfaces.
         self.tx_data   = tx_data   = Signal(64)
         self.tx_header = tx_header = Signal(2)

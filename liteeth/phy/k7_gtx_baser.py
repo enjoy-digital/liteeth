@@ -5,15 +5,16 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
-from litex.gen import *
-
 from migen.genlib.cdc import MultiReg
+
+from litex.gen import *
 
 from litex.soc.interconnect.csr import CSRField, CSRStatus, CSRStorage
 
+from liteiclink.serdes.gtx_7series import GTXQuadPLL
+
 from liteeth.common import *
 from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
-from liteiclink.serdes.gtx_7series import GTXQuadPLL
 from liteeth.phy.pcs_baser import PCS
 from liteeth.phy.pma_baser.gtx_7series import PMA_K7_GTX_10G_BASER, PMA_K7_GTX_5G_BASER
 
