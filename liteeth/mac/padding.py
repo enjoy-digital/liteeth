@@ -42,9 +42,12 @@ class LiteEthMACPaddingInserter(Module):
                     ).Elif((counter == padding_limit) & (last_be > sink.last_be),
                         # If the right amount of data words are transmitted, but
                         # too few bytes, transmit more bytes of the word. The
-                        # formerly "unused" bytes get transmitted as well
-                        source.last_be.eq(last_be)
-                    ). Else(
+                        # formerly "unused" bytes get transmitted as well.
+                        source.last_be.eq(last_be),
+                        # End of frame: reset the counter for the next frame (otherwise the next
+                        # short frame would be sent unpadded).
+                        NextValue(counter, 0),
+                    ).Else(
                         NextValue(counter, 0),
                     )
                 )
