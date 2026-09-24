@@ -54,6 +54,7 @@ def expected_ping_reply(payload, quench):
     packet.msgtype  = icmp_type_ping_reply
     packet.code     = 0
     packet.checksum = 0
+    packet.dont_fragment = 0
     packet.quench   = quench
     packet.encode()
     packet.insert_checksum()
@@ -70,6 +71,7 @@ def main_generator(dut):
     request.msgtype  = icmp_type_ping_request
     request.code     = 0
     request.checksum = 0
+    request.dont_fragment = 0
     request.quench   = quench
 
     dut.icmp_model.send(request, target_ip=dut_ip)

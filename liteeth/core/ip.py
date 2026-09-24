@@ -95,8 +95,9 @@ class LiteEthIPV4Packetizer(Packetizer):
 
 class LiteEthIPTX(LiteXModule):
     def __init__(self, mac_address, ip_address, arp_table, dw=8, with_buffer=True,
-        gateway_ip = None,
-        netmask    = None,
+        gateway_ip    = None,
+        netmask       = None,
+        dont_fragment = False,
     ):
         ip_address = convert_ip(ip_address)
         assert (gateway_ip is None) == (netmask is None)
@@ -136,6 +137,7 @@ class LiteEthIPTX(LiteXModule):
             packetizer.sink.total_length.eq(ipv4_header.length + sink.length),
             packetizer.sink.version.eq(0x4),     # ipv4
             packetizer.sink.ihl.eq(ipv4_header.length//4),
+            packetizer.sink.dont_fragment.eq(dont_fragment),
             packetizer.sink.identification.eq(0),
             packetizer.sink.ttl.eq(0x80),
             packetizer.sink.sender_ip.eq(ip_address),
@@ -280,17 +282,20 @@ class LiteEthIPRX(LiteXModule):
 # IP -----------------------------------------------------------------------------------------------
 
 class LiteEthIP(LiteXModule):
-    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, dw=8,
-        gateway_ip = None,
-        netmask    = None,
+    def __init__(self, mac, mac_address, ip_address, arp_table, with_broadcast=True, buffer_tx=True, dw=8,
+        gateway_ip    = None,
+        netmask       = None,
+        dont_fragment = False,
     ):
         self.tx = tx = LiteEthIPTX(
-            mac_address = mac_address,
-            ip_address  = ip_address,
-            arp_table   = arp_table,
-            dw          = dw,
-            gateway_ip  = gateway_ip,
-            netmask     = netmask,
+            mac_address   = mac_address,
+            ip_address    = ip_address,
+            arp_table     = arp_table,
+            dw            = dw,
+            with_buffer   = buffer_tx,
+            gateway_ip    = gateway_ip,
+            netmask       = netmask,
+            dont_fragment = dont_fragment,
         )
         self.rx = rx = LiteEthIPRX(mac_address, ip_address, with_broadcast, dw=dw)
         mac_port = mac.crossbar.get_port(ethernet_type_ip, dw)
