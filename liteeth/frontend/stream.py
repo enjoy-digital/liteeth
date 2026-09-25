@@ -45,15 +45,17 @@ class LiteEthStream2UDPTX(LiteXModule):
 
     Packetizes a data stream into UDP packets:
     - Without FIFO (``fifo_depth=None``): each word is sent as a UDP packet.
-    - With FIFO: packets are delimited by ``sink.last`` (or by a full FIFO, in which case the packet
-      is split).
+    - With FIFO: packets are delimited by ``sink.last`` or split when reaching the maximum packet
+      length: ``max_packet_length`` bytes rounded down to full words when set (ex the maximum UDP
+      payload for the MTU, 8972 bytes with Jumbo Frames), else the FIFO depth.
 
     When ``with_last_be`` is set, ``sink`` carries a ``last_be`` byte-enable (one-hot on the last
     valid byte of the last word) allowing byte-granular packet lengths. A ``last_be`` of 0 on the
     last word is interpreted as a full word (legacy behaviour).
     """
     def __init__(self, ip_address=0, udp_port=0, data_width=8, fifo_depth=None, with_csr=False,
-        with_last_be = False,
+        with_last_be      = False,
+        max_packet_length = None,
     ):
         sink_description = eth_tty_tx_description(data_width, with_last_be=with_last_be)
         self.sink   = sink   = stream.Endpoint(sink_description)
@@ -131,8 +133,13 @@ class LiteEthStream2UDPTX(LiteXModule):
                 buffered      = True,
             )
 
-            if fifo_depth > 0:
-                self.comb += packet_full.eq(counter == (fifo_depth - 1))
+            # Maximum packet length (in words): packets longer than this are split.
+            max_packet_words = fifo_depth
+            if max_packet_length is not None:
+                max_packet_words = min(fifo_depth, max_packet_length//bytes_per_word)
+                assert max_packet_words >= 1, "max_packet_length must be >= data width."
+            if max_packet_words > 0:
+                self.comb += packet_full.eq(counter == (max_packet_words - 1))
 
             self.comb += [
                 packet_last.eq(sink.last | packet_full),
@@ -287,12 +294,14 @@ class LiteEthUDP2StreamRX(LiteXModule):
 
 class LiteEthUDPStreamer(LiteXModule):
     def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64,
-        with_broadcast = True,
-        cd             = "sys",
-        with_last_be   = False,
+        with_broadcast       = True,
+        cd                   = "sys",
+        with_last_be         = False,
+        tx_max_packet_length = None,
     ):
         self.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth,
-            with_last_be = with_last_be,
+            with_last_be      = with_last_be,
+            max_packet_length = tx_max_packet_length,
         )
         self.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, data_width, rx_fifo_depth,
             with_broadcast = with_broadcast,

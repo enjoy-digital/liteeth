@@ -941,3 +941,63 @@ class TestTKeepConversion(unittest.TestCase):
                     self.assertEqual((yield dut.keep_o),  full)
 
                 run_simulation(dut, tb())
+
+# Test Stream to UDP max packet length -------------------------------------------------------------
+
+class TestStream2UDPTXMaxPacketLength(unittest.TestCase):
+    _packets = TestStreamLastBE._packets
+
+    def _run(self, dut, packets, expect_npackets=None, drain=20000):
+        # Collect every output packet passively and drain for a bounded time, so a wrong split
+        # shows up as a length mismatch instead of a simulation that never ends.
+        recvd = []
+
+        @passive
+        def collector():
+            yield from stream_collector(dut.source, dest=recvd, ready_rand=0)
+
+        def generator():
+            yield from stream_inserter(dut.sink, src=packets, valid_rand=0)
+            for _ in range(drain):
+                yield
+
+        run_simulation(dut, [generator(), collector()])
+        return recvd
+
+    def test_tx_max_packet_length(self):
+        # Packets not closed by last are split at max_packet_length (rounded down to full words)
+        # instead of the FIFO depth; packets closed by last below the limit are unchanged.
+        dut = LiteEthStream2UDPTX(
+            ip_address        = 0,
+            udp_port          = 1,
+            data_width        = 64,
+            fifo_depth        = 64,
+            with_last_be      = True,
+            max_packet_length = 100, # 12 words: 96 bytes.
+        )
+        packets = self._packets([96, 95, 20, 250]) # 250 bytes: 96 + 96 + 58.
+        recvd   = self._run(dut, packets, expect_npackets=6)
+        lengths = [p.params["length"] for p in recvd]
+        self.assertEqual(lengths, [96, 95, 20, 96, 96, 58])
+        self.assertEqual(b"".join(bytes(p.data) for p in recvd),
+                         b"".join(bytes(p.data) for p in packets))
+
+    def test_tx_max_packet_length_stream(self):
+        # A stream without last (ex 3 jumbo payloads + 13 bytes, closed by a final last) is sent as
+        # max-length packets then the remainder; max_packet_length larger than the FIFO is capped.
+        for max_packet_length, fifo_depth, split in [(8972, 2048, 8968), (8972, 512, 4096)]:
+            with self.subTest(max_packet_length=max_packet_length, fifo_depth=fifo_depth):
+                dut = LiteEthStream2UDPTX(
+                    ip_address        = 0,
+                    udp_port          = 1,
+                    data_width        = 64,
+                    fifo_depth        = fifo_depth,
+                    with_last_be      = True,
+                    max_packet_length = max_packet_length,
+                )
+                total   = 3*split + 13
+                packets = self._packets([total])
+                n       = 4
+                recvd   = self._run(dut, packets, expect_npackets=n)
+                self.assertEqual([p.params["length"] for p in recvd], [split]*3 + [13])
+                self.assertEqual(b"".join(bytes(p.data) for p in recvd), bytes(packets[0].data))

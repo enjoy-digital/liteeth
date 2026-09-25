@@ -499,6 +499,11 @@ class UDPCore(PHYCore):
         tx_fifo_depth = port_cfg.get("tx_fifo_depth", 64)
         rx_fifo_depth = port_cfg.get("rx_fifo_depth", 64)
 
+        # TX Max Packet Length (bytes, optional): packets not closed by last are split at this
+        # length (rounded down to full words) instead of the TX FIFO depth. Set it to the maximum
+        # UDP payload for the MTU (ex 8972 with Jumbo Frames) so split packets fit in frames.
+        tx_max_packet_length = port_cfg.get("tx_max_packet_length", None)
+
         # AXI-Stream tkeep (exposed by default, "with_tkeep": False removes the pins): contiguous
         # mask of the valid bytes of the last word, allows byte-granular packet lengths on the
         # stream port (converted to/from LiteEth's last_be). A sink_keep of 0 on the last word (pin
@@ -527,12 +532,13 @@ class UDPCore(PHYCore):
         # Create UDPStreamer.
         # -------------------
         udp_streamer = LiteEthUDPStreamer(self.core.udp,
-            ip_address    = ip_address,
-            udp_port      = udp_port,
-            data_width    = data_width,
-            tx_fifo_depth = tx_fifo_depth,
-            rx_fifo_depth = rx_fifo_depth,
-            with_last_be  = with_tkeep,
+            ip_address           = ip_address,
+            udp_port             = udp_port,
+            data_width           = data_width,
+            tx_fifo_depth        = tx_fifo_depth,
+            rx_fifo_depth        = rx_fifo_depth,
+            with_last_be         = with_tkeep,
+            tx_max_packet_length = tx_max_packet_length,
         )
         self.submodules += udp_streamer
 
