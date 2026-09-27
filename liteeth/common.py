@@ -78,6 +78,7 @@ ipv4_header_fields = {
     "version":        HeaderField(0,  4,  4),
     "total_length":   HeaderField(2,  0, 16),
     "identification": HeaderField(4,  0, 16),
+    "flags_offset":   HeaderField(6,  0, 16), # Flags (3 MSBs: -/DF/MF) + Fragment Offset.
     "ttl":            HeaderField(8,  0,  8),
     "protocol":       HeaderField(9,  0,  8),
     "checksum":       HeaderField(10, 0, 16),
@@ -85,6 +86,7 @@ ipv4_header_fields = {
     "target_ip":      HeaderField(16, 0, 32)
 }
 ipv4_header = Header(ipv4_header_fields, ipv4_header_length, swap_field_bytes=True)
+ipv4_mf_offset_mask = 0x3fff # More Fragments flag + Fragment Offset.
 
 # ICMP Constants/Header ----------------------------------------------------------------------------
 
@@ -323,11 +325,15 @@ def eth_etherbone_mmap_description(dw):
     ]
     return EndpointDescription(payload_layout, param_layout)
 
-# TTY
-def eth_tty_tx_description(dw):
+# TTY / Stream
+def eth_tty_tx_description(dw, with_last_be=False):
     payload_layout = [("data", dw)]
+    if with_last_be:
+        payload_layout += [("last_be", dw//8)]
     return EndpointDescription(payload_layout)
 
-def eth_tty_rx_description(dw):
+def eth_tty_rx_description(dw, with_last_be=False):
     payload_layout = [("data", dw), ("error", 1)]
+    if with_last_be:
+        payload_layout += [("last_be", dw//8)]
     return EndpointDescription(payload_layout)

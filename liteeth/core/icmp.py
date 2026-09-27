@@ -9,7 +9,7 @@ from litex.gen import *
 from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
-from liteeth.packet import Depacketizer, Packetizer
+from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # ICMP TX ------------------------------------------------------------------------------------------
 

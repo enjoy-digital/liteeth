@@ -8,7 +8,7 @@ from litex.gen import *
 from litex.gen.genlib.misc import WaitTimer
 
 from liteeth.common import *
-from liteeth.packet import Depacketizer, Packetizer
+from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # ARP Layouts --------------------------------------------------------------------------------------
 
