@@ -225,34 +225,47 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
                 rx_data_reg.eq(rx_data),
                 source.valid.eq(rx_ctl_reg[0]),
                 source.data.eq(rx_data_reg),
+                source.error.eq(rx_ctl_reg[0] ^ rx_ctl_reg[1]),
             ]
             self.comb += source.last.eq(~rx_ctl_reg[0] & rx_ctl_reg_d[0])
         else:
             sdr_phase     = Signal()
             sdr_low       = Signal(4)
+            sdr_error     = Signal()
             rx_ctl_rising = Signal()
+            rx_error      = Signal()
             rx_ctl_d      = Signal()
 
-            self.comb += rx_ctl_rising.eq(rx_ctl[0])
+            self.comb += [
+                rx_ctl_rising.eq(rx_ctl[0]),
+                rx_error.eq(rx_ctl[0] ^ rx_ctl[1]),
+            ]
             self.sync += [
                 rx_ctl_d.eq(rx_ctl_rising),
                 source.valid.eq(0),
+                source.error.eq(0),
                 If(link_state.link_1G,
                     sdr_phase.eq(0),
+                    sdr_error.eq(0),
                     source.valid.eq(rx_ctl_rising),
                     source.data.eq(rx_data),
+                    source.error.eq(rx_error),
                 ).Else(
                     If(rx_ctl_rising,
                         If(sdr_phase,
                             source.valid.eq(1),
                             source.data.eq(Cat(sdr_low, rx_data[0:4])),
+                            source.error.eq(sdr_error | rx_error),
                             sdr_phase.eq(0),
+                            sdr_error.eq(0),
                         ).Else(
                             sdr_low.eq(rx_data[0:4]),
                             sdr_phase.eq(1),
+                            sdr_error.eq(rx_error),
                         )
                     ).Else(
                         sdr_phase.eq(0),
+                        sdr_error.eq(0),
                     )
                 )
             ]
