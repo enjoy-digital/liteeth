@@ -41,6 +41,11 @@ and rejects 200 MHz: the channel PLL cannot generate 3.125 Gb/s from that
 reference. The calibration divider follows the reference frequency, and
 the CDR configuration follows the PLL's output divider.
 
+KU and UltraScale+ 2.5G BASE-X wrappers also default to 156.25 MHz; a 200 MHz
+reference cannot generate their 3.125 Gb/s line rate. The standalone generator
+uses these defaults when `refclk_freq` is omitted. Explicit reference-clock
+settings remain authoritative.
+
 ## Reuse with LiteICLink
 
 The BASE-R GTY/GTH/GTX PMAs already reuse LiteICLink PLL, DRP, and reset/init

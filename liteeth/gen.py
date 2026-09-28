@@ -370,8 +370,13 @@ class PHYCore(SoCMini):
                 )
             # Other 7-Series/Ultrascale(+).
             else:
-                refclk_freq = core_config.get("refclk_freq",
-                    125e6 if phy is liteeth_phys.K7_2500BASEX else 200e6)
+                default_refclk_freq = {
+                    liteeth_phys.K7_2500BASEX      : 125e6,
+                    liteeth_phys.KU_2500BASEX      : 156.25e6,
+                    liteeth_phys.USP_GTH_2500BASEX : 156.25e6,
+                    liteeth_phys.USP_GTY_2500BASEX : 156.25e6,
+                }.get(phy, 200e6)
+                refclk_freq = core_config.get("refclk_freq", default_refclk_freq)
                 phy_kwargs = dict(
                     # General.
                     data_pads          = ethphy_pads,
