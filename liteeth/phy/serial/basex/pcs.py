@@ -7,7 +7,7 @@
 
 from migen import *
 from migen.genlib.fsm import *
-from migen.genlib.cdc import PulseSynchronizer
+from migen.genlib.cdc import MultiReg, PulseSynchronizer
 
 from litex.gen import *
 from litex.gen.genlib.misc import WaitTimer
@@ -264,6 +264,9 @@ class PCS(LiteXModule):
     - True  : SGMII MAC side from the start. Required by SGMII PHYs that only complete
               Auto-Negotiation with SGMII configuration words.
     - False : 1000BASE-X only.
+
+    sys_clk_freq sets the one-second CSR link-event debounce. If omitted, add_csr()
+    uses the frequency from LiteXContext.top for compatibility with existing targets.
     """
     autocsr_exclude = {"ev"}
     def __init__(self, lsb_first=False,
@@ -275,7 +278,9 @@ class PCS(LiteXModule):
         eth_tx_clk_freq = 125e6,
         with_csr        = False,
         with_autoneg    = True,
+        sys_clk_freq    = None,
     ):
+        self.sys_clk_freq = sys_clk_freq
         self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
         self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
@@ -482,7 +487,14 @@ class PCS(LiteXModule):
         if with_csr:
             self.add_csr()
 
-    def add_csr(self):
+    def add_csr(self, sys_clk_freq=None):
+        if sys_clk_freq is None:
+            sys_clk_freq = self.sys_clk_freq
+        if sys_clk_freq is None:
+            sys_clk_freq = getattr(LiteXContext.top, "sys_clk_freq", None)
+        if sys_clk_freq is None or int(sys_clk_freq) <= 0:
+            raise ValueError("A positive sys_clk_freq is required for PCS CSRs.")
+
         self.status = CSRStatus(fields=[
             CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
             CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
@@ -500,23 +512,25 @@ class PCS(LiteXModule):
             self.status.fields.config_reg.eq(self.lp_abi_csr.o)
         ]
 
-        self.sync += [
-            self.status.fields.link_up.eq(self.link_up),
-            self.status.fields.is_sgmii.eq(self.is_sgmii),
+        # The PCS status originates in eth_tx. Both software and the event FSM consume
+        # synchronized system-domain copies; the link-partner word uses its bus handshake.
+        self.specials += [
+            MultiReg(self.link_up,  self.status.fields.link_up),
+            MultiReg(self.is_sgmii, self.status.fields.is_sgmii),
         ]
 
-        self.link_up_timer = link_up_timer = WaitTimer(int(LiteXContext.top.sys_clk_freq))
+        self.link_up_timer = link_up_timer = WaitTimer(int(sys_clk_freq))
 
         self.csr_fsm = fsm = FSM()
         fsm.act("DOWN",
-            If(self.link_up,
+            If(self.status.fields.link_up,
                 NextState("UP")
             )
         )
         fsm.act("UP",
             link_up_timer.wait.eq(1),
             self.ev.link.trigger.eq(link_up_timer.done),
-            If(~self.link_up,
+            If(~self.status.fields.link_up,
                 NextState("DOWN"),
             )
         )
