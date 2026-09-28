@@ -130,7 +130,8 @@ class LiteEthBASERPHY(LiteXModule):
                 "PRBS31 bit errors since the test was last enabled, saturating rather than wrapping."
                 " Set prbs_pause and wait for prbs_paused before reading all words. Clear prbs_pause"
                 " and wait for prbs_paused to clear before requesting another snapshot. Disabling"
-                " the checker clears the counter, even while paused. For a bit error ratio, the denominator is the elapsed time"
+                " the checker clears the counter, even while paused. For a bit error ratio, the denominator"
+                " is the elapsed time"
                 " times the " + self.prbs_rate_description)
             self.comb += self._rx_prbs_errors.status.eq(self.rx_prbs_errors)
         else:
