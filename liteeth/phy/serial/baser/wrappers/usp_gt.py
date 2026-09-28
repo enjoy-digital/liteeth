@@ -49,7 +49,10 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
 
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
         with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False,
-        prbs_errors_width=32, pll=None):
+        prbs_errors_width=32, pll=None, pll_master=True):
+        if pll is None and not pll_master:
+            raise ValueError("pll_master=False requires an external PLL.")
+
         self.sink    = stream.Endpoint(eth_phy_description(self.dw))
         self.source  = stream.Endpoint(eth_phy_description(self.dw))
 
@@ -93,6 +96,7 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
             sys_clk_freq = sys_clk_freq,
             tx_polarity  = tx_polarity,
             rx_polarity  = rx_polarity,
+            pll_master   = pll_master,
         )
 
         self.cd_eth_tx = pma.cd_eth_tx
