@@ -4,8 +4,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 import unittest
+from types import SimpleNamespace
+from unittest import mock
 
 from migen import Instance, Record, Signal
+
+from litex.gen import LiteXContext
 
 from liteeth.phy.serial.basex.pcs import PCSGearbox as LegacyPCSGearbox
 from liteeth.phy.serial.basex.pma.gearbox import PCSGearbox
@@ -16,6 +20,7 @@ from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_1000BASEX, USP_GTH
 from liteeth.phy.serial.basex.wrappers.ku_gth import KU_1000BASEX, KU_2500BASEX
 from liteeth.phy.serial.basex.wrappers.a7_gtp import A7_1000BASEX, A7_2500BASEX
 from liteeth.phy.serial.gtp_7series import QPLLChannel
+from liteeth.phy.serial.basex.wrappers.us_lvds import US_LVDS_1000BASEX
 
 
 def data_pads():
@@ -87,6 +92,30 @@ class TestBASEXPMA(unittest.TestCase):
         channels = [s for s in fragment.specials if isinstance(s, Instance) and s.of == "GTPE2_CHANNEL"]
         self.assertEqual(len(channels), 1)
         self.assertEqual(channels[0].get_io("TXDIFFCTRL").value, 0b1001)
+
+    def test_us_and_usp_lvds_wrappers_keep_constraints_and_csrs(self):
+        for usp in (False, True):
+            for with_csr in (False, True):
+                with self.subTest(usp=usp, with_csr=with_csr):
+                    constraints = []
+                    platform = SimpleNamespace(add_false_path_constraints=lambda *clocks: constraints.append(clocks))
+                    pads = Record([("tx_p", 1), ("tx_n", 1), ("rx_p", 1), ("rx_n", 1), ("rst_n", 1)])
+                    with mock.patch.object(LiteXContext, "platform", platform), \
+                         mock.patch.object(LiteXContext, "top", SimpleNamespace(sys_clk_freq=100e6)):
+                        phy = US_LVDS_1000BASEX(pads, Signal(), 100e6, usp=usp,
+                            iodelay_clk_freq=300e6 if usp else 200e6, with_csr=with_csr)
+                    self.assertEqual(constraints, [
+                        (phy.crg.cd_eth_rx.clk, phy.crg.cd_eth_rx_div.clk),
+                        (phy.crg.cd_eth_tx.clk, phy.crg.cd_eth_tx_div.clk),
+                    ])
+                    if with_csr:
+                        self.assertEqual(phy.cdr_control.size, 4)
+                        self.assertEqual(phy.cdr_status.size, 40)
+                    fragment = phy.get_fragment()
+                    instances = [s.of for s in fragment.specials if isinstance(s, Instance)]
+                    self.assertEqual(instances.count("MMCME4_ADV" if usp else "MMCME3_ADV"), 1)
+                    self.assertEqual(instances.count("ISERDESE3"), 2)
+                    self.assertEqual(instances.count("OSERDESE3"), 1)
 
 
 if __name__ == "__main__":
