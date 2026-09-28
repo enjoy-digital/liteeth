@@ -10,6 +10,7 @@ from migen import Instance, Record, Signal
 from liteeth.phy.serial.basex.pcs import PCSGearbox as LegacyPCSGearbox
 from liteeth.phy.serial.basex.pma.gearbox import PCSGearbox
 from liteeth.phy.serial.basex.wrappers.k7_gtx import K7_1000BASEX, K7_2500BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_1000BASEX, USP_GTH_2500BASEX
 from liteeth.phy.serial.basex.wrappers.ku_gth import KU_1000BASEX, KU_2500BASEX
 from liteeth.phy.serial.basex.wrappers.a7_gtp import A7_1000BASEX, A7_2500BASEX
 from liteeth.phy.serial.gtp_7series import QPLLChannel
@@ -27,6 +28,8 @@ class TestBASEXPMA(unittest.TestCase):
         for cls, primitive, kwargs in (
             (K7_1000BASEX, "GTXE2_CHANNEL", {}),
             (K7_2500BASEX, "GTXE2_CHANNEL", {}),
+            (USP_GTH_1000BASEX, "GTHE4_CHANNEL", {}),
+            (USP_GTH_2500BASEX, "GTHE4_CHANNEL", {"refclk_freq": 156.25e6}),
             (KU_1000BASEX, "GTHE3_CHANNEL", {}),
             (KU_2500BASEX, "GTHE3_CHANNEL", {"refclk_freq": 156.25e6}),
         ):
