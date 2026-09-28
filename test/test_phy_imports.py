@@ -13,6 +13,16 @@ import liteeth.phy as phy
 # Public PHY Imports -------------------------------------------------------------------------------
 
 class TestPHYImports(unittest.TestCase):
+    remaining_moves = {
+        "mii":      "parallel.mii",
+        "rmii":     "parallel.rmii",
+        "gmii":     "parallel.gmii",
+        "gmii_mii": "parallel.gmii_mii",
+        "xgmii":    "parallel.xgmii",
+        "model":    "simulation.model",
+        "a7_gtp":   "serial.gtp_7series",
+    }
+
     rgmii_moves = {
         "s6rgmii": "parallel.rgmii.s6",
         "s7rgmii": "parallel.rgmii.s7",
@@ -46,6 +56,11 @@ class TestPHYImports(unittest.TestCase):
     }
 
     package_exports = {
+        "mii":                ("LiteEthPHYMII",),
+        "rmii":               ("LiteEthPHYRMII",),
+        "gmii":               ("LiteEthPHYGMII",),
+        "gmii_mii":           ("LiteEthPHYGMIIMII",),
+        "xgmii":              ("LiteEthPHYXGMII",),
         "a7_1000basex":      ("A7_1000BASEX", "A7_2500BASEX"),
         "k7_1000basex":      ("K7_1000BASEX", "K7_2500BASEX"),
         "ku_1000basex":      ("KU_1000BASEX", "KU_2500BASEX"),
@@ -58,6 +73,7 @@ class TestPHYImports(unittest.TestCase):
         "v7_1000basex":  ("V7_1000BASEX", "V7_2500BASEX"),
         "gw5_1000basex": ("GW5_1000BASEX",),
         "a7_gtp":        ("QPLL", "QPLLChannel", "QPLLSettings", "GTPTxInit", "GTPRxInit"),
+        "model":         ("LiteEthPHYModel",),
         "pcs_1000basex": ("PCS", "PCSTX", "PCSRX"),
     }
 
@@ -90,6 +106,14 @@ class TestPHYImports(unittest.TestCase):
 
     def test_rgmii_legacy_modules_are_aliases(self):
         for old_name, new_name in self.rgmii_moves.items():
+            with self.subTest(module=old_name):
+                old = importlib.import_module(f"liteeth.phy.{old_name}")
+                new = importlib.import_module(f"liteeth.phy.{new_name}")
+                self.assertIs(old, new)
+                self.assertIs(getattr(phy, old_name), new)
+
+    def test_remaining_legacy_modules_are_aliases(self):
+        for old_name, new_name in self.remaining_moves.items():
             with self.subTest(module=old_name):
                 old = importlib.import_module(f"liteeth.phy.{old_name}")
                 new = importlib.import_module(f"liteeth.phy.{new_name}")

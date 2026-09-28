@@ -27,7 +27,7 @@ from liteeth.phy.serial.baser.pcs.tx import PCSTX
 from liteeth.phy.serial.baser.pcs.prbs import PRBS31Checker, PRBS31Generator
 from liteeth.phy.serial.baser.pcs.scrambler import Scrambler, Descrambler
 from liteeth.phy.serial.baser.pcs.watchdog import PCSRXWatchdog
-from liteeth.phy.xgmii import LiteEthPHYXGMII
+from liteeth.phy.parallel.xgmii import LiteEthPHYXGMII
 
 from test.model.mac import MACPacket
 from test.stream_helpers import Packet, PacketLogger, PacketStreamer, check

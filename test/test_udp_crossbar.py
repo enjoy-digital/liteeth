@@ -83,7 +83,7 @@ class TestUDPCrossbar(unittest.TestCase):
         # Etherbone (32-bit port) requests a TX buffer holding its largest reply on wide cores only.
         from liteeth.core import LiteEthUDPIPCore
         from liteeth.frontend.etherbone import LiteEthEtherbone
-        from liteeth.phy.model import LiteEthPHYModel
+        from liteeth.phy.simulation.model import LiteEthPHYModel
         for dw, buffer_depth, expected in [(64, 16, 10), (64, 4, 4), (32, 16, None), (8, 4, None)]:
             with self.subTest(dw=dw, buffer_depth=buffer_depth):
                 pads = Record([("source_valid", 1), ("source_ready", 1), ("source_data", 8),

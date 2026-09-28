@@ -27,7 +27,7 @@ from liteeth.common import *
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.core.dhcp import *
 from liteeth.frontend.etherbone import LiteEthEtherbone
-from liteeth.phy.model import LiteEthPHYModel
+from liteeth.phy.simulation.model import LiteEthPHYModel
 
 # IOs ----------------------------------------------------------------------------------------------
 

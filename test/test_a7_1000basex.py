@@ -11,7 +11,7 @@ from unittest import mock
 from migen import Signal
 
 import liteeth.phy.a7_1000basex as a7_1000basex
-from liteeth.phy.a7_gtp import QPLLChannel
+from liteeth.phy.serial.gtp_7series import QPLLChannel
 from liteeth.phy.pcs_1000basex import PCS
 
 

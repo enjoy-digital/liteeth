@@ -19,12 +19,12 @@ from litex.gen import *
 
 from litex.soc.cores.clock import S7MMCM
 
-from liteeth.phy.a7_gtp import GTPTxInit, GTPRxInit
+from liteeth.phy.serial.gtp_7series import GTPTxInit, GTPRxInit
 
 # Artix-7 GTP 5GBASE-R PMA -------------------------------------------------------------------------
 
 class PMA_A7_GTP_5G_BASER(LiteXModule):
-    """5GBASE-R PMA on an Artix-7 GTP, driven from one channel of a GTPE2_COMMON (liteeth.phy.a7_gtp).
+    """5GBASE-R PMA on an Artix-7 GTP, driven from one channel of a GTPE2_COMMON (liteeth.phy.serial.gtp_7series).
 
     Presents the same interface as PMA_K7_GTX_10G_BASER -- a 64-bit block and 2-bit sync header
     each way, a receive bitslip, and tx_ce/rx_ce -- so the same PCS and XGMII arrangement sits on

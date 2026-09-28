@@ -52,7 +52,7 @@ from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 from litex.soc.cores.led import LedChaser
 
-from liteeth.phy.mii import LiteEthPHYMII
+from liteeth.phy.parallel.mii import LiteEthPHYMII
 from liteeth.core.ptp import LiteEthPTP
 
 # CRG ----------------------------------------------------------------------------------------------
