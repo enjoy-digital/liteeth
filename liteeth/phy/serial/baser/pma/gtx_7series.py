@@ -39,7 +39,8 @@ class PMA_K7_GTX_10G_BASER(LiteXModule):
     tx_clk_freq = linerate/64
     rx_clk_freq = linerate/64
 
-    def __init__(self, qpll, data_pads, sys_clk_freq, tx_polarity=0, rx_polarity=0):
+    def __init__(self, qpll, data_pads, sys_clk_freq, tx_polarity=0, rx_polarity=0,
+        pll_master=True):
         from liteiclink.serdes.gtx_7series import GTXTXInit, GTXRXInit
 
         # Interface to the PCS.
@@ -869,11 +870,12 @@ class PMA_K7_GTX_10G_BASER(LiteXModule):
         self.tx_init = tx_init = ResetInserter()(GTXTXInit(sys_clk_freq, buffer_enable=True))
         self.comb += [
             tx_init.reset.eq(self.reset),
-            qpll.reset.eq(tx_init.pllreset),
             tx_init.plllock.eq(qpll.lock),
             tx_reset.eq(tx_init.gtXxreset),
             tx_init.Xxresetdone.eq(tx_reset_done),
         ]
+        if pll_master:
+            self.comb += qpll.reset.eq(tx_init.pllreset)
         # Re-initialise the TX PMA's clock dividers once the transmitter is otherwise up. On about
         # half of all resets they come out of GTTXRESET in the wrong state and TXOUTCLK runs at
         # linerate/24 instead of linerate/32 -- 429.687MHz rather than 322.266MHz -- with the MGT

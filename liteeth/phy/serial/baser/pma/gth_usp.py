@@ -41,7 +41,8 @@ class PMA_USP_GTH_10G_BASER(LiteXModule):
         "PROGDIV_CFG"     : 16.5,
     }
 
-    def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity=0, rx_polarity=0):
+    def __init__(self, pll, data_pads, sys_clk_freq, tx_polarity=0, rx_polarity=0,
+        pll_master=True):
         # Interfaces.
         self.tx_data   = tx_data   = Signal(64)
         self.tx_header = tx_header = Signal(2)
@@ -85,8 +86,9 @@ class PMA_USP_GTH_10G_BASER(LiteXModule):
         self.comb += [
             tx_init.plllock.eq(pll.lock),
             rx_init.plllock.eq(pll.lock),
-            pll.reset.eq(tx_init.pllreset)
         ]
+        if pll_master:
+            self.comb += pll.reset.eq(tx_init.pllreset)
 
         # DRP mux ----------------------------------------------------------------------------------
         self.drp_mux = drp_mux = DRPMux()
