@@ -39,7 +39,7 @@ latency calibration. Those require additional work for timing applications.
 
 ## SerDes configuration
 
-`liteeth/phy/serial/basex/wrappers/gw5.py` embeds the SerDes initialization register
+`liteeth/phy/serial/basex/pma/gw5_config.py` embeds the SerDes initialization register
 writes and their TOML source. During the Gowin build, the project script
 writes `gw5_1000basex.csr` in the gateware directory and loads it with
 `set_csr`. No separate configuration files, generated/encrypted PHY IP,
