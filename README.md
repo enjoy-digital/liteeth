@@ -36,6 +36,7 @@ PHY:
   - 5/10/25GBASE-R PHYs on selected Xilinx 7-Series and UltraScale+ transceivers.
 
 Transceiver PHY architecture and porting guidance: [doc/phy_portability.md](doc/phy_portability.md).
+PHY layout and import compatibility: [doc/phy_layout.md](doc/phy_layout.md).
 
 | PHY       | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
 |-----------|-----|------|----------|-------|----------|----------|---------------|
