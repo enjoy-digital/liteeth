@@ -1,3 +1,6 @@
+import importlib as _importlib
+import sys as _sys
+
 from liteeth.common import *
 
 
@@ -21,6 +24,35 @@ def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
         return LiteEthPHYMII(clock_pads, pads, **kwargs)
     else:
         raise ValueError("Unable to autodetect PHY from platform file, use direct instantiation")
+
+
+# Keep established direct imports pointing at the implementation modules. Registering
+# the modules themselves also preserves module-level patching by downstream targets.
+_legacy_modules = {
+    "pcs_1000basex":          "serial.basex.pcs",
+    "a7_1000basex":           "serial.basex.a7_gtp",
+    "k7_1000basex":           "serial.basex.k7_gtx",
+    "v7_1000basex":           "serial.basex.v7_gth",
+    "ku_1000basex":           "serial.basex.ku_gth",
+    "usp_gth_1000basex":      "serial.basex.usp_gth",
+    "usp_gty_1000basex":      "serial.basex.usp_gty",
+    "gw5_1000basex":          "serial.basex.gw5",
+    "us_lvds_1000basex":      "serial.basex.us_lvds",
+    "titanium_lvds_1000basex": "serial.basex.titanium_lvds",
+    "s6rgmii":                "parallel.rgmii.s6",
+    "s7rgmii":                "parallel.rgmii.s7",
+    "usrgmii":                "parallel.rgmii.us",
+    "ecp5rgmii":              "parallel.rgmii.ecp5",
+    "gw5rgmii":               "parallel.rgmii.gw5",
+    "titaniumrgmii":          "parallel.rgmii.titanium",
+    "trionrgmii":             "parallel.rgmii.trion",
+    "agilex_rgmii":           "parallel.rgmii.agilex",
+}
+for _legacy_name, _module_name in _legacy_modules.items():
+    _module = _importlib.import_module(f"{__name__}.{_module_name}")
+    _sys.modules[f"{__name__}.{_legacy_name}"] = _module
+    globals()[_legacy_name] = _module
+del _legacy_name, _module_name, _module
 
 from liteeth.phy.mii      import LiteEthPHYMII
 from liteeth.phy.rmii     import LiteEthPHYRMII

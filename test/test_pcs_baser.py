@@ -16,17 +16,17 @@ from litex.gen.sim import run_simulation
 
 from liteeth.common import eth_phy_description, eth_preamble
 from liteeth.mac.core import LiteEthMACCore
-from liteeth.phy.pcs_baser import PCS
-from liteeth.phy.pcs_baser.ber_mon import PCSRXBERMonitor
-from liteeth.phy.pcs_baser.block_sync import PCSRXFrameSync
-from liteeth.phy.pcs_baser.common import *
-from liteeth.phy.pcs_baser.decoder import XGMIIBaseRDecoder
-from liteeth.phy.pcs_baser.encoder import XGMIIBaseREncoder
-from liteeth.phy.pcs_baser.rx import PCSRX
-from liteeth.phy.pcs_baser.tx import PCSTX
-from liteeth.phy.pcs_baser.prbs import PRBS31Checker, PRBS31Generator
-from liteeth.phy.pcs_baser.scrambler import Scrambler, Descrambler
-from liteeth.phy.pcs_baser.watchdog import PCSRXWatchdog
+from liteeth.phy.serial.baser.pcs import PCS
+from liteeth.phy.serial.baser.pcs.ber_mon import PCSRXBERMonitor
+from liteeth.phy.serial.baser.pcs.block_sync import PCSRXFrameSync
+from liteeth.phy.serial.baser.pcs.common import *
+from liteeth.phy.serial.baser.pcs.decoder import XGMIIBaseRDecoder
+from liteeth.phy.serial.baser.pcs.encoder import XGMIIBaseREncoder
+from liteeth.phy.serial.baser.pcs.rx import PCSRX
+from liteeth.phy.serial.baser.pcs.tx import PCSTX
+from liteeth.phy.serial.baser.pcs.prbs import PRBS31Checker, PRBS31Generator
+from liteeth.phy.serial.baser.pcs.scrambler import Scrambler, Descrambler
+from liteeth.phy.serial.baser.pcs.watchdog import PCSRXWatchdog
 from liteeth.phy.xgmii import LiteEthPHYXGMII
 
 from test.model.mac import MACPacket
