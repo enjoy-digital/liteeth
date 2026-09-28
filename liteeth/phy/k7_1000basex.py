@@ -12,20 +12,23 @@ from litex.gen import *
 
 from litex.soc.cores.clock import S7MMCM
 
+from liteiclink.serdes.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
+
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
 # K7_1000BASEX PHY ---------------------------------------------------------------------------------
 
 class K7_1000BASEX(LiteXModule):
-    # Configured for 200MHz transceiver reference clock.
     dw          = 8
     linerate    = 1.25e9
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
+
+    supported_refclk_freqs = (200e6,)
+
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
-        from liteiclink.transceiver.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
-        assert refclk_freq in [200e6]
+        assert refclk_freq in self.supported_refclk_freqs
         self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
 
         self.sink    = pcs.sink
@@ -71,7 +74,7 @@ class K7_1000BASEX(LiteXModule):
         rx_data           = Signal(20)
         rx_reset_done     = Signal()
 
-        pll = GTXChannelPLL(refclk, 200e6, self.linerate)
+        pll = GTXChannelPLL(refclk, refclk_freq, self.linerate)
         self.submodules.pll = pll
 
         # Work around Python's 255 argument limitation.
@@ -799,3 +802,11 @@ class K7_2500BASEX(K7_1000BASEX):
     linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6
+
+    supported_refclk_freqs = (125e6,)
+
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=125e6,
+        with_csr=True, rx_polarity=0, tx_polarity=0):
+        super().__init__(refclk_or_clk_pads, data_pads, sys_clk_freq,
+            refclk_freq=refclk_freq, with_csr=with_csr,
+            rx_polarity=rx_polarity, tx_polarity=tx_polarity)
