@@ -61,29 +61,25 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
 
         self.reset = Signal()
 
-        # Reference clock ---------------------------------------------------------------------------
-        refclk = Signal()
-        if isinstance(refclk_or_clk_pads, Signal):
-            self.comb += refclk.eq(refclk_or_clk_pads)
-        elif refclk_from_fabric:
-            self.comb += refclk.eq(refclk_or_clk_pads)
-        else:
-            self.refclk_buf = Instance("IBUFDS_GTE4",
-                i_CEB = 0,
-                i_I   = refclk_or_clk_pads.p,
-                i_IB  = refclk_or_clk_pads.n,
-                o_O   = refclk,
-                p_REFCLK_HROW_CK_SEL = 0b00,
-            )
-
+        # Reference clock / PLL --------------------------------------------------------------------
         pll_cls, pma_cls = self.transceiver
-
-        # A GTY quad has one GTYE4_COMMON, so channels sharing a quad must share a QPLL. The
-        # reference bypasses LiteXModule's automatic submodule registration, which would
-        # otherwise duplicate the PLL into this PHY's hierarchy.
         if pll is None:
-            self.pll = pll = pll_cls(refclk, refclk_freq, self.linerate)
+            refclk = Signal()
+            if isinstance(refclk_or_clk_pads, Signal) or refclk_from_fabric:
+                self.comb += refclk.eq(refclk_or_clk_pads)
+            else:
+                self.refclk_buf = Instance("IBUFDS_GTE4",
+                    i_CEB = 0,
+                    i_I   = refclk_or_clk_pads.p,
+                    i_IB  = refclk_or_clk_pads.n,
+                    o_O   = refclk,
+                    p_REFCLK_HROW_CK_SEL = 0b00,
+                )
+            self.pll = pll = pll_cls(refclk, refclk_freq, self.linerate,
+                refclk_from_fabric=refclk_from_fabric)
         else:
+            # The parent owns a shared common primitive and its reference-clock routing.
+            # Bypass automatic submodule registration to avoid instantiating the PLL twice.
             object.__setattr__(self, "pll", pll)
 
         # PMA (Clause 51) ---------------------------------------------------------------------------
