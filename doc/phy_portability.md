@@ -99,6 +99,19 @@ primitive parameters at every supported rate, then check on hardware. In
 particular, replacing the GTP initialization path needs reset and DRP
 validation on an Artix-7 board.
 
+## Sharing a BASE-R QPLL
+
+GTX, GTH and GTY BASE-R channels sharing a QPLL must have exactly one reset
+owner. Instantiate the PLL once in the parent, pass it to each channel, and
+use `pll_master=True` on the owner and `pll_master=False` on the others.
+The default is `True`, preserving single-channel operation. The parent also
+renames each PHY's Ethernet clock domains when instantiating multiple channels.
+
+A follower resets its own channel without resetting the shared PLL. Resetting
+the owner can interrupt all channels sharing that PLL. If the parent manages
+PLL reset itself, all channels use `pll_master=False`. A PHY that constructs
+its own PLL must remain its reset owner.
+
 ## Porting and Validation
 
 1. Pick the existing PCS for the Ethernet mode. Define the PMA data width,

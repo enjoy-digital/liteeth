@@ -41,7 +41,7 @@ class K7_GTX_10G_BASER(LiteEthBASERPHY):
     transceiver = (GTXQuadPLL, PMA_K7_GTX_10G_BASER)
 
     def __init__(self, qpll, data_pads, sys_clk_freq, with_csr=True,
-        rx_polarity=0, tx_polarity=0, prbs_errors_width=32):
+        rx_polarity=0, tx_polarity=0, prbs_errors_width=32, pll_master=True):
 
         self.sink   = stream.Endpoint(eth_phy_description(self.dw))
         self.source = stream.Endpoint(eth_phy_description(self.dw))
@@ -58,6 +58,7 @@ class K7_GTX_10G_BASER(LiteEthBASERPHY):
             sys_clk_freq = sys_clk_freq,
             tx_polarity  = tx_polarity,
             rx_polarity  = rx_polarity,
+            pll_master   = pll_master,
         )
 
         # The transceiver owns the user clock domains; alias them the way the UltraScale+ PHYs do.
