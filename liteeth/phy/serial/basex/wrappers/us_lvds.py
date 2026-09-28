@@ -72,6 +72,7 @@ class US_LVDS_1000BASEX(LiteXModule):
         pcs_kwargs = {} if pcs_kwargs is None else dict(pcs_kwargs)
         pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
         pcs_kwargs.setdefault("with_csr",        with_csr)
+        pcs_kwargs.setdefault("sys_clk_freq",    sys_clk_freq)
         self.pcs = pcs = PCS(lsb_first=True, **pcs_kwargs)
 
         self.sink    = pcs.sink
