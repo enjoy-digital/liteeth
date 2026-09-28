@@ -57,7 +57,7 @@ class TestPHYPortability(unittest.TestCase):
                 self.assertTrue(hasattr(phy, "cd_eth_tx"))
                 self.assertTrue(hasattr(phy, "cd_eth_rx"))
                 self.assertEqual(phy._control.size, 6)
-                self.assertEqual(phy._status.size, 12)
+                self.assertEqual(phy._status.size, 13)
                 self.assertTrue(hasattr(phy, "_rx_prbs_errors"))
 
     def test_a7_without_prbs_keeps_core_status(self):
@@ -65,7 +65,7 @@ class TestPHYPortability(unittest.TestCase):
             with_prbs=False)
         phy.get_fragment()
         self.assertEqual(phy._control.size, 6)
-        self.assertEqual(phy._status.size, 12)
+        self.assertEqual(phy._status.size, 13)
         self.assertFalse(hasattr(phy, "_rx_prbs_errors"))
 
     def test_1000_and_2500_basex_wrappers_elaborate(self):
@@ -117,17 +117,17 @@ class TestPHYPortability(unittest.TestCase):
         def stimulus():
             yield dut.rx_prbs31_enable.eq(1)
             yield dut.pcs.rx_error_count.eq(7)
-            for _ in range(8):
+            for _ in range(64):
                 yield
             samples.append((yield dut.rx_prbs_errors))
 
             yield dut.rx_ce.eq(1)
-            for _ in range(8):
+            for _ in range(64):
                 yield
             samples.append((yield dut.rx_prbs_errors))
 
             yield dut.rx_prbs31_enable.eq(0)
-            for _ in range(8):
+            for _ in range(64):
                 yield
             samples.append((yield dut.rx_prbs_errors))
 

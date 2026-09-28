@@ -128,6 +128,26 @@ class TestPHYImports(unittest.TestCase):
                 self.assertIs(old, new)
                 self.assertIs(getattr(phy, old_name), new)
 
+    def test_basex_device_helpers_keep_their_imports(self):
+        helpers = {
+            "gw5" : ("GW5SerDes",),
+            "us_lvds" : ("COMMA_RD_N", "COMMA_RD_P", "USLVDSClocking", "USLVDSTXGearbox",
+                "USLVDSSerdesTX", "USLVDSPhaseDetector", "USLVDSCommaAligner",
+                "USLVDSRXGearbox", "USLVDSSerdesRX"),
+            "titanium_lvds" : ("EfinixSerdesDiffTx", "EfinixSerdesDiffRx", "Decoder8b10bChecker",
+                "Decoder8b10bIdleChecker", "EfinixAligner", "EfinixSerdesBuffer",
+                "EfinixSerdesDiffRxClockRecovery", "EfinixSerdesClocking"),
+        }
+        for device, names in helpers.items():
+            wrapper = importlib.import_module(f"liteeth.phy.serial.basex.wrappers.{device}")
+            pma = importlib.import_module(f"liteeth.phy.serial.basex.pma.{device}")
+            for name in names:
+                with self.subTest(device=device, name=name):
+                    self.assertIs(getattr(wrapper, name), getattr(pma, name))
+        from liteeth.phy.serial.basex.pma.gw5_config import _serdes_csr, _serdes_toml
+        self.assertIs(phy.gw5_1000basex._serdes_csr, _serdes_csr)
+        self.assertIs(phy.gw5_1000basex._serdes_toml, _serdes_toml)
+
     def test_direct_import_paths_remain_available(self):
         for module_name, class_names in self.direct_imports.items():
             module = importlib.import_module(f"liteeth.phy.{module_name}")

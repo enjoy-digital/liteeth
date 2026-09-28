@@ -4,6 +4,8 @@ import sys as _sys
 from liteeth.common import *
 
 
+# PHY Autodetection --------------------------------------------------------------------------------
+
 def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
     # Autodetect PHY
     if hasattr(clock_pads, "gtx") and len(pads.tx_data) == 8:
@@ -25,6 +27,34 @@ def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
     else:
         raise ValueError("Unable to autodetect PHY from platform file, use direct instantiation")
 
+
+# Public PHY Classes -------------------------------------------------------------------------------
+
+from liteeth.phy.parallel.mii      import LiteEthPHYMII
+from liteeth.phy.parallel.rmii     import LiteEthPHYRMII
+from liteeth.phy.parallel.gmii     import LiteEthPHYGMII
+from liteeth.phy.parallel.gmii_mii import LiteEthPHYGMIIMII
+from liteeth.phy.parallel.xgmii    import LiteEthPHYXGMII
+
+from liteeth.phy.parallel.rgmii.s6     import LiteEthPHYRGMII as LiteEthS6PHYRGMII
+from liteeth.phy.parallel.rgmii.s7     import LiteEthPHYRGMII as LiteEthS7PHYRGMII
+from liteeth.phy.parallel.rgmii.us     import LiteEthPHYRGMII as LiteEthUSPHYRGMII
+from liteeth.phy.parallel.rgmii.ecp5   import LiteEthPHYRGMII as LiteEthECP5PHYRGMII
+from liteeth.phy.parallel.rgmii.agilex import LiteEthPHYRGMII as LiteEthAgilexPHYRGMII
+
+from liteeth.phy.serial.basex.wrappers.a7_gtp  import A7_1000BASEX
+from liteeth.phy.serial.basex.wrappers.a7_gtp  import A7_2500BASEX
+from liteeth.phy.serial.basex.wrappers.k7_gtx  import K7_1000BASEX
+from liteeth.phy.serial.basex.wrappers.k7_gtx  import K7_2500BASEX
+from liteeth.phy.serial.basex.wrappers.ku_gth  import KU_1000BASEX
+from liteeth.phy.serial.basex.wrappers.ku_gth  import KU_2500BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_1000BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_2500BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_1000BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_2500BASEX
+from liteeth.phy.serial.basex.wrappers.us_lvds import US_LVDS_1000BASEX
+
+# Legacy Module Imports ----------------------------------------------------------------------------
 
 # Keep established direct imports pointing at the implementation modules. Registering
 # the modules themselves also preserves module-level patching by downstream targets.
@@ -60,28 +90,3 @@ for _legacy_name, _module_name in _legacy_modules.items():
     _sys.modules[f"{__name__}.{_legacy_name}"] = _module
     globals()[_legacy_name] = _module
 del _legacy_name, _module_name, _module
-
-from liteeth.phy.parallel.mii      import LiteEthPHYMII
-from liteeth.phy.parallel.rmii     import LiteEthPHYRMII
-from liteeth.phy.parallel.gmii     import LiteEthPHYGMII
-from liteeth.phy.parallel.gmii_mii import LiteEthPHYGMIIMII
-from liteeth.phy.parallel.xgmii    import LiteEthPHYXGMII
-
-from liteeth.phy.s6rgmii   import LiteEthPHYRGMII as LiteEthS6PHYRGMII
-from liteeth.phy.s7rgmii   import LiteEthPHYRGMII as LiteEthS7PHYRGMII
-from liteeth.phy.usrgmii   import LiteEthPHYRGMII as LiteEthUSPHYRGMII
-from liteeth.phy.ecp5rgmii import LiteEthPHYRGMII as LiteEthECP5PHYRGMII
-
-from liteeth.phy.a7_1000basex      import A7_1000BASEX
-from liteeth.phy.a7_1000basex      import A7_2500BASEX
-from liteeth.phy.k7_1000basex      import K7_1000BASEX
-from liteeth.phy.k7_1000basex      import K7_2500BASEX
-from liteeth.phy.ku_1000basex      import KU_1000BASEX
-from liteeth.phy.ku_1000basex      import KU_2500BASEX
-from liteeth.phy.usp_gth_1000basex import USP_GTH_1000BASEX
-from liteeth.phy.usp_gth_1000basex import USP_GTH_2500BASEX
-from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
-from liteeth.phy.usp_gty_1000basex import USP_GTY_2500BASEX
-from liteeth.phy.us_lvds_1000basex import US_LVDS_1000BASEX
-
-from liteeth.phy.agilex_rgmii      import LiteEthPHYRGMII as LiteEthAgilexPHYRGMII

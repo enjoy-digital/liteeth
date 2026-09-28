@@ -21,7 +21,7 @@ from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.k7_1000basex import K7_1000BASEX
+from liteeth.phy.serial.basex.wrappers.k7_gtx import K7_1000BASEX
 
 # CRG ----------------------------------------------------------------------------------------------
 
