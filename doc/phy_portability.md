@@ -147,10 +147,11 @@ advances on valid receive blocks when the PMA supplies an enable.
 
 To read the complete counter, including multiple CSR words:
 
-1. Enable the PRBS checker and leave it enabled throughout the measurement.
-2. Set `control.prbs_pause` and poll `status.prbs_paused` until it is one.
-3. Read `rx_prbs_errors`; the acknowledgment travels with the frozen counter value.
-4. Clear `control.prbs_pause` and wait for `status.prbs_paused` to become zero
+1. Clear `control.prbs_pause` and wait for `status.prbs_paused` to be zero.
+2. Enable the PRBS checker and leave it enabled throughout the measurement.
+3. Set `control.prbs_pause` and poll `status.prbs_paused` until it is one.
+4. Read `rx_prbs_errors`; the acknowledgment travels with the frozen counter value.
+5. Clear `control.prbs_pause` and wait for `status.prbs_paused` to become zero
    before requesting another snapshot.
 
 Disabling the checker or resetting its receive domain clears the counter,
@@ -158,3 +159,5 @@ including while paused. Existing register addresses and field offsets remain
 unchanged; `status.prbs_paused` occupies previously unused bit 12 and is zero
 when PRBS support is disabled. Software polling must use a timeout if the
 receive clock can stop.
+Reading `status` retains its existing read-to-clear behavior for the sticky
+link-loss and high-BER flags, including while polling the pause acknowledgment.
