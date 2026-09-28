@@ -193,6 +193,28 @@ class TestByteEnable(unittest.TestCase):
                 self.assertEqual(received, [payload]*5)
                 self.assertEqual(got_errors, [True, True, True, False, False])
 
+    def test_legacy_invalid_marker_falls_back_to_full_word(self):
+        dut = LiteEthStream2UDPTX(data_width=64, fifo_depth=16, with_last_be=True)
+        def check():
+            yield dut.source.ready.eq(1)
+            yield dut.sink.valid.eq(1)
+            yield dut.sink.last.eq(1)
+            yield dut.sink.last_be.eq(3) # Invalid one-hot encoding, supported legacy fallback.
+            yield dut.sink.data.eq(0x12345678)
+            yield
+            while not (yield dut.sink.ready):
+                yield
+            yield dut.sink.valid.eq(0)
+            for _ in range(64):
+                yield
+                if (yield dut.source.valid):
+                    self.assertEqual((yield dut.source.last), 1)
+                    self.assertEqual((yield dut.source.be), 0xff)
+                    self.assertEqual((yield dut.source.length), 8)
+                    return
+            self.fail("Legacy packet did not complete")
+        run_simulation(dut, check())
+
     def test_legacy_streamer_boundaries(self):
         for dw in [8, 32, 64]:
             packets = [bytes(range(n)) for n in range(1, 18)]
