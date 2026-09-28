@@ -86,7 +86,7 @@ class LiteEthMACPaddingChecker(Module):
         length_inc = Signal(4)
 
         # Count valid bytes.
-        self.comb += length_inc.eq(sum(sink.be[i] for i in range(dw//8)))
+        self.comb += length_inc.eq(stream.byte_count(sink.be))
 
         self.sync += [
             If(sink.valid & sink.ready,

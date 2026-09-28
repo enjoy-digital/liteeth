@@ -244,16 +244,7 @@ class LiteEthUDPRX(LiteXModule):
             If(count < source.length,
                source.be.eq(depacketizer.source.be),
             ).Else(
-              Case(source.length & (dw//8 - 1), {
-                  1         : source.be.eq(0b00000001),
-                  2         : source.be.eq(0b00000011),
-                  3         : source.be.eq(0b00000111),
-                  4         : source.be.eq(0b00001111),
-                  5         : source.be.eq(0b00011111),
-                  6         : source.be.eq(0b00111111),
-                  7         : source.be.eq(0b01111111),
-                  "default" : source.be.eq((1 << (dw//8)) - 1),
-              })
+                source.be.eq(eth_packet_last_mask(dw, source.length)),
             ),
             If(source.valid & source.ready,
                 NextValue(count, count + dw//8),

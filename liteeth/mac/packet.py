@@ -48,7 +48,7 @@ class LiteEthMACPacketWriter(LiteXModule):
 
         # Count valid bytes.
         length_inc = Signal(4)
-        self.comb += length_inc.eq(sum(packet_source.be[i] for i in range(dw//8)))
+        self.comb += length_inc.eq(stream.byte_count(packet_source.be))
 
         next_length = Signal.like(self.length)
         last_error  = Signal()
@@ -183,23 +183,9 @@ class LiteEthMACPacketReader(LiteXModule):
             sink.ready.eq(source.ready & direct_read),
         ]
 
-        # Encode Length to be.
-        length_lsb = self.length[:int(math.log2(dw/8))] if (dw != 8) else 0
-        self.comb += [
-            source.be.eq((1 << (dw//8)) - 1),
-            If(source.last,
-                Case(length_lsb, {
-                    1         : source.be.eq(0b00000001),
-                    2         : source.be.eq(0b00000011),
-                    3         : source.be.eq(0b00000111),
-                    4         : source.be.eq(0b00001111),
-                    5         : source.be.eq(0b00011111),
-                    6         : source.be.eq(0b00111111),
-                    7         : source.be.eq(0b01111111),
-                    "default" : source.be.eq((1 << (dw//8)) - 1),
-                })
-            )
-        ]
+        # Enable the final word's payload bytes; intermediate words are full.
+        self.comb += source.be.eq(Mux(source.last,
+            eth_packet_last_mask(dw, self.length), (1 << (dw//8)) - 1))
 
         if timestamp is not None:
             self.sync += If(self.idle & self.enable, timestamp_value.eq(timestamp))
