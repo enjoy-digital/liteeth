@@ -9,7 +9,7 @@ when implementation files move.
 | --- | --- | --- |
 | MII, RMII, GMII, XGMII | `liteeth/phy/{mii,rmii,gmii,gmii_mii,xgmii}.py` | `liteeth.phy` and the individual modules |
 | Vendor RGMII | `liteeth/phy/*rgmii.py` | Individual modules and the aliases in `liteeth.phy` |
-| 1000/2500BASE-X | `pcs_1000basex.py` and device-named wrapper modules | Device modules and the aliases in `liteeth.phy` |
+| 1000/2500BASE-X | `serial/basex/pcs.py` and device adapters | Original device modules and the aliases in `liteeth.phy` |
 | 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, diagnostics, and device wrappers | Every preexisting module and submodule path forwards to the implementation |
 | GTP initialization | `a7_gtp.py` | Direct imports from targets and BASE-R PMAs |
 
@@ -21,8 +21,10 @@ their package-level imports.
 
 Serial Ethernet modes are grouped under `liteeth/phy/serial/`. The 64b/66b
 BASE-R PCS, PMAs, diagnostics, and wrappers live in `baser/`; the 8b/10b
-BASE-X PCS and device adapters are the next group for `basex/`. Existing
-top-level BASE-R modules forward imports to their new implementations.
+BASE-X PCS and device adapters live in `basex/`. Existing top-level BASE-R
+modules forward imports to their new implementations. Legacy BASE-X module
+names alias the new modules, so code that patches a module-level PCS helper
+still affects the class implementation.
 Parallel and RGMII PHYs can be grouped separately after the serial modes are
 stable. Keep device-specific primitive parameters visible; sharing a PLL or
 reset helper does not imply that two line codes share a PMA.

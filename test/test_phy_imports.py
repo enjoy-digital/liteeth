@@ -13,6 +13,19 @@ import liteeth.phy as phy
 # Public PHY Imports -------------------------------------------------------------------------------
 
 class TestPHYImports(unittest.TestCase):
+    basex_moves = {
+        "pcs_1000basex": "serial.basex.pcs",
+        "a7_1000basex": "serial.basex.a7_gtp",
+        "k7_1000basex": "serial.basex.k7_gtx",
+        "v7_1000basex": "serial.basex.v7_gth",
+        "ku_1000basex": "serial.basex.ku_gth",
+        "usp_gth_1000basex": "serial.basex.usp_gth",
+        "usp_gty_1000basex": "serial.basex.usp_gty",
+        "gw5_1000basex": "serial.basex.gw5",
+        "us_lvds_1000basex": "serial.basex.us_lvds",
+        "titanium_lvds_1000basex": "serial.basex.titanium_lvds",
+    }
+
     baser_submodules = (
         "pcs_baser.ber_mon", "pcs_baser.block_sync", "pcs_baser.common",
         "pcs_baser.decoder", "pcs_baser.encoder", "pcs_baser.lfsr",
@@ -68,6 +81,13 @@ class TestPHYImports(unittest.TestCase):
             for class_name in class_names:
                 with self.subTest(module=module_name, name=class_name):
                     self.assertIs(getattr(phy, class_name), getattr(module, class_name))
+
+    def test_basex_legacy_modules_are_aliases(self):
+        for old_name, new_name in self.basex_moves.items():
+            with self.subTest(module=old_name):
+                old = importlib.import_module(f"liteeth.phy.{old_name}")
+                new = importlib.import_module(f"liteeth.phy.{new_name}")
+                self.assertIs(old, new)
 
     def test_direct_import_paths_remain_available(self):
         for module_name, class_names in self.direct_imports.items():
