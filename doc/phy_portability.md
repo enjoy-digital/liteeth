@@ -10,10 +10,10 @@ LiteX architecture rules are documented in
 
 | Component | Location | Responsibility |
 | --- | --- | --- |
-| 1000/2500BASE-X PCS | `liteeth/phy/pcs_1000basex.py` | 8b/10b Ethernet coding, autonegotiation, and the byte stream |
+| 1000/2500BASE-X PCS | `liteeth/phy/serial/basex/pcs.py` | 8b/10b Ethernet coding, autonegotiation, and the byte stream |
 | 5/10/25GBASE-R PCS | `liteeth/phy/serial/baser/pcs/` | 64b/66b coding, scrambling, block sync, BER, and XGMII |
 | BASE-R PMAs | `liteeth/phy/serial/baser/pma/` | Vendor primitive in 64b/66b mode, gearbox cadence, clock/reset, and bitslip |
-| PHY wrappers | `liteeth/phy/*basex.py`, `serial/baser/{a7_gtp,k7_gtx,usp_gt}.py` | MAC stream, PCS/PMA wiring, public controls, and CSRs |
+| PHY wrappers | `liteeth/phy/serial/{basex,baser}/` | MAC stream, PCS/PMA wiring, public controls, and CSRs |
 | Shared transceiver helpers | `liteiclink/serdes/` | PLLs, DRP, and applicable initialization sequences |
 | Board targets and platforms | LiteX targets/platforms | Pins, reference clock source, transceiver channel, and timing constraints |
 | Standalone generator | `liteeth/gen.py` | Core configuration, PHY selection, and rate-compatible reference clock defaults |
