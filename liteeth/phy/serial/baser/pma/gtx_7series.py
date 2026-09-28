@@ -3,7 +3,7 @@
 #
 # Ported from phy/k7_gtx_10g_baser.py on the liteeth-a7-5000baser-working branch, where the same
 # transceiver drove a vendored Verilog PCS. The transceiver half is split out here so it can sit
-# under the pure-LiteX PCS in phy/pcs_baser, alongside the UltraScale+ PMAs in this package. The
+# under the pure-LiteX PCS in serial/baser/pcs, alongside the UltraScale+ PMAs in this package. The
 # GTXE2_CHANNEL parameters and the MMCM/reset sequencing are carried over unchanged: they are what
 # was brought up on hardware at 5G and 10G.
 #

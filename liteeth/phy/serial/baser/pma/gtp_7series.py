@@ -3,7 +3,7 @@
 #
 # Ported from phy/a7_1000basex.py (A7_5000BASER) on the liteeth-a7-5000baser-working branch, where
 # the GTP drove a vendored Verilog PCS on gated clocks. The transceiver half is split out here, as
-# gtx_7series.py is for the Kintex-7, so it can sit under the pure-LiteX PCS in phy/pcs_baser. The
+# gtx_7series.py is for the Kintex-7, so it can sit under the pure-LiteX PCS in serial/baser/pcs. The
 # GTPE2_CHANNEL parameters are carried over unchanged, with the 1000BASE-X arms of that file's
 # shared conditionals resolved away; they are what was brought up on hardware at 5GBASE-R.
 #
