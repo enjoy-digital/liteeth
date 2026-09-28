@@ -48,6 +48,31 @@ settings remain authoritative.
 
 ## Reuse with LiteICLink
 
+### Configuring a 25G GTY QPLL
+
+The GTY BASE-R wrapper passes PLL selection and tuning to LiteICLink at
+construction. The 25G channel requires QPLL0 and the common-primitive tuning
+listed in `PMA_USP_GTY_25G_BASER.qpll_params`. LiteICLink derives the feedback
+dividers and SDM bypass from the reference frequency; the wrapper does not
+modify a constructed PLL or inspect Migen's private fragments.
+
+For an externally owned 25G PLL:
+
+```python
+pll = GTYQuadPLL(refclk, refclk_freq, 25.78125e9,
+    qpll="qpll0", qpll_params=PMA_USP_GTY_25G_BASER.qpll_params)
+phy = USP_GTY_25G_BASER(None, data_pads, sys_clk_freq, pll=pll)
+```
+
+The wrapper validates the supplied PLL's family, line rate, selection and
+required tuning. Configure the reference-clock source on the external PLL;
+the wrapper's reference-clock arguments apply only when it creates the PLL.
+This interface requires LiteICLink's QPLL selection/tuning and GTH4/GTY fabric
+reference-clock updates. The 156.25 MHz fractional-N and 161.1328125 MHz
+integer-N settings retain their existing primitive values.
+
+### Shared Transceiver Helpers
+
 The BASE-R GTY/GTH/GTX PMAs already reuse LiteICLink PLL, DRP, and reset/init
 helpers. The 7-series GTP PMA currently reuses the older GTP initialization
 logic in `liteeth/phy/serial/gtp_7series.py`. LiteICLink's generic
