@@ -124,10 +124,26 @@ class TestECP5RGMIIDynamicSpeed(unittest.TestCase):
             yield
             self.assertEqual((yield dut.source.valid), 1)
             self.assertEqual((yield dut.source.data), 0x5a)
+            self.assertEqual((yield dut.source.error), 0)
+
+            yield dut.rx_ctl.eq(0b01)
+            yield dut.rx_data.eq(0xa5)
+            yield
+            yield
+            self.assertEqual((yield dut.source.valid), 1)
+            self.assertEqual((yield dut.source.data), 0xa5)
+            self.assertEqual((yield dut.source.error), 1)
+
+            yield dut.rx_ctl.eq(0b11)
+            yield
+            yield
+            self.assertEqual((yield dut.source.error), 1)
 
             yield dut.rx_ctl.eq(0b00)
             yield
             self.assertEqual((yield dut.source.last), 1)
+            yield
+            self.assertEqual((yield dut.source.error), 0)
 
         run_simulation(dut, generator())
 
@@ -140,7 +156,7 @@ class TestECP5RGMIIDynamicSpeed(unittest.TestCase):
             yield link_state.link_100M.eq(1)
             yield
 
-            yield dut.rx_ctl.eq(0b01)
+            yield dut.rx_ctl.eq(0b11)
             yield dut.rx_data.eq(0x0b)
             yield
             self.assertEqual((yield dut.source.valid), 0)
@@ -153,9 +169,105 @@ class TestECP5RGMIIDynamicSpeed(unittest.TestCase):
             yield
             self.assertEqual((yield dut.source.valid), 1)
             self.assertEqual((yield dut.source.data), 0xab)
+            self.assertEqual((yield dut.source.error), 0)
             self.assertEqual((yield dut.source.last), 1)
 
         run_simulation(dut, generator())
+
+    def test_rx_100m_combines_nibble_errors(self):
+        for error_nibble in [0, 1]:
+            with self.subTest(error_nibble=error_nibble):
+                link_state = LiteEthRGMIILinkState()
+                dut        = LiteEthRGMIIRXDatapath(link_state=link_state)
+
+                def generator():
+                    yield link_state.link_1G.eq(0)
+                    yield link_state.link_100M.eq(1)
+                    yield
+
+                    yield dut.rx_ctl.eq(0b01 if error_nibble == 0 else 0b11)
+                    yield dut.rx_data.eq(0x0b)
+                    yield
+
+                    yield dut.rx_ctl.eq(0b01 if error_nibble == 1 else 0b11)
+                    yield dut.rx_data.eq(0x0a)
+                    yield
+
+                    yield dut.rx_ctl.eq(0b00)
+                    yield
+                    self.assertEqual((yield dut.source.valid), 1)
+                    self.assertEqual((yield dut.source.data), 0xab)
+                    self.assertEqual((yield dut.source.error), 1)
+
+                run_simulation(dut, generator())
+
+    def test_rx_fixed_speed_propagates_error(self):
+        dut = LiteEthRGMIIRXDatapath()
+
+        def generator():
+            yield dut.rx_ctl.eq(0b01)
+            yield dut.rx_data.eq(0x5a)
+            yield
+            yield dut.rx_ctl.eq(0b11)
+            yield dut.rx_data.eq(0xa5)
+            yield
+            yield
+            self.assertEqual((yield dut.source.valid), 1)
+            self.assertEqual((yield dut.source.data), 0x5a)
+            self.assertEqual((yield dut.source.error), 1)
+            yield
+            self.assertEqual((yield dut.source.valid), 1)
+            self.assertEqual((yield dut.source.data), 0xa5)
+            self.assertEqual((yield dut.source.error), 1)
+
+        run_simulation(dut, generator())
+
+    def test_rx_sdr_error_lasts_until_frame_end(self):
+        for speed in (10, 100):
+            for error_nibble in (0, 1):
+                with self.subTest(speed=speed, error_nibble=error_nibble):
+                    link_state = LiteEthRGMIILinkState()
+                    dut = LiteEthRGMIIRXDatapath(link_state=link_state)
+                    observed = []
+
+                    def driver():
+                        yield link_state.link_1G.eq(0)
+                        yield link_state.link_100M.eq(speed == 100)
+                        yield link_state.link_10M.eq(speed == 10)
+                        yield
+                        # Two bytes: an error in either nibble of the first must reach the last.
+                        for i, nibble in enumerate((0xb, 0xa, 0xd, 0xc)):
+                            yield dut.rx_ctl.eq(0b01 if i == error_nibble else 0b11)
+                            yield dut.rx_data.eq(nibble)
+                            yield
+                        yield dut.rx_ctl.eq(0)
+                        for _ in range(3):
+                            yield
+                        # Discard an incomplete errored byte, then start a clean frame.
+                        yield dut.rx_ctl.eq(0b01)
+                        yield dut.rx_data.eq(0xf)
+                        yield
+                        yield dut.rx_ctl.eq(0)
+                        for _ in range(3):
+                            yield
+                        for nibble in (2, 1):
+                            yield dut.rx_ctl.eq(0b11)
+                            yield dut.rx_data.eq(nibble)
+                            yield
+                        yield dut.rx_ctl.eq(0)
+                        for _ in range(3):
+                            yield
+
+                    @passive
+                    def monitor():
+                        while True:
+                            if (yield dut.source.valid):
+                                observed.append(((yield dut.source.data),
+                                    (yield dut.source.error), (yield dut.source.last)))
+                            yield
+
+                    run_simulation(dut, [driver(), monitor()])
+                    self.assertEqual(observed, [(0xab, 1, 0), (0xcd, 1, 1), (0x12, 0, 1)])
 
 
 if __name__ == "__main__":

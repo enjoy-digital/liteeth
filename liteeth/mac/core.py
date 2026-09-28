@@ -322,9 +322,11 @@ class LiteEthMACCore(LiteXModule):
             def add_domain_switch(self):
                 """Add last_be/converter/CDC stages in the order required by the data widths."""
                 dw = phy_dw
+                # Eight-bit PHYs only drive last, even when no width conversion is needed.
+                if phy_dw <= core_dw:
+                    self.add_last_be()
                 if phy_dw < core_dw:
                     dw = core_dw
-                    self.add_last_be()
                     self.add_converter("eth_rx")
                 if with_store_and_forward:
                     self.add_packet_drop_fifo(dw)

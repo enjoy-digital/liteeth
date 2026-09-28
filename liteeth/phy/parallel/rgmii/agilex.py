@@ -96,20 +96,94 @@ class LiteEthPHYRGMIITX(LiteXModule):
 
         self.sync += sink.ready.eq(1)
 
+# LiteEth PHY RGMII RX Datapath --------------------------------------------------------------------
+
+class LiteEthRGMIIRXDatapath(LiteXModule):
+    def __init__(self):
+        self.rx_ctl_raw  = rx_ctl_raw  = Signal(2)
+        self.rx_data_raw = rx_data_raw = Signal(8)
+        self.source     = source      = stream.Endpoint(eth_phy_description(8))
+
+        # # #
+
+        rx_ctl_raw_d  = Signal(2)
+        rx_data_raw_d = Signal(8)
+        rx_align      = Signal()
+        rx_active     = Signal()
+        rx_ctl        = Signal(2)
+        rx_data       = Signal(8)
+        self.sync += [
+            rx_ctl_raw_d.eq(rx_ctl_raw),
+            rx_data_raw_d.eq(rx_data_raw)
+        ]
+
+        start_aligned   = Signal()
+        start_unaligned = Signal()
+        self.comb += [
+            # RX_CTL=01 is a valid byte with RX_ER, not an alignment request.
+            start_aligned.eq(~rx_active & rx_ctl_raw[0]),
+            # The shifted path joins the previous high nibble to the current low nibble.
+            # Its first sample has the first preamble nibble in the high half of the sample.
+            # Check that nibble to avoid treating idle RX_ER indications as frame starts.
+            start_unaligned.eq(~rx_active & ~rx_ctl_raw[0] & rx_ctl_raw[1] &
+                (rx_data_raw[4:8] == 0x5)),
+        ]
+
+        self.comb += [
+            rx_data.eq(rx_data_raw),
+            rx_ctl.eq(rx_ctl_raw),
+            If(rx_align,
+                rx_data.eq(Cat(rx_data_raw_d[4:8], rx_data_raw[0:4])),
+                rx_ctl.eq(Cat(rx_ctl_raw_d[1], rx_ctl_raw[0])),
+            ),
+            If(start_aligned,
+                rx_data.eq(rx_data_raw),
+                rx_ctl.eq(rx_ctl_raw),
+            ),
+            If(start_unaligned,
+                rx_ctl.eq(0),
+            ),
+        ]
+
+        self.sync += [
+            # Keep the selected alignment while discarding the initial incomplete byte.
+            rx_active.eq(rx_ctl[0] | start_unaligned),
+            If(~rx_active,
+                If(start_aligned,
+                    rx_align.eq(0),
+                ).Elif(start_unaligned,
+                    rx_align.eq(1),
+                )
+            ),
+        ]
+
+        rx_ctl_d = Signal()
+        self.sync += rx_ctl_d.eq(rx_ctl[0])
+
+        last = Signal()
+        self.comb += last.eq(~rx_ctl[0] & rx_ctl_d)
+        self.sync += [
+            source.valid.eq(rx_ctl[0]),
+            source.data.eq(rx_data),
+            If(~rx_ctl[0],
+                source.error.eq(0),
+            ).Elif(~rx_ctl[1],
+                source.error.eq(1),
+            ),
+        ]
+        self.comb += source.last.eq(last)
+
 # LiteEthPHYRGMII RX -----------------------------------------------------------------------------------
 
 class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads):
-        self.source    = source = stream.Endpoint(eth_phy_description(8))
+        self.source = source = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
         rx_ctl_pipe = Signal(2)
         rx_ctl_raw  = Signal(2)
-        rx_ctl      = Signal()
-
         rx_data_raw = Signal(8)
-        rx_data     = Signal(8)
 
         self.specials += [
             ddio_in(ClockSignal("eth_rx"), pads.rx_ctl,    rx_ctl_pipe[0], rx_ctl_pipe[1]),
@@ -125,59 +199,12 @@ class LiteEthPHYRGMIIRX(LiteXModule):
                 pipe_in(ClockSignal("eth_rx"), rx_data_pipe[1], rx_data_raw[i+4]),
             ]
 
-        rx_ctl_raw_d  = Signal(2)
-        rx_data_raw_d = Signal(8)
-        rx_align      = Signal()
-        rx_active     = Signal()
-        self.sync += [
-            rx_ctl_raw_d.eq(rx_ctl_raw),
-            rx_data_raw_d.eq(rx_data_raw)
-        ]
-
-        start_aligned   = Signal()
-        start_unaligned = Signal()
+        self.datapath = datapath = LiteEthRGMIIRXDatapath()
         self.comb += [
-            start_aligned.eq(~rx_active &  rx_ctl_raw[0] &  rx_ctl_raw[1]),
-            start_unaligned.eq(~rx_active &  rx_ctl_raw[0] & ~rx_ctl_raw[1]),
+            datapath.rx_ctl_raw.eq(rx_ctl_raw),
+            datapath.rx_data_raw.eq(rx_data_raw),
+            datapath.source.connect(source),
         ]
-
-        self.comb += [
-            rx_data.eq(rx_data_raw),
-            rx_ctl.eq(rx_ctl_raw[0]),
-            If(rx_align,
-                rx_data.eq(Cat(rx_data_raw_d[4:8], rx_data_raw[0:4])),
-                rx_ctl.eq(rx_ctl_raw_d[1]),
-            ),
-            If(start_aligned,
-                rx_data.eq(rx_data_raw),
-                rx_ctl.eq(rx_ctl_raw[0]),
-            ),
-            If(start_unaligned,
-                rx_ctl.eq(0),
-            ),
-        ]
-
-        self.sync += [
-            rx_active.eq(rx_ctl),
-            If(~rx_active,
-                If(start_aligned,
-                    rx_align.eq(0),
-                ).Elif(start_unaligned,
-                    rx_align.eq(1),
-                )
-            ),
-        ]
-
-        rx_ctl_d = Signal()
-        self.sync += rx_ctl_d.eq(rx_ctl)
-
-        last = Signal()
-        self.comb += last.eq(~rx_ctl & rx_ctl_d)
-        self.sync += [
-            source.valid.eq(rx_ctl),
-            source.data.eq(rx_data)
-        ]
-        self.comb += source.last.eq(last)
 
 # LiteEthPHYRGMII CRG ----------------------------------------------------------------------------------
 

@@ -59,6 +59,23 @@ and the ownership/interface rules in [PHY portability](phy_portability.md).
 Parallel PHYs can keep their device-local TX/RX/CRG classes; they do not need a
 common superclass merely to share a few assignments or CSR declarations.
 
+## RGMII Receive Errors
+
+RGMII presents RX_DV on the rising RX_CTL sample and RX_DV XOR RX_ER on the
+falling sample. Decode these samples after the same alignment and pipeline
+stages as their data nibbles. Preserve the existing data, valid and last timing.
+
+Latch an error until the end of its frame, then clear it during idle, as the
+Titanium/Trion receiver does. This keeps PHY errors visible to packet-level
+consumers after preamble/FCS removal and data-width conversion. At 10/100 Mbps,
+an error on either nibble must mark the assembled byte and the rest of the
+frame; the invalid cycles between bytes must not clear the latch. Idle RX_ER
+indications do not start a frame or contaminate the next frame.
+
+Test error positions at frame boundaries as well as in the payload, and check
+that a valid FCS does not override a PHY error. Include a following clean frame
+to verify that the error clears.
+
 ## Compatibility
 
 For each established import, preserve class identity through the old path,

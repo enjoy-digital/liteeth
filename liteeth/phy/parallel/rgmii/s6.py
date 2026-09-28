@@ -102,6 +102,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         rx_ctl_ibuf    = Signal()
         rx_ctl_idelay  = Signal()
         rx_ctl         = Signal()
+        rx_ctl_falling = Signal()
         rx_ctl_reg     = Signal()
         rx_data_ibuf   = Signal(4)
         rx_data_idelay = Signal(4)
@@ -132,6 +133,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
             Instance("IDDR2",
                 p_DDR_ALIGNMENT = "C0",
                 o_Q0 = rx_ctl,
+                o_Q1 = rx_ctl_falling,
                 i_C0 =  ClockSignal("eth_rx"),
                 i_C1 = ~ClockSignal("eth_rx"),
                 i_CE = 1,
@@ -185,6 +187,11 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         self.sync += [
             source.valid.eq(rx_ctl_reg),
             source.data.eq(Cat(rx_data_reg[:4], rx_data[4:])),
+            If(~rx_ctl_reg,
+                source.error.eq(0),
+            ).Elif(~rx_ctl_falling,
+                source.error.eq(1),
+            ),
         ]
         self.comb += source.last.eq(last)
 

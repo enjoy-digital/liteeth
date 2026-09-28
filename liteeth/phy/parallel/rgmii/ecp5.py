@@ -225,18 +225,33 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
                 rx_data_reg.eq(rx_data),
                 source.valid.eq(rx_ctl_reg[0]),
                 source.data.eq(rx_data_reg),
+                If(~rx_ctl_reg[0],
+                    source.error.eq(0),
+                ).Elif(~rx_ctl_reg[1],
+                    source.error.eq(1),
+                ),
             ]
             self.comb += source.last.eq(~rx_ctl_reg[0] & rx_ctl_reg_d[0])
         else:
             sdr_phase     = Signal()
             sdr_low       = Signal(4)
             rx_ctl_rising = Signal()
+            rx_error      = Signal()
             rx_ctl_d      = Signal()
 
-            self.comb += rx_ctl_rising.eq(rx_ctl[0])
+            self.comb += [
+                rx_ctl_rising.eq(rx_ctl[0]),
+                rx_error.eq(rx_ctl[0] ^ rx_ctl[1]),
+            ]
             self.sync += [
                 rx_ctl_d.eq(rx_ctl_rising),
                 source.valid.eq(0),
+                # Retain errors through the whole frame, including gaps between SDR bytes.
+                If(~rx_ctl_rising,
+                    source.error.eq(0),
+                ).Elif(rx_error,
+                    source.error.eq(1),
+                ),
                 If(link_state.link_1G,
                     sdr_phase.eq(0),
                     source.valid.eq(rx_ctl_rising),

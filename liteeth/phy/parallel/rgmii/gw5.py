@@ -84,7 +84,7 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         assert rx_delay_taps < 256
 
         rx_ctl_delayf  = Signal()
-        rx_ctl         = Signal()
+        rx_ctl         = Signal(2)
         rx_data_delayf = Signal(4)
         rx_data        = Signal(8)
 
@@ -103,8 +103,8 @@ class LiteEthPHYRGMIIRX(LiteXModule):
             DDRInput(
                 clk = ClockSignal("eth_rx"),
                 i   = rx_ctl_delayf,
-                o1  = rx_ctl,
-                o2  = Open()
+                o1  = rx_ctl[0],
+                o2  = rx_ctl[1],
             )
         ]
         for i in range(4):
@@ -128,13 +128,18 @@ class LiteEthPHYRGMIIRX(LiteXModule):
             ]
 
         rx_ctl_d = Signal()
-        self.sync += rx_ctl_d.eq(rx_ctl)
+        self.sync += rx_ctl_d.eq(rx_ctl[0])
 
         last = Signal()
-        self.comb += last.eq(~rx_ctl & rx_ctl_d)
+        self.comb += last.eq(~rx_ctl[0] & rx_ctl_d)
         self.sync += [
-            source.valid.eq(rx_ctl),
-            source.data.eq(rx_data)
+            source.valid.eq(rx_ctl[0]),
+            source.data.eq(rx_data),
+            If(~rx_ctl[0],
+                source.error.eq(0),
+            ).Elif(~rx_ctl[1],
+                source.error.eq(1),
+            ),
         ]
         self.comb += source.last.eq(last)
 
