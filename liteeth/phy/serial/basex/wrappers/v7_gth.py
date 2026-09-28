@@ -6,6 +6,8 @@
 # Copyright (c) 2024 Gustavo Bastos <gustavocerq7gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import math
+
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
@@ -27,8 +29,11 @@ class V7_1000BASEX(LiteXModule):
     linerate    = 1.25e9
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
+    supported_refclk_freqs = (200e6, 156.25e6)
+
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
-        assert refclk_freq in [200e6, 156.25e6]
+        if refclk_freq not in self.supported_refclk_freqs:
+            raise ValueError(f"Unsupported reference clock {refclk_freq/1e6:g} MHz for {self.linerate/1e9:g} Gb/s V7 BASE-X.")
         self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
 
         self.sink    = pcs.sink
@@ -78,9 +83,17 @@ class V7_1000BASEX(LiteXModule):
         rx_mmcm_locked    = Signal()
         rx_mmcm_reset     = Signal(reset=1)
 
-        pll = GTHChannelPLL(refclk, 200e6, self.linerate)
+        pll = GTHChannelPLL(refclk, refclk_freq, self.linerate)
         self.submodules.pll = pll
-        print(pll)
+
+        # Divide the reference clock to at most 25 MHz for GTH calibration.
+        clk25_div = math.ceil(refclk_freq/25e6)
+        # Match LiteICLink's GTH CDR configuration to the selected output divider.
+        rxcdr_cfg = {
+            2 : 0x03000023ff10200020,
+            4 : 0x03000023ff10100020,
+            8 : 0x03000023ff10080020,
+        }[pll.config["d"]]
 
         gth_params = dict(
             # Simulation-Only Attributes
@@ -179,8 +192,8 @@ class V7_1000BASEX(LiteXModule):
             p_TERM_RCAL_CFG                = 0b10000,
             p_TERM_RCAL_OVRD               = 0b0,
             p_TST_RSV                      = 0x00000000,
-            p_RX_CLK25_DIV                 = 5,
-            p_TX_CLK25_DIV                 = 5,
+            p_RX_CLK25_DIV                 = clk25_div,
+            p_TX_CLK25_DIV                 = clk25_div,
             p_UCODEER_CLR                  = 0b0,
 
             # PCI Express Attributes
@@ -214,7 +227,7 @@ class V7_1000BASEX(LiteXModule):
             p_RX_DEFER_RESET_BUF_EN        = "TRUE",
 
             # CDR Attributes
-            p_RXCDR_CFG                    = 0x03000023ff10100020, # FIXME: Add 2.5Gbps config.
+            p_RXCDR_CFG                    = rxcdr_cfg,
             p_RXCDR_FR_RESET_ON_EIDLE      = 0b0,
             p_RXCDR_HOLD_DURING_EIDLE      = 0b0,
             p_RXCDR_PH_RESET_ON_EIDLE      = 0b0,
@@ -794,3 +807,11 @@ class V7_2500BASEX(V7_1000BASEX):
     linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6
+
+    supported_refclk_freqs = (156.25e6,)
+
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
+        with_csr=True, rx_polarity=0, tx_polarity=0):
+        super().__init__(refclk_or_clk_pads, data_pads, sys_clk_freq,
+            refclk_freq=refclk_freq, with_csr=with_csr,
+            rx_polarity=rx_polarity, tx_polarity=tx_polarity)
