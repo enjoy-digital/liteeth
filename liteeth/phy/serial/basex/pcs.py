@@ -540,9 +540,15 @@ class PCS(LiteXModule):
 
         # The PCS status originates in eth_tx. Both software and the event FSM consume
         # synchronized system-domain copies; the link-partner word uses its bus handshake.
+        link_up_tx  = Signal()
+        is_sgmii_tx = Signal()
+        self.sync.eth_tx += [
+            link_up_tx.eq(self.link_up),
+            is_sgmii_tx.eq(self.is_sgmii),
+        ]
         self.specials += [
-            MultiReg(self.link_up,  self.status.fields.link_up),
-            MultiReg(self.is_sgmii, self.status.fields.is_sgmii),
+            MultiReg(link_up_tx,  self.status.fields.link_up),
+            MultiReg(is_sgmii_tx, self.status.fields.is_sgmii),
         ]
 
         self.link_up_timer = link_up_timer = WaitTimer(int(sys_clk_freq))
