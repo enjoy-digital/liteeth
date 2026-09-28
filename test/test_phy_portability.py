@@ -94,6 +94,11 @@ class TestPHYPortability(unittest.TestCase):
                     clk25_div = {"k7_1000": 8, "k7_2500": 5}[name]
                     self.assertEqual(gtx_params["RX_CLK25_DIV"].value, clk25_div)
                     self.assertEqual(gtx_params["TX_CLK25_DIV"].value, clk25_div)
+                    rxcdr_cfg = {
+                        "k7_1000": 0x03000023ff10100020,
+                        "k7_2500": 0x03000023ff10200020,
+                    }[name]
+                    self.assertEqual(gtx_params["RXCDR_CFG"].value, rxcdr_cfg)
                 if name == "k7_2500":
                     self.assertEqual(phy.pll.config["clkin"], 125e6)
 
