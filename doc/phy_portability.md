@@ -3,8 +3,8 @@
 LiteEth keeps Ethernet protocol logic separate from the transceiver mode and
 board wiring. A PHY port should reuse the existing PCS, expose the same MAC
 interface, and add only the PMA behavior the new device needs. The broader
-LiteX architecture rules are proposed in
-[LiteX PR #2637](https://github.com/enjoy-digital/litex/pull/2637).
+LiteX architecture rules are documented in
+[LiteX's architectural style guide](https://github.com/enjoy-digital/litex/blob/master/doc/architectural_style.md).
 
 ## Ownership and Interfaces
 
