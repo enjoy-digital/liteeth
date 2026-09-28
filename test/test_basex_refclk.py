@@ -37,7 +37,7 @@ class TestBASEXReferenceClock(unittest.TestCase):
         for cls in (KU_2500BASEX, USP_GTH_2500BASEX, USP_GTY_2500BASEX):
             with self.subTest(phy=cls.__name__):
                 pads = Record([("txp", 1), ("txn", 1), ("rxp", 1), ("rxn", 1)])
-                with self.assertRaisesRegex(ValueError, "No config found"):
+                with self.assertRaisesRegex(ValueError, "Unsupported reference clock"):
                     cls(Signal(), pads, 100e6, refclk_freq=200e6, with_csr=False)
 
 

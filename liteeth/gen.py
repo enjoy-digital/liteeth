@@ -370,13 +370,6 @@ class PHYCore(SoCMini):
                 )
             # Other 7-Series/Ultrascale(+).
             else:
-                default_refclk_freq = {
-                    liteeth_phys.K7_2500BASEX      : 125e6,
-                    liteeth_phys.KU_2500BASEX      : 156.25e6,
-                    liteeth_phys.USP_GTH_2500BASEX : 156.25e6,
-                    liteeth_phys.USP_GTY_2500BASEX : 156.25e6,
-                }.get(phy, 200e6)
-                refclk_freq = core_config.get("refclk_freq", default_refclk_freq)
                 phy_kwargs = dict(
                     # General.
                     data_pads          = ethphy_pads,
@@ -384,12 +377,13 @@ class PHYCore(SoCMini):
                     with_csr           = False,
                     # Clocking.
                     refclk_or_clk_pads = ethphy_pads.refclk,
-                    refclk_freq        = refclk_freq,
                     # TX.
                     tx_polarity        = core_config.get("phy_tx_polarity", 0),
                     # RX.
                     rx_polarity        = core_config.get("phy_rx_polarity", 0),
                 )
+                if "refclk_freq" in core_config:
+                    phy_kwargs["refclk_freq"] = core_config["refclk_freq"]
                 if phy in [
                     liteeth_phys.USP_GTH_1000BASEX, liteeth_phys.USP_GTH_2500BASEX,
                     liteeth_phys.USP_GTY_1000BASEX, liteeth_phys.USP_GTY_2500BASEX,
