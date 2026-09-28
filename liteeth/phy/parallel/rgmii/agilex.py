@@ -102,7 +102,7 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
     def __init__(self):
         self.rx_ctl_raw  = rx_ctl_raw  = Signal(2)
         self.rx_data_raw = rx_data_raw = Signal(8)
-        self.source      = source      = stream.Endpoint(eth_phy_description(8))
+        self.source     = source      = stream.Endpoint(eth_phy_description(8))
 
         # # #
 
@@ -120,8 +120,13 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
         start_aligned   = Signal()
         start_unaligned = Signal()
         self.comb += [
-            start_aligned.eq(~rx_active &  rx_ctl_raw[0] &  rx_ctl_raw[1]),
-            start_unaligned.eq(~rx_active &  rx_ctl_raw[0] & ~rx_ctl_raw[1]),
+            # RX_CTL=01 is a valid byte with RX_ER, not an alignment request.
+            start_aligned.eq(~rx_active & rx_ctl_raw[0]),
+            # The shifted path joins the previous high nibble to the current low nibble.
+            # Its first sample has the first preamble nibble in the high half of the sample.
+            # Check that nibble to avoid treating idle RX_ER indications as frame starts.
+            start_unaligned.eq(~rx_active & ~rx_ctl_raw[0] & rx_ctl_raw[1] &
+                (rx_data_raw[4:8] == 0x5)),
         ]
 
         self.comb += [
@@ -141,7 +146,8 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
         ]
 
         self.sync += [
-            rx_active.eq(rx_ctl[0]),
+            # Keep the selected alignment while discarding the initial incomplete byte.
+            rx_active.eq(rx_ctl[0] | start_unaligned),
             If(~rx_active,
                 If(start_aligned,
                     rx_align.eq(0),
@@ -159,7 +165,11 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
         self.sync += [
             source.valid.eq(rx_ctl[0]),
             source.data.eq(rx_data),
-            source.error.eq(rx_ctl[0] ^ rx_ctl[1]),
+            If(~rx_ctl[0],
+                source.error.eq(0),
+            ).Elif(~rx_ctl[1],
+                source.error.eq(1),
+            ),
         ]
         self.comb += source.last.eq(last)
 

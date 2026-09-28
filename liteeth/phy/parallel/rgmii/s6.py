@@ -187,7 +187,11 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         self.sync += [
             source.valid.eq(rx_ctl_reg),
             source.data.eq(Cat(rx_data_reg[:4], rx_data[4:])),
-            source.error.eq(rx_ctl_reg ^ rx_ctl_falling),
+            If(~rx_ctl_reg,
+                source.error.eq(0),
+            ).Elif(~rx_ctl_falling,
+                source.error.eq(1),
+            ),
         ]
         self.comb += source.last.eq(last)
 
