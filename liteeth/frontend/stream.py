@@ -65,11 +65,11 @@ class LiteEthStream2UDPTX(LiteXModule):
         if with_csr:
             self.add_csr()
 
-        sink_be         = Signal(bytes_per_word)
-        sink_last_bytes = Signal(max=bytes_per_word + 1)
+        sink_be    = Signal(bytes_per_word)
+        sink_bytes = Signal(max=bytes_per_word + 1)
         self.comb += [
             sink_be.eq(sink.be if with_be else full_be),
-            sink_last_bytes.eq(sum(sink_be[i] for i in range(bytes_per_word))),
+            sink_bytes.eq(stream.byte_count(sink_be)),
         ]
 
         if fifo_depth is None:
@@ -80,7 +80,7 @@ class LiteEthStream2UDPTX(LiteXModule):
                 source.src_port.eq(self.udp_port),
                 source.dst_port.eq(self.udp_port),
                 source.ip_address.eq(self.ip_address),
-                source.length.eq(sink_last_bytes),
+                source.length.eq(sink_bytes),
             ]
         else:
             counter = Signal(max=fifo_depth+1)
@@ -91,7 +91,6 @@ class LiteEthStream2UDPTX(LiteXModule):
             packet_last   = Signal()
             packet_full   = Signal()
             packet_length = Signal(16)
-            packet_be     = Signal(bytes_per_word)
             source_active = Signal()
 
             fifo_payload_layout = [("data", data_width)]
@@ -117,15 +116,8 @@ class LiteEthStream2UDPTX(LiteXModule):
 
             self.comb += [
                 packet_last.eq(sink.last | packet_full),
-                # Last word of the packet: sink's be on sink.last, full word when split on a
-                # full FIFO.
-                If(sink.last,
-                    packet_be.eq(sink_be),
-                    packet_length.eq(counter*bytes_per_word + sink_last_bytes),
-                ).Else(
-                    packet_be.eq(full_be),
-                    packet_length.eq((counter + 1)*bytes_per_word),
-                ),
+                # Intermediate beats are full, including a beat closing a split packet.
+                packet_length.eq(counter*bytes_per_word + sink_bytes),
 
                 # Input.
                 sink.ready.eq(fifo.sink.ready),
@@ -146,7 +138,7 @@ class LiteEthStream2UDPTX(LiteXModule):
             ]
             if with_be:
                 self.comb += [
-                    fifo.sink.be.eq(Mux(packet_last, packet_be, full_be)),
+                    fifo.sink.be.eq(sink_be),
                     source.be.eq(fifo.source.be),
                 ]
             else:

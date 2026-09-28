@@ -197,3 +197,30 @@ class TestByteEnable(unittest.TestCase):
                 dut = LiteEthUDP2StreamRX(udp_port=1234, data_width=dw, fifo_depth=8, with_be=True)
                 received, _ = transfer(self, dut, packets, dw)
                 self.assertEqual(received, packets)
+
+class TestByteEnableLayouts(unittest.TestCase):
+    def test_final_word_masks(self):
+        from liteeth.common import eth_packet_last_mask
+        for width in [8, 16, 32, 64]:
+            lanes = width//8
+            dut = Module()
+            length = Signal(8)
+            mask = Signal(lanes)
+            dut.comb += mask.eq(eth_packet_last_mask(width, length))
+            def check():
+                for n in range(1, 3*lanes + 1):
+                    yield length.eq(n)
+                    yield
+                    used = (n - 1) % lanes + 1
+                    self.assertEqual((yield mask), sum(1 << i for i in range(used)))
+            run_simulation(dut, check())
+
+    def test_protocol_payloads_are_independent(self):
+        from liteeth.common import eth_udp_user_description, eth_ipv4_user_description
+        udp = eth_udp_user_description(32)
+        ip = eth_ipv4_user_description(32)
+        self.assertEqual(udp.payload_layout, [("data", 32), ("be", 4), ("error", 4)])
+        self.assertEqual(udp.payload_layout, ip.payload_layout)
+        udp.payload_layout.append(("extra", 1))
+        self.assertEqual(len(ip.payload_layout), 3)
+        self.assertEqual(len(eth_udp_user_description(32).payload_layout), 3)
