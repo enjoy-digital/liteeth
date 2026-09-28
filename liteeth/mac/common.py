@@ -46,8 +46,8 @@ class LiteEthMACUserPort(LiteEthMACSlavePort):
 
 
 class LiteEthMACCrossbar(LiteEthCrossbar):
-    def __init__(self, dw=8):
-        LiteEthCrossbar.__init__(self, LiteEthMACMasterPort, "ethernet_type", dw)
+    def __init__(self, dw=8, with_pipelining=False):
+        LiteEthCrossbar.__init__(self, LiteEthMACMasterPort, "ethernet_type", dw, with_pipelining)
 
     def get_port(self, ethernet_type, dw=8):
         port = LiteEthMACUserPort(dw)

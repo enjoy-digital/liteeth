@@ -7,11 +7,11 @@
 from litex.gen import *
 
 from litex.soc.interconnect        import stream
-from litex.soc.interconnect.packet import PacketFIFO
+from litex.soc.interconnect.packet import Depacketizer, PacketFIFO, Packetizer
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
-from litex.soc.interconnect.packet import Depacketizer, Packetizer
+from liteeth.fifo import PacketDropFIFO
 
 # UDP Crossbar -------------------------------------------------------------------------------------
 
@@ -35,8 +35,10 @@ class LiteEthUDPUserPort(LiteEthUDPSlavePort):
 
 
 class LiteEthUDPCrossbar(LiteEthCrossbar):
-    def __init__(self, dw=8):
-        self.dw = dw
+    def __init__(self, dw=8, eth_mtu=eth_mtu_default, with_store_and_forward=False):
+        self.dw                     = dw
+        self.eth_mtu                = eth_mtu
+        self.with_store_and_forward = with_store_and_forward
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
     def get_port(self, udp_port, dw=8, cd="sys", depth=None, tx_buffer_depth=None):
@@ -44,14 +46,21 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
 
         When dw is narrower than the crossbar, the TX up-converter only provides a full-width word
         every dw_crossbar/dw cycles, which PHYs that cannot pause a frame (ex XGMII) do not support.
-        tx_buffer_depth (in crossbar words) then adds a store-and-forward buffer after the converter
+        tx_buffer_depth (in crossbar words) adds a store-and-forward buffer after the converter
         so packets are sent back-to-back: it must hold the largest packet sent on the port.
+        When automatic store-and-forward is enabled, the buffer holds at least a full frame.
         """
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
         user_port     = LiteEthUDPUserPort(dw)
         internal_port = LiteEthUDPUserPort(self.dw)
+
+        # Per-Port Packet FIFOs.
+        # ----------------------
+        slower            = (dw < self.dw) or (cd != "sys")
+        with_packet_fifos = self.with_store_and_forward and slower
+        packet_fifo_depth = eth_packet_fifo_depth(self.eth_mtu, self.dw)
 
         # TX
         # ---
@@ -72,26 +81,42 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         )
         self.comb += tx_cdc.source.connect(tx_converter.sink)
 
-        # Store-and-Forward Buffer (Optional).
-        if tx_buffer_depth is not None:
-            self.tx_buffer = tx_buffer = PacketFIFO(eth_udp_user_description(self.dw),
-                payload_depth = tx_buffer_depth,
-                param_depth   = 2,
+        # Store-and-Forward (Optional): assemble the whole packet before sending.
+        tx_source = tx_converter.source
+        if with_packet_fifos or tx_buffer_depth is not None:
+            fifo_depth = tx_buffer_depth
+            if with_packet_fifos:
+                fifo_depth = max(packet_fifo_depth, fifo_depth or 0)
+            self.tx_buffer = tx_buffer = PacketFIFO(
+                eth_udp_user_description(self.dw),
+                payload_depth = fifo_depth,
+                param_depth   = 4 if with_packet_fifos else 2,
+                buffered      = with_packet_fifos,
             )
             self.comb += tx_converter.source.connect(tx_buffer.sink)
-            tx_converter = tx_buffer
+            tx_source = tx_buffer.source
 
         # Interface.
-        self.comb += tx_converter.source.connect(internal_port.sink)
+        self.comb += tx_source.connect(internal_port.sink)
 
         # RX
         # --
+        # Store-and-Forward (Optional): take the burst off the shared path, drop what will not fit.
+        rx_source = internal_port.source
+        if with_packet_fifos:
+            self.rx_packet_fifo = rx_packet_fifo = PacketDropFIFO(
+                eth_udp_user_description(self.dw),
+                payload_depth = packet_fifo_depth,
+            )
+            self.comb += internal_port.source.connect(rx_packet_fifo.sink)
+            rx_source = rx_packet_fifo.source
+
         # Data-Width Conversion.
         self.rx_converter = rx_converter = stream.StrideConverter(
             description_from = eth_udp_user_description(self.dw),
             description_to   = eth_udp_user_description(user_port.dw)
         )
-        self.comb += internal_port.source.connect(rx_converter.sink)
+        self.comb += rx_source.connect(rx_converter.sink)
 
         # CDC.
         self.rx_cdc = rx_cdc = stream.ClockDomainCrossing(
@@ -252,7 +277,7 @@ class LiteEthUDPRX(LiteXModule):
 # UDP ----------------------------------------------------------------------------------------------
 
 class LiteEthUDP(LiteXModule):
-    def __init__(self, ip, ip_address, dw=8):
+    def __init__(self, ip, ip_address, dw=8, eth_mtu=eth_mtu_default, with_store_and_forward=False):
         self.tx = tx = LiteEthUDPTX(ip_address, dw)
         self.rx = rx = LiteEthUDPRX(ip_address, dw)
         ip_port = ip.crossbar.get_port(udp_protocol, dw)
@@ -260,7 +285,10 @@ class LiteEthUDP(LiteXModule):
             tx.source.connect(ip_port.sink),
             ip_port.source.connect(rx.sink)
         ]
-        self.crossbar = crossbar = LiteEthUDPCrossbar(dw)
+        self.crossbar = crossbar = LiteEthUDPCrossbar(dw,
+            eth_mtu                = eth_mtu,
+            with_store_and_forward = with_store_and_forward,
+        )
         self.comb += [
             crossbar.master.source.connect(tx.sink),
             rx.source.connect(crossbar.master.sink)

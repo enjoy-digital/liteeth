@@ -68,6 +68,17 @@ class TestUDPCrossbar(unittest.TestCase):
         self.assertEqual(recvd, sent)
         self.assertGreater(bubbles, 0)
 
+    def test_auto_and_explicit_buffer_share_fifo(self):
+        crossbar = LiteEthUDPCrossbar(64, with_store_and_forward=True)
+        crossbar.get_port(0x1234, dw=32, tx_buffer_depth=16)
+        self.assertEqual(crossbar.tx_buffer.payload_fifo.depth,
+            eth_packet_fifo_depth(eth_mtu_default, 64))
+        self.assertTrue(hasattr(crossbar, "rx_packet_fifo"))
+
+        crossbar = LiteEthUDPCrossbar(64, with_store_and_forward=True)
+        crossbar.get_port(0x1234, dw=32, tx_buffer_depth=512)
+        self.assertEqual(crossbar.tx_buffer.payload_fifo.depth, 512)
+
     def test_etherbone_tx_buffer(self):
         # Etherbone (32-bit port) requests a TX buffer holding its largest reply on wide cores only.
         from liteeth.core import LiteEthUDPIPCore
