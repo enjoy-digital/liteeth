@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from migen import ClockDomain, Signal
+from migen.fhdl.structure import _Assign
 from migen.genlib.cdc import MultiReg
 
 from litex.gen import LiteXContext, LiteXModule
@@ -48,13 +49,17 @@ class TestBASEXStatus(unittest.TestCase):
 
     def test_status_uses_cdc_helpers(self):
         dut = StatusDUT()
-        synchronizers = [s for s in dut.get_fragment().specials if isinstance(s, MultiReg)]
+        fragment = dut.get_fragment()
+        synchronizers = [s for s in fragment.specials if isinstance(s, MultiReg)]
         for source, destination in (
             (dut.link_up, dut.status.fields.link_up),
             (dut.is_sgmii, dut.status.fields.is_sgmii),
         ):
-            self.assertTrue(any(s.i is source and s.o is destination and s.odomain == "sys"
-                and s.n >= 2 for s in synchronizers))
+            synchronizer = next(s for s in synchronizers if s.o is destination)
+            self.assertEqual(synchronizer.odomain, "sys")
+            self.assertGreaterEqual(synchronizer.n, 2)
+            self.assertTrue(any(isinstance(s, _Assign) and s.l is synchronizer.i and s.r is source
+                for s in fragment.sync["eth_tx"]))
 
     def test_status_and_debounced_event_with_independent_clocks(self):
         for tx_period in (6, 14):
