@@ -37,6 +37,24 @@ Only the shared MDIO and hardware-reset helpers remain in the top-level
 `common.py`. Keep device-specific primitive parameters visible; sharing a PLL
 or reset helper does not imply that two line codes share a PMA.
 
+## Adding or Changing a PHY
+
+- Put Ethernet coding, autonegotiation, and packet behavior in the relevant PCS.
+- Put device primitives, serialization, clock recovery, and device initialization
+  in a mode-specific PMA. Keep primitive parameters and clock/reset sequencing visible.
+- Use a device wrapper to connect the PCS and PMA, expose the MAC stream, and
+  provide public controls and CSRs. Keep rate variants small and explicit.
+- Keep pin selection, reference-clock source, and board policy in the target/platform.
+- Use canonical imports in implementation code and benches. The package exports
+  serve the generator; the central alias table preserves established direct imports.
+
+Follow [LiteX coding style](https://github.com/enjoy-digital/litex/blob/master/doc/coding_style.md)
+and the ownership/interface rules in [PHY portability](phy_portability.md).
+Parallel PHYs can keep their device-local TX/RX/CRG classes; they do not need a
+common superclass merely to share a few assignments or CSR declarations.
+
+## Compatibility
+
 For each established import, preserve class identity through the old path,
 positional and keyword constructor arguments, stream widths, clock-domain names,
 CSR layout and descriptions, and generator YAML names. Compare elaborated vendor

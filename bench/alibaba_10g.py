@@ -22,7 +22,7 @@ from litex.soc.cores.led     import LedChaser
 from litex.soc.cores.bitbang import I2CMaster
 
 from liteeth.common import eth_mtu_default
-from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_1000BASEX
 from liteeth.phy.serial.baser.wrappers.usp_gt import USP_GTY_10G_BASER, USP_GTY_5G_BASER, USP_GTY_25G_BASER
 
 # CRG ----------------------------------------------------------------------------------------------

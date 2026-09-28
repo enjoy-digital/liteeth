@@ -54,7 +54,7 @@ from litex.soc.integration.builder import *
 from litex.soc.cores.led import LedChaser
 
 from liteeth.phy.serial.gtp_7series import QPLLSettings, QPLL
-from liteeth.phy.a7_1000basex import A7_1000BASEX
+from liteeth.phy.serial.basex.wrappers.a7_gtp import A7_1000BASEX
 from liteeth.core.ptp import LiteEthPTP
 
 # CRG ----------------------------------------------------------------------------------------------
