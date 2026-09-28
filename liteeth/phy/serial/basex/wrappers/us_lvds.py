@@ -130,6 +130,15 @@ class US_LVDS_1000BASEX(LiteXModule):
         # The SerDes domains talk to the eth_rx/eth_tx domains through AsyncFIFOs only.
         platform.add_false_path_constraints(crg.cd_eth_rx.clk, crg.cd_eth_rx_div.clk)
         platform.add_false_path_constraints(crg.cd_eth_tx.clk, crg.cd_eth_tx_div.clk)
+        # ISERDESE3/OSERDESE3 CLK (BUFG, 625 MHz) and CLKDIV (BUFGCE_DIV, 156.25 MHz) come from
+        # the same MMCM output but the router only matches their delays when told to (UG949):
+        # one clock delay group per direction.
+        for name, ser, div in [
+            ("eth_rx_ser_clks", crg.cd_eth_rx_ser.clk, crg.cd_eth_rx_div.clk),
+            ("eth_tx_ser_clks", crg.cd_eth_tx_ser.clk, crg.cd_eth_tx_div.clk)]:
+            platform.add_platform_command(
+                "set_property CLOCK_DELAY_GROUP " + name + " [get_nets {{{ser} {div}}}]",
+                ser=ser, div=div)
 
         # TX.
         # ---
