@@ -24,8 +24,12 @@ class KU_1000BASEX(LiteXModule):
     linerate    = 1.25e9
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
+
+    supported_refclk_freqs = (200e6, 156.25e6)
+
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
-        assert refclk_freq in [200e6, 156.25e6]
+        if refclk_freq not in self.supported_refclk_freqs:
+            raise ValueError(f"Unsupported reference clock {refclk_freq/1e6:g} MHz for {type(self).__name__}.")
         self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
 
         self.sink    = pcs.sink
@@ -70,6 +74,8 @@ class KU_2500BASEX(KU_1000BASEX):
     linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6
+
+    supported_refclk_freqs = (156.25e6,)
 
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
         with_csr=True, rx_polarity=0, tx_polarity=0):
