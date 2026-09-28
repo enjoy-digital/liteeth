@@ -15,11 +15,11 @@ from liteiclink.serdes.gtx_7series import GTXQuadPLL
 
 from liteeth.phy.serial.gtp_7series import QPLLChannel
 from liteeth.phy.a7_1000basex import A7_1000BASEX, A7_2500BASEX
-from liteeth.phy.serial.baser.a7_gtp import A7_GTP_5G_BASER
-from liteeth.phy.serial.baser.diagnostics import LiteEthBASERPHY
+from liteeth.phy.serial.baser.wrappers.a7_gtp import A7_GTP_5G_BASER
+from liteeth.phy.serial.baser.wrappers.diagnostics import LiteEthBASERPHY
 from liteeth.phy.k7_1000basex import K7_1000BASEX, K7_2500BASEX
-from liteeth.phy.serial.baser.k7_gtx import K7_GTX_10G_BASER, K7_GTX_5G_BASER
-from liteeth.phy.serial.baser.usp_gt import (
+from liteeth.phy.serial.baser.wrappers.k7_gtx import K7_GTX_10G_BASER, K7_GTX_5G_BASER
+from liteeth.phy.serial.baser.wrappers.usp_gt import (
     USP_GTH_10G_BASER, USP_GTH_5G_BASER,
     USP_GTY_10G_BASER, USP_GTY_5G_BASER, USP_GTY_25G_BASER,
 )
