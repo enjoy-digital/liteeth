@@ -9,18 +9,18 @@ def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
     if hasattr(clock_pads, "gtx") and len(pads.tx_data) == 8:
         if hasattr(clock_pads, "tx"):
             # This is a 10/100/1G PHY
-            from liteeth.phy.gmii_mii import LiteEthPHYGMIIMII
+            from liteeth.phy.parallel.gmii_mii import LiteEthPHYGMIIMII
             return LiteEthPHYGMIIMII(clock_pads, pads, clk_freq=clk_freq, **kwargs)
         else:
             # This is a pure 1G PHY
-            from liteeth.phy.gmii import LiteEthPHYGMII
+            from liteeth.phy.parallel.gmii import LiteEthPHYGMII
             return LiteEthPHYGMII(clock_pads, pads, **kwargs)
     elif hasattr(pads, "rx_ctl"):
         # This is a 10/100/1G RGMII PHY
         raise ValueError("RGMII PHYs are specific to vendors (for now), use direct instantiation")
     elif len(pads.tx_data) == 4:
         # This is a MII PHY
-        from liteeth.phy.mii import LiteEthPHYMII
+        from liteeth.phy.parallel.mii import LiteEthPHYMII
         return LiteEthPHYMII(clock_pads, pads, **kwargs)
     else:
         raise ValueError("Unable to autodetect PHY from platform file, use direct instantiation")
@@ -29,6 +29,13 @@ def LiteEthPHY(clock_pads, pads, clk_freq=None, **kwargs):
 # Keep established direct imports pointing at the implementation modules. Registering
 # the modules themselves also preserves module-level patching by downstream targets.
 _legacy_modules = {
+    "mii":                    "parallel.mii",
+    "rmii":                   "parallel.rmii",
+    "gmii":                   "parallel.gmii",
+    "gmii_mii":               "parallel.gmii_mii",
+    "xgmii":                  "parallel.xgmii",
+    "model":                  "simulation.model",
+    "a7_gtp":                 "serial.gtp_7series",
     "pcs_1000basex":          "serial.basex.pcs",
     "a7_1000basex":           "serial.basex.a7_gtp",
     "k7_1000basex":           "serial.basex.k7_gtx",
@@ -54,11 +61,11 @@ for _legacy_name, _module_name in _legacy_modules.items():
     globals()[_legacy_name] = _module
 del _legacy_name, _module_name, _module
 
-from liteeth.phy.mii      import LiteEthPHYMII
-from liteeth.phy.rmii     import LiteEthPHYRMII
-from liteeth.phy.gmii     import LiteEthPHYGMII
-from liteeth.phy.gmii_mii import LiteEthPHYGMIIMII
-from liteeth.phy.xgmii    import LiteEthPHYXGMII
+from liteeth.phy.parallel.mii      import LiteEthPHYMII
+from liteeth.phy.parallel.rmii     import LiteEthPHYRMII
+from liteeth.phy.parallel.gmii     import LiteEthPHYGMII
+from liteeth.phy.parallel.gmii_mii import LiteEthPHYGMIIMII
+from liteeth.phy.parallel.xgmii    import LiteEthPHYXGMII
 
 from liteeth.phy.s6rgmii   import LiteEthPHYRGMII as LiteEthS6PHYRGMII
 from liteeth.phy.s7rgmii   import LiteEthPHYRGMII as LiteEthS7PHYRGMII

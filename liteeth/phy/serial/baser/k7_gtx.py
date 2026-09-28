@@ -12,7 +12,7 @@ from liteiclink.serdes.gtx_7series import GTXQuadPLL
 
 from liteeth.common import *
 from liteeth.phy.serial.baser.diagnostics import LiteEthBASERPHY
-from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
+from liteeth.phy.parallel.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
 from liteeth.phy.serial.baser.pcs import PCS
 from liteeth.phy.serial.baser.pma.gtx_7series import PMA_K7_GTX_10G_BASER, PMA_K7_GTX_5G_BASER
 

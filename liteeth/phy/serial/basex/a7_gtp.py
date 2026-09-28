@@ -15,7 +15,7 @@ from litex.gen import *
 from litex.soc.cores.clock import S7PLL, S7MMCM
 
 from liteeth.common import *
-from liteeth.phy.a7_gtp import *
+from liteeth.phy.serial.gtp_7series import *
 from liteeth.phy.serial.basex.pcs import *
 
 # A7_1000BASEX PHY ---------------------------------------------------------------------------------

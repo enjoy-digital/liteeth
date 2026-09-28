@@ -12,7 +12,7 @@ from pathlib import Path
 from migen import *
 
 from litex.soc.interconnect.stream import *
-from liteeth.phy.xgmii import LiteEthPHYXGMII, LiteEthPHYXGMIIRX
+from liteeth.phy.parallel.xgmii import LiteEthPHYXGMII, LiteEthPHYXGMIIRX
 
 from test.test_stream import StreamPacket, stream_inserter, stream_collector, compare_packets
 

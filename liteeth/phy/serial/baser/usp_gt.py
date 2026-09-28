@@ -17,7 +17,7 @@ from liteeth.phy.serial.baser.diagnostics import LiteEthBASERPHY
 from liteeth.phy.serial.baser.pcs import PCS
 from liteeth.phy.serial.baser.pma import (PMA_USP_GTY_10G_BASER, PMA_USP_GTH_10G_BASER,
                                 PMA_USP_GTY_5G_BASER, PMA_USP_GTH_5G_BASER, PMA_USP_GTY_25G_BASER)
-from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
+from liteeth.phy.parallel.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
 
 # UltraScale+ BASE-R PHY ---------------------------------------------------------------------------
 

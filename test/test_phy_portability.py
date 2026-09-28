@@ -13,7 +13,7 @@ from litex.gen.sim import run_simulation
 
 from liteiclink.serdes.gtx_7series import GTXQuadPLL
 
-from liteeth.phy.a7_gtp import QPLLChannel
+from liteeth.phy.serial.gtp_7series import QPLLChannel
 from liteeth.phy.a7_1000basex import A7_1000BASEX, A7_2500BASEX
 from liteeth.phy.serial.baser.a7_gtp import A7_GTP_5G_BASER
 from liteeth.phy.serial.baser.diagnostics import LiteEthBASERPHY

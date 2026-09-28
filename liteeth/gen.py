@@ -332,7 +332,7 @@ class PHYCore(SoCMini):
                 qpll_channel_index = core_config.get("qpll_channel", 0)
                 assert qpll_channel_index in [0, 1]
                 if core_config.get("qpll", True):
-                    from liteeth.phy.a7_gtp import QPLLSettings, QPLL
+                    from liteeth.phy.serial.gtp_7series import QPLLSettings, QPLL
                     qpll_settings = QPLLSettings(
                         refclksel  = 0b001,
                         fbdiv      = {
@@ -412,7 +412,7 @@ class PHYCore(SoCMini):
         # in the project using the core.
         eth_rx_clk = getattr(ethphy, "crg", ethphy).cd_eth_rx.clk
         eth_tx_clk = getattr(ethphy, "crg", ethphy).cd_eth_tx.clk
-        from liteeth.phy.model import LiteEthPHYModel
+        from liteeth.phy.simulation.model import LiteEthPHYModel
         if not isinstance(ethphy, LiteEthPHYModel):
             self.platform.add_period_constraint(eth_rx_clk, 1e9/phy.rx_clk_freq)
             self.platform.add_period_constraint(eth_tx_clk, 1e9/phy.tx_clk_freq)

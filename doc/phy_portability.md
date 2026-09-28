@@ -14,6 +14,8 @@ LiteX architecture rules are documented in
 | 5/10/25GBASE-R PCS | `liteeth/phy/serial/baser/pcs/` | 64b/66b coding, scrambling, block sync, BER, and XGMII |
 | BASE-R PMAs | `liteeth/phy/serial/baser/pma/` | Vendor primitive in 64b/66b mode, gearbox cadence, clock/reset, and bitslip |
 | PHY wrappers | `liteeth/phy/serial/{basex,baser}/` | MAC stream, PCS/PMA wiring, public controls, and CSRs |
+| Parallel PHYs | `liteeth/phy/parallel/` | MII, RMII, GMII, XGMII, and vendor RGMII adapters |
+| Simulation PHY | `liteeth/phy/simulation/model.py` | Stream-based model for software and gateware simulation |
 | Shared transceiver helpers | `liteiclink/serdes/` | PLLs, DRP, and applicable initialization sequences |
 | Board targets and platforms | LiteX targets/platforms | Pins, reference clock source, transceiver channel, and timing constraints |
 | Standalone generator | `liteeth/gen.py` | Core configuration, PHY selection, and rate-compatible reference clock defaults |
@@ -37,9 +39,9 @@ PLL configuration.
 
 The BASE-R GTY/GTH/GTX PMAs already reuse LiteICLink PLL, DRP, and reset/init
 helpers. The 7-series GTP PMA currently reuses the older GTP initialization
-logic in `liteeth/phy/a7_gtp.py`. LiteICLink's generic GTP/GTX/GTH/GTY
-SerDes classes contain 8b/10b encoding and are limited to their 20/40-bit
-data modes. Their primitive instances cannot replace a BASE-R PMA without
+logic in `liteeth/phy/serial/gtp_7series.py`. LiteICLink's generic
+GTP/GTX/GTH/GTY SerDes classes contain 8b/10b encoding and are limited to
+their 20/40-bit data modes. Their primitive instances cannot replace a BASE-R PMA without
 adding the 64b/66b gearbox and matching its clock and reset behavior. The
 device-specific primitive parameter tables therefore remain in the PMAs.
 

@@ -14,7 +14,7 @@ from litex.gen import *
 
 from liteeth.common import *
 from liteeth.phy.serial.baser.diagnostics import LiteEthBASERPHY
-from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
+from liteeth.phy.parallel.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
 from liteeth.phy.serial.baser.pcs import PCS
 from liteeth.phy.serial.baser.pma.gtp_7series import PMA_A7_GTP_5G_BASER
 
