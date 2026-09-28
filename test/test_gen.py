@@ -4,6 +4,7 @@
 # Copyright (c) 2019-2020 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import os
 import re
 import sys
 import copy
@@ -20,12 +21,21 @@ _repo_root    = Path(__file__).resolve().parents[1]
 _examples_dir = _repo_root / "examples"
 _build_dir    = _examples_dir / "build"
 
+def generator_env():
+    env = os.environ.copy()
+    paths = [str(_repo_root)]
+    if env.get("PYTHONPATH"):
+        paths.append(env["PYTHONPATH"])
+    env["PYTHONPATH"] = os.pathsep.join(paths)
+    return env
+
 def build_config(name):
     shutil.rmtree(_build_dir, ignore_errors=True)
     try:
         subprocess.run(
             [sys.executable, str(_repo_root / "liteeth" / "gen.py"), f"{name}.yml"],
             cwd   = _examples_dir,
+            env   = generator_env(),
             check = True,
         )
         return int(not (_build_dir / "gateware" / "liteeth_core.v").is_file())
@@ -49,7 +59,7 @@ def generate_config(name, **overrides):
             yaml.dump(config, f)
         gen_cmd = [sys.executable, str(_repo_root / "liteeth" / "gen.py"), str(config_yml)]
         gen_cmd += ["--output-dir", str(tmp / "build")]
-        subprocess.run(gen_cmd, cwd=tmp, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(gen_cmd, cwd=tmp, env=generator_env(), check=True, stdout=subprocess.DEVNULL)
         with open(tmp / "build" / "gateware" / "liteeth_core.v", "r", encoding="utf-8") as f:
             return f.read()
 
@@ -78,6 +88,27 @@ class TestExamples(unittest.TestCase):
 # Test Generated Core ------------------------------------------------------------------------------
 
 class TestGeneratedCore(unittest.TestCase):
+    def test_basex_phy_generation(self):
+        for phy, primitive in [
+            ("K7_1000BASEX", "GTXE2_CHANNEL"),
+            ("K7_2500BASEX", "GTXE2_CHANNEL"),
+            ("KU_1000BASEX", "GTHE3_CHANNEL"),
+            ("KU_2500BASEX", "GTHE3_CHANNEL"),
+            ("USP_GTH_2500BASEX", "GTHE4_CHANNEL"),
+            ("USP_GTY_2500BASEX", "GTYE4_CHANNEL"),
+        ]:
+            with self.subTest(phy=phy):
+                verilog = generate_config("udp_s7phyrgmii", phy=phy)
+                self.assertIn(primitive, verilog)
+
+    def test_basex_explicit_reference_overrides_constructor_default(self):
+        for refclk, divider in ((None, 8), (156.25e6, 7)):
+            with self.subTest(refclk=refclk):
+                verilog = generate_config("udp_s7phyrgmii", phy="KU_1000BASEX", refclk_freq=refclk)
+                match = re.search(r"\.TX_CLK25_DIV\s*\(\s*(?:\d+'d)?(\d+)\s*\)", verilog)
+                self.assertIsNotNone(match, "Missing TX_CLK25_DIV parameter")
+                self.assertEqual(int(match[1]), divider)
+
     def test_udp_streamer_tkeep_pins(self):
         # tkeep pins are exposed by default and removed with with_tkeep: False.
         verilog = generate_config("udp_xgmii_jumbo")

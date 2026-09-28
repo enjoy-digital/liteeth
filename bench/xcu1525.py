@@ -22,7 +22,7 @@ from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.usp_gty_1000basex import USP_GTY_1000BASEX
+from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_1000BASEX
 
 # CRG ----------------------------------------------------------------------------------------------
 

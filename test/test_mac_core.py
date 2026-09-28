@@ -21,10 +21,13 @@ from litex.gen.sim import *
 # DUT ----------------------------------------------------------------------------------------------
 
 class DUT(LiteXModule):
-    def __init__(self):
+    def __init__(self, with_store_and_forward=False, rx_clk_freq=None):
         self.phy_model = phy.PHY(8, debug=False)
+        if rx_clk_freq is not None:
+            self.phy_model.rx_clk_freq = rx_clk_freq
         self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=True)
-        self.core      = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True)
+        self.core      = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True,
+            with_store_and_forward=with_store_and_forward)
 
         self.streamer = PacketStreamer(eth_phy_description(8), last_be=1)
         self.streamer_randomizer = Randomizer(eth_phy_description(8), level=50)
@@ -66,8 +69,8 @@ def main_generator(dut):
 # Test MAC Core ------------------------------------------------------------------------------------
 
 class TestMACCore(unittest.TestCase):
-    def test(self):
-        dut = DUT()
+    def loopback_test(self, with_store_and_forward, rx_clk_freq=None):
+        dut = DUT(with_store_and_forward=with_store_and_forward, rx_clk_freq=rx_clk_freq)
         generators = {
             "sys" :   [
                 main_generator(dut),
@@ -90,3 +93,14 @@ class TestMACCore(unittest.TestCase):
             "eth_tx" : 10,
         }
         run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+
+    def test(self):
+        self.loopback_test(with_store_and_forward=False)
+
+    def test_store_and_forward(self):
+        self.loopback_test(with_store_and_forward=True)
+
+    def test_store_and_forward_pipelined(self):
+        # A PHY clock above eth_pipelining_clk_freq adds the register stage ahead of the transmit
+        # packet FIFO.
+        self.loopback_test(with_store_and_forward=True, rx_clk_freq=390.625e6)

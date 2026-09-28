@@ -33,15 +33,22 @@ PHY:
   - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
   - SGMII / 2500BaseX 3.125Gbps PHYs.
   - SGMII / 1000BaseX over LVDS SelectIO 1Gbps PHYs (Titanium, UltraScale/UltraScale+).
+  - 5/10/25GBASE-R PHYs on selected Xilinx 7-Series and UltraScale+ transceivers.
 
-| -     | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
-|-------|-----|------|----------|-------|----------|----------|---------------|
-| MII   |  X  |  X  |      X    |   X   |     X    |     X    |       X       |
-| RMII  |  X  |  X  |      X    |   X   |     X    |     X    |       X       |
-| GMII  |     |     |      X    |       |          |     X    |       X       |
-| RGMII |     |  X  |      X    |   X   |     X    |     X    |       X       |
-| SGMII |     |     |           |       |          |     X    |       X       |
-| LVDS  |     |     |           |       |     X    |          |       X       |
+Transceiver PHY architecture and porting guidance: [doc/phy_portability.md](doc/phy_portability.md).
+PHY layout and import compatibility: [doc/phy_layout.md](doc/phy_layout.md).
+
+| PHY       | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
+|-----------|-----|------|----------|-------|----------|----------|---------------|
+| MII       |  X  |  X   |     X    |   X   |     X    |     X    |       X       |
+| RMII      |  X  |  X   |     X    |   X   |     X    |     X    |       X       |
+| GMII      |     |      |     X    |       |          |     X    |       X       |
+| RGMII     |     |  X   |     X    |   X   |     X    |     X    |       X       |
+| SGMII     |     |      |          |       |          |     X    |       X       |
+| LVDS      |     |      |          |       |     X    |          |       X       |
+| 5GBASE-R  |     |      |          |       |          |     X    |       X       |
+| 10GBASE-R |     |      |          |       |          |     X    |       X       |
+| 25GBASE-R |     |      |          |       |          |          |       X       |
 
 
 Core:

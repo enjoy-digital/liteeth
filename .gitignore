@@ -45,6 +45,8 @@ coverage.xml
 *,cover
 .hypothesis/
 sim.vcd
+crc_test*.vcd
+serdes_sim*.vcd
 
 # Translations
 *.mo

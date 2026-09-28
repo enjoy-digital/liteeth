@@ -332,7 +332,7 @@ class PHYCore(SoCMini):
                 qpll_channel_index = core_config.get("qpll_channel", 0)
                 assert qpll_channel_index in [0, 1]
                 if core_config.get("qpll", True):
-                    from liteeth.phy.a7_gtp import QPLLSettings, QPLL
+                    from liteeth.phy.serial.gtp_7series import QPLLSettings, QPLL
                     qpll_settings = QPLLSettings(
                         refclksel  = 0b001,
                         fbdiv      = {
@@ -370,20 +370,26 @@ class PHYCore(SoCMini):
                 )
             # Other 7-Series/Ultrascale(+).
             else:
-                ethphy = phy(
+                phy_kwargs = dict(
                     # General.
                     data_pads          = ethphy_pads,
                     sys_clk_freq       = self.clk_freq,
                     with_csr           = False,
                     # Clocking.
                     refclk_or_clk_pads = ethphy_pads.refclk,
-                    refclk_freq        = core_config.get("refclk_freq", 200e6),
-                    refclk_from_fabric = core_config.get("refclk_from_fabric", True),
                     # TX.
                     tx_polarity        = core_config.get("phy_tx_polarity", 0),
                     # RX.
                     rx_polarity        = core_config.get("phy_rx_polarity", 0),
                 )
+                if "refclk_freq" in core_config:
+                    phy_kwargs["refclk_freq"] = core_config["refclk_freq"]
+                if phy in [
+                    liteeth_phys.USP_GTH_1000BASEX, liteeth_phys.USP_GTH_2500BASEX,
+                    liteeth_phys.USP_GTY_1000BASEX, liteeth_phys.USP_GTY_2500BASEX,
+                ]:
+                    phy_kwargs["refclk_from_fabric"] = core_config.get("refclk_from_fabric", True)
+                ethphy = phy(**phy_kwargs)
             self.comb += [
                 ethphy.reset.eq(ethphy_pads.rst),
                 ethphy_pads.link_up.eq(ethphy.link_up),
@@ -405,7 +411,7 @@ class PHYCore(SoCMini):
         # in the project using the core.
         eth_rx_clk = getattr(ethphy, "crg", ethphy).cd_eth_rx.clk
         eth_tx_clk = getattr(ethphy, "crg", ethphy).cd_eth_tx.clk
-        from liteeth.phy.model import LiteEthPHYModel
+        from liteeth.phy.simulation.model import LiteEthPHYModel
         if not isinstance(ethphy, LiteEthPHYModel):
             self.platform.add_period_constraint(eth_rx_clk, 1e9/phy.rx_clk_freq)
             self.platform.add_period_constraint(eth_tx_clk, 1e9/phy.tx_clk_freq)

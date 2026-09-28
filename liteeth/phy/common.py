@@ -50,9 +50,9 @@ class LiteEthPHYMDIO(LiteXModule):
         data_oe = Signal()
         data_r  = Signal()
         self.comb += [
-            pads.mdc.eq(self._w.storage[0]),
-            data_oe.eq( self._w.storage[1]),
-            data_w.eq(  self._w.storage[2]),
+            pads.mdc.eq(self._w.fields.mdc),
+            data_oe.eq( self._w.fields.oe),
+            data_w.eq(  self._w.fields.w),
         ]
-        self.specials += MultiReg(data_r, self._r.status[0])
+        self.specials += MultiReg(data_r, self._r.fields.r)
         self.specials += Tristate(pads.mdio, data_w, data_oe, data_r)

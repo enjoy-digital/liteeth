@@ -19,7 +19,7 @@ from litex.build.sim.config import SimConfig
 from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.model import LiteEthPHYModel
+from liteeth.phy.simulation.model import LiteEthPHYModel
 
 # IOs ----------------------------------------------------------------------------------------------
 
