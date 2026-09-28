@@ -200,8 +200,7 @@ def get_udp_port_ios(name, data_width, dynamic_params=False, with_tkeep=True):
         ),
     ]
 
-def get_udp_raw_port_ios(name, data_width, with_last_be=False):
-    byte_enable = "last_be" if with_last_be else "be"
+def get_udp_raw_port_ios(name, data_width):
     return [
         (f"{name}", 0,
 
@@ -214,7 +213,7 @@ def get_udp_raw_port_ios(name, data_width, with_last_be=False):
             Subsignal("sink_last",       Pins(1)),
             Subsignal("sink_ready",      Pins(1)),
             Subsignal("sink_data",       Pins(data_width)),
-            Subsignal(f"sink_{byte_enable}", Pins(data_width//8)),
+            Subsignal("sink_be",         Pins(data_width//8)),
 
             # Source.
             Subsignal("source_ip_address", Pins(32)),
@@ -225,7 +224,7 @@ def get_udp_raw_port_ios(name, data_width, with_last_be=False):
             Subsignal("source_last",       Pins(1)),
             Subsignal("source_ready",      Pins(1)),
             Subsignal("source_data",       Pins(data_width)),
-            Subsignal(f"source_{byte_enable}", Pins(data_width//8)),
+            Subsignal("source_be",         Pins(data_width//8)),
             Subsignal("source_error",      Pins(1)),
         ),
     ]
@@ -569,57 +568,45 @@ class UDPCore(PHYCore):
 
     def add_raw_port(self, platform, name, port_cfg):
         # Use default Data-Width of 8-bit when not specified.
-        data_width   = port_cfg.get("data_width", 8)
-        with_last_be = port_cfg.get("with_last_be", False)
+        data_width = port_cfg.get("data_width", 8)
 
         # Create/Add IOs.
-         # ---------------
+        # ---------------
         platform.add_extension(get_udp_raw_port_ios(name,
-            data_width   = data_width,
-            with_last_be = with_last_be,
-         ))
+            data_width = data_width,
+        ))
 
         port_ios = platform.request(name)
 
         raw_port = self.core.udp.crossbar.get_port(port_ios.sink_dst_port, dw=data_width)
 
-        if with_last_be:
-            tx_legacy = stream.LastBEConverter(raw_port.sink.description)
-            rx_legacy = stream.LastBEConverter(raw_port.source.description, reverse=True)
-            self.submodules += tx_legacy, rx_legacy
-            self.comb += [tx_legacy.source.connect(raw_port.sink), raw_port.source.connect(rx_legacy.sink)]
-            raw_sink, raw_source = tx_legacy.sink, rx_legacy.source
-        else:
-            raw_sink, raw_source = raw_port.sink, raw_port.source
-        byte_enable = "last_be" if with_last_be else "be"
-
         # Connect IOs.
         # ------------
         # Connect UDP Sink IOs to UDP.
         self.comb += [
-            raw_sink.valid.eq(port_ios.sink_valid),
-            raw_sink.last.eq(port_ios.sink_last),
-            raw_sink.dst_port.eq(port_ios.sink_dst_port),
-            raw_sink.src_port.eq(port_ios.sink_src_port),
-            raw_sink.ip_address.eq(port_ios.sink_ip_address),
-            raw_sink.length.eq(port_ios.sink_length),
-            port_ios.sink_ready.eq(raw_sink.ready),
-            raw_sink.data.eq(port_ios.sink_data),
-            getattr(raw_sink, byte_enable).eq(getattr(port_ios, f"sink_{byte_enable}")),
+            raw_port.sink.valid.eq(port_ios.sink_valid),
+            raw_port.sink.last.eq(port_ios.sink_last),
+            raw_port.sink.dst_port.eq(port_ios.sink_dst_port),
+            raw_port.sink.src_port.eq(port_ios.sink_src_port),
+            raw_port.sink.ip_address.eq(port_ios.sink_ip_address),
+            raw_port.sink.length.eq(port_ios.sink_length),
+            port_ios.sink_ready.eq(raw_port.sink.ready),
+            raw_port.sink.data.eq(port_ios.sink_data),
+            raw_port.sink.be.eq(port_ios.sink_be),
         ]
 
         # Connect UDP to UDP Source IOs.
         self.comb += [
-            port_ios.source_valid.eq(raw_source.valid),
-            port_ios.source_last.eq(raw_source.last),
-            port_ios.source_dst_port.eq(raw_source.dst_port),
-            port_ios.source_src_port.eq(raw_source.src_port),
-            port_ios.source_ip_address.eq(raw_source.ip_address),
-            port_ios.source_length.eq(raw_source.length),
-            raw_source.ready.eq(port_ios.source_ready),
-            port_ios.source_data.eq(raw_source.data),
-            getattr(port_ios, f"source_{byte_enable}").eq(getattr(raw_source, byte_enable)),
-            port_ios.source_error.eq(raw_source.error),
+            port_ios.source_valid.eq(raw_port.source.valid),
+            port_ios.source_last.eq(raw_port.source.last),
+            port_ios.source_dst_port.eq(raw_port.source.dst_port),
+            port_ios.source_src_port.eq(raw_port.source.src_port),
+            port_ios.source_ip_address.eq(raw_port.source.ip_address),
+            port_ios.source_length.eq(raw_port.source.length),
+            raw_port.source.ready.eq(port_ios.source_ready),
+            port_ios.source_data.eq(raw_port.source.data),
+            port_ios.source_be.eq(raw_port.source.be),
+            port_ios.source_error.eq(raw_port.source.error),
         ]
 
     def __init__(self, platform, core_config):

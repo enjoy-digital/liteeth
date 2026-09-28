@@ -78,7 +78,7 @@ class LiteEthEtherbonePacketDepacketizer(Depacketizer):
 
 
 class LiteEthEtherbonePacketRX(LiteXModule):
-    def __init__(self, with_last_handler=False):
+    def __init__(self):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
@@ -86,7 +86,6 @@ class LiteEthEtherbonePacketRX(LiteXModule):
 
         self.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
 
-        # with_last_handler is retained for callers; StrideConverter now terminates packets.
         self.comb += sink.connect(depacketizer.sink)
 
         self.fsm = fsm = FSM(reset_state="IDLE")

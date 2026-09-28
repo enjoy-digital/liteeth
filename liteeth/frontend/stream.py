@@ -11,16 +11,6 @@ from liteeth.common import *
 
 # Helpers ------------------------------------------------------------------------------------------
 
-def tkeep2last_be(keep):
-    """Legacy one-hot encoding. New code can connect keep directly to be."""
-    return keep & ~(keep >> 1)
-
-
-def last_be2tkeep(last_be, last, keep_width):
-    """Legacy marker to byte mask; kept for existing generator integrations."""
-    return Mux(last & (last_be != 0), (last_be << 1) - 1, (1 << keep_width) - 1)
-
-
 def _ip_address_udp_port_signals(module, ip_address, udp_port, with_csr):
     """IP address / UDP port as constants (reset values, CSR-overridable) or as dynamic Signals
     (e.g. pads of a standalone core), which must not be used as reset values."""
@@ -53,13 +43,9 @@ class LiteEthStream2UDPTX(LiteXModule):
     the final word has a nonzero, contiguous mask starting at byte zero.
     """
     def __init__(self, ip_address=0, udp_port=0, data_width=8, fifo_depth=None, with_csr=False,
-        with_last_be      = False,
-        max_packet_length = None,
         with_be           = False,
+        max_packet_length = None,
     ):
-        if with_be and with_last_be:
-            raise ValueError("Select either be or legacy last_be, not both.")
-        with_be = with_be or with_last_be
         sink_description = eth_tty_tx_description(data_width, with_be=with_be)
         self.sink   = sink   = stream.Endpoint(sink_description)
         self.source = source = stream.Endpoint(eth_udp_user_description(data_width))
@@ -184,11 +170,6 @@ class LiteEthStream2UDPTX(LiteXModule):
                 )
             ]
 
-        if with_last_be:
-            self.legacy = stream.LastBEConverter(sink_description)
-            self.comb += self.legacy.source.connect(sink)
-            self.sink = self.legacy.sink
-
     def add_csr(self):
         self._enable     = CSRStorage(1, description="Enable Module", reset=1)
         self._ip_address = CSRStorage(32, description="IP Address", reset=self.ip_address.reset.value)
@@ -214,13 +195,9 @@ class LiteEthUDP2StreamRX(LiteXModule):
     are preserved.
     """
     def __init__(self, ip_address=0, udp_port=0, data_width=8, fifo_depth=None, with_broadcast=True,
-        with_csr     = False,
-        with_last_be = False,
-        with_be      = False,
+        with_csr = False,
+        with_be  = False,
     ):
-        if with_be and with_last_be:
-            raise ValueError("Select either be or legacy last_be, not both.")
-        with_be = with_be or with_last_be
         source_description = eth_tty_rx_description(data_width, with_be=with_be)
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(data_width))
         self.source = source = stream.Endpoint(source_description)
@@ -275,11 +252,6 @@ class LiteEthUDP2StreamRX(LiteXModule):
                 fifo.source.connect(source)
             ]
 
-        if with_last_be:
-            self.legacy = stream.LastBEConverter(source_description, reverse=True)
-            self.comb += source.connect(self.legacy.sink)
-            self.source = self.legacy.source
-
     def add_csr(self):
         self._enable     = CSRStorage(1,  description="Enable Module", reset=1)
         self._ip_address = CSRStorage(32, description="IP Address",    reset=self.ip_address.reset.value)
@@ -298,19 +270,16 @@ class LiteEthUDPStreamer(LiteXModule):
     def __init__(self, udp, ip_address, udp_port, data_width=8, rx_fifo_depth=64, tx_fifo_depth=64,
         with_broadcast       = True,
         cd                   = "sys",
-        with_last_be         = False,
-        tx_max_packet_length = None,
         with_be              = False,
+        tx_max_packet_length = None,
     ):
         self.tx = tx = LiteEthStream2UDPTX(ip_address, udp_port, data_width, tx_fifo_depth,
             with_be           = with_be,
-            with_last_be      = with_last_be,
             max_packet_length = tx_max_packet_length,
         )
         self.rx = rx = LiteEthUDP2StreamRX(ip_address, udp_port, data_width, rx_fifo_depth,
             with_broadcast = with_broadcast,
             with_be        = with_be,
-            with_last_be   = with_last_be,
         )
         udp_port = udp.crossbar.get_port(udp_port, dw=data_width, cd=cd)
         self.comb += [

@@ -29,26 +29,14 @@ For `n` valid bytes the new mask is `(1 << n) - 1`; intermediate words use the
 full mask, rather than zero. Update custom PHY receive endpoints as well.
 Do not simply rename the old one-hot signal.
 
-For code that needs a gradual migration, adapt the legacy endpoint explicitly:
-
-```python
-legacy_tx = stream.LastBEConverter(eth_udp_user_description(32))
-self.submodules += legacy_tx
-self.comb += legacy_tx.source.connect(udp_port.sink)
-# Existing logic drives legacy_tx.sink.last_be; the UDP port carries be.
-```
-
-Use `reverse=True` for a receive boundary. Adapters preserve the old zero/full
-convention. There are no implicit aliases between the two encodings.
-The internal `LiteEthLastHandler`, `LiteEthMACTXLastBE` and `LiteEthMACRXLastBE`
-stages have been removed; custom pipelines should use the updated stride
-converter directly.
+The legacy encoding, compatibility adapters and conversion helpers have been
+removed. Custom pipelines should use the updated stride converter directly;
+the MAC marker-correction stages and Etherbone's special last handler are gone.
 
 `LiteEthUDPStreamer`, `LiteEthStream2UDPTX` and `LiteEthUDP2StreamRX` expose the
 native mask with `with_be=True`. Their default whole-word user interfaces stay
-unchanged. Existing `with_last_be=True` calls retain legacy user endpoints using
-boundary adapters; the UDP-side endpoints always use native `be`. The old
-`tkeep2last_be`/`last_be2tkeep` helpers remain available for legacy integrations.
+unchanged. Replace `with_last_be=True` with `with_be=True` and update the masks;
+legacy keyword arguments are no longer accepted.
 
 Etherbone's memory-mapped endpoint now calls its Wishbone byte-selection parameter
 `byte_enable`. Its stream `be` qualifies the transported word. These have distinct
@@ -61,6 +49,6 @@ UDP stream ports retain `sink_keep`/`source_keep` pins, now wired directly to
 means a full word. For existing whole-word integrations, set `with_tkeep: False`
 to omit the pins and generate full masks internally.
 
-Raw UDP ports now expose `sink_be`/`source_be`. Set `with_last_be: True` on a raw
-port to retain its old `sink_last_be`/`source_last_be` pins and encoding through
-explicit adapters. Other raw-port pins are unchanged.
+Raw UDP ports expose `sink_be`/`source_be`, with the native mask encoding.
+Legacy pin names and the legacy raw-port option are no longer supported.
+Other raw-port pins are unchanged.

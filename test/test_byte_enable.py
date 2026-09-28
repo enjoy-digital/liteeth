@@ -15,7 +15,7 @@ from liteeth.frontend.stream import LiteEthStream2UDPTX, LiteEthUDP2StreamRX
 
 # Helpers ------------------------------------------------------------------------------------------
 
-def transfer(test, dut, packets, dw, errors=None, legacy_input=False, legacy_output=False):
+def transfer(test, dut, packets, dw, errors=None):
     lanes    = dw//8
     received = []
     masks    = []
@@ -31,10 +31,7 @@ def transfer(test, dut, packets, dw, errors=None, legacy_input=False, legacy_out
                 last = offset + lanes >= len(packet)
                 yield dut.sink.data.eq(int.from_bytes(word, "little"))
                 yield dut.sink.last.eq(last)
-                if legacy_input:
-                    yield dut.sink.last_be.eq(1 << (len(word) - 1) if last else 0)
-                else:
-                    yield dut.sink.be.eq((1 << len(word)) - 1)
+                yield dut.sink.be.eq((1 << len(word)) - 1)
                 if hasattr(dut.sink, "error"):
                     error = 0
                     if errors is not None:
@@ -62,11 +59,7 @@ def transfer(test, dut, packets, dw, errors=None, legacy_input=False, legacy_out
             ready = (yield dut.source.ready)
             data  = (yield dut.source.data)
             last  = (yield dut.source.last)
-            if legacy_output:
-                marker = (yield dut.source.last_be)
-                mask = (marker << 1) - 1 if last else (1 << lanes) - 1
-            else:
-                mask = (yield dut.source.be)
+            mask = (yield dut.source.be)
             error = (yield dut.source.error) if hasattr(dut.source, "error") else 0
             # Compare qualified data: unused lanes carry no payload.
             qualified = data & sum(0xff << (8*i) for i in range(lanes) if mask & (1 << i))
@@ -193,36 +186,14 @@ class TestByteEnable(unittest.TestCase):
                 self.assertEqual(received, [payload]*5)
                 self.assertEqual(got_errors, [True, True, True, False, False])
 
-    def test_legacy_invalid_marker_falls_back_to_full_word(self):
-        dut = LiteEthStream2UDPTX(data_width=64, fifo_depth=16, with_last_be=True)
-        def check():
-            yield dut.source.ready.eq(1)
-            yield dut.sink.valid.eq(1)
-            yield dut.sink.last.eq(1)
-            yield dut.sink.last_be.eq(3) # Invalid one-hot encoding, supported legacy fallback.
-            yield dut.sink.data.eq(0x12345678)
-            yield
-            while not (yield dut.sink.ready):
-                yield
-            yield dut.sink.valid.eq(0)
-            for _ in range(64):
-                yield
-                if (yield dut.source.valid):
-                    self.assertEqual((yield dut.source.last), 1)
-                    self.assertEqual((yield dut.source.be), 0xff)
-                    self.assertEqual((yield dut.source.length), 8)
-                    return
-            self.fail("Legacy packet did not complete")
-        run_simulation(dut, check())
-
-    def test_legacy_streamer_boundaries(self):
+    def test_streamer_boundaries(self):
         for dw in [8, 32, 64]:
             packets = [bytes(range(n)) for n in range(1, 18)]
             with self.subTest(dw=dw, direction="tx"):
-                dut = LiteEthStream2UDPTX(udp_port=1234, data_width=dw, fifo_depth=32, with_last_be=True)
-                received, _ = transfer(self, dut, packets, dw, legacy_input=True)
+                dut = LiteEthStream2UDPTX(udp_port=1234, data_width=dw, fifo_depth=32, with_be=True)
+                received, _ = transfer(self, dut, packets, dw)
                 self.assertEqual(received, packets)
             with self.subTest(dw=dw, direction="rx"):
-                dut = LiteEthUDP2StreamRX(udp_port=1234, data_width=dw, fifo_depth=8, with_last_be=True)
-                received, _ = transfer(self, dut, packets, dw, legacy_output=True)
+                dut = LiteEthUDP2StreamRX(udp_port=1234, data_width=dw, fifo_depth=8, with_be=True)
+                received, _ = transfer(self, dut, packets, dw)
                 self.assertEqual(received, packets)

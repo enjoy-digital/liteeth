@@ -16,10 +16,6 @@ from litex.soc.interconnect.csr import *
 
 from litex.soc.interconnect.packet import Header, HeaderField
 
-# Byte-enabled packet streams require the matching LiteX stream/packet helpers.
-if not hasattr(stream, "LastBEConverter"):
-    raise ImportError("LiteEth byte-enable streams require an updated LiteX; update LiteX first.")
-
 # Ethernet Constants -------------------------------------------------------------------------------
 
 # Datapaths faster than this are likely to need extra pipeline stages to close timing. For example,
@@ -356,18 +352,14 @@ def eth_etherbone_mmap_description(dw):
     return EndpointDescription(payload_layout, param_layout)
 
 # TTY / Stream
-def eth_tty_tx_description(dw, with_last_be=False, with_be=False):
+def eth_tty_tx_description(dw, with_be=False):
     payload_layout = [("data", dw)]
-    if with_be and with_last_be:
-        raise ValueError("Select either be or legacy last_be, not both.")
-    if with_be or with_last_be:
-        payload_layout += [("last_be" if with_last_be else "be", dw//8)]
+    if with_be:
+        payload_layout += [("be", dw//8)]
     return EndpointDescription(payload_layout)
 
-def eth_tty_rx_description(dw, with_last_be=False, with_be=False):
+def eth_tty_rx_description(dw, with_be=False):
     payload_layout = [("data", dw), ("error", 1)]
-    if with_be and with_last_be:
-        raise ValueError("Select either be or legacy last_be, not both.")
-    if with_be or with_last_be:
-        payload_layout += [("last_be" if with_last_be else "be", dw//8)]
+    if with_be:
+        payload_layout += [("be", dw//8)]
     return EndpointDescription(payload_layout)

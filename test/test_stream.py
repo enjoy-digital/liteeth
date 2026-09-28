@@ -16,7 +16,6 @@ from litex.soc.interconnect.stream import *
 from litex.gen import LiteXModule
 
 from liteeth.frontend.stream import LiteEthStream2UDPTX, LiteEthUDP2StreamRX
-from liteeth.frontend.stream import tkeep2last_be, last_be2tkeep
 
 # Helpers ------------------------------------------------------------------------------------------
 
@@ -652,14 +651,14 @@ class TestStreamByteEnable(unittest.TestCase):
         self.assertEqual(recvd[1].data, packets[0].data[64:])
         self.assertEqual(recvd[1].params["length"], 36)
 
-    def test_tx_legacy_last_be_zero(self):
-        # be left at 0 on the last word (legacy users): full last word.
+    def test_tx_full_byte_mask(self):
+        # A full mask qualifies every byte on every word.
         dut = LiteEthStream2UDPTX(
             ip_address   = 0,
             udp_port     = 1,
             data_width   = 64,
             fifo_depth   = 16,
-            with_last_be = True,
+            with_be = True,
         )
         words   = [(0x1111, 0), (0x2222, 0), (0x3333, 1)]
         results = []
@@ -669,7 +668,7 @@ class TestStreamByteEnable(unittest.TestCase):
                 yield dut.sink.data.eq(data)
                 yield dut.sink.valid.eq(1)
                 yield dut.sink.last.eq(last)
-                yield dut.sink.last_be.eq(0)
+                yield dut.sink.be.eq(0xff)
                 yield
                 while not (yield dut.sink.ready):
                     yield
@@ -761,8 +760,7 @@ class TestStreamByteEnable(unittest.TestCase):
             self.assertEqual(got.params["length"], len(sent.data))
 
     def test_tx_8bit(self):
-        # 8-bit data-path: be is a single bit, 0 or 1 on the last byte (legacy users may leave
-        # it at 0), both mean one byte.
+        # Eight-bit data paths enable their single byte on every beat.
         dut = LiteEthStream2UDPTX(
             ip_address   = 0,
             udp_port     = 1,
@@ -890,46 +888,6 @@ class TestStreamByteEnable(unittest.TestCase):
         recvd = self._run(dut, packets, expect_npackets=1)
         self.assertEqual(len(recvd), 1)
         self.assertEqual(recvd[0].data, packets[1].data)
-
-# Test tkeep <-> last_be conversion ----------------------------------------------------------------
-
-class TestTKeepConversion(unittest.TestCase):
-    def test_conversions(self):
-        for width in [1, 4, 8]:
-            with self.subTest(width=width):
-                class DUT(Module):
-                    def __init__(self):
-                        self.keep    = Signal(width)
-                        self.last    = Signal()
-                        self.last_be = Signal(width)
-                        self.keep_o  = Signal(width)
-                        self.comb += [
-                            self.last_be.eq(tkeep2last_be(self.keep)),
-                            self.keep_o.eq(last_be2tkeep(self.last_be, self.last, width)),
-                        ]
-
-                dut  = DUT()
-                full = 2**width - 1
-
-                def tb():
-                    for n in range(1, width + 1):
-                        keep = (1 << n) - 1
-                        yield dut.keep.eq(keep)
-                        yield dut.last.eq(1)
-                        yield
-                        self.assertEqual((yield dut.last_be), 1 << (n - 1))
-                        self.assertEqual((yield dut.keep_o),  keep)
-                        yield dut.last.eq(0)
-                        yield
-                        self.assertEqual((yield dut.keep_o), full)
-                    # tkeep of 0 (pin not driven): last_be 0, full word.
-                    yield dut.keep.eq(0)
-                    yield dut.last.eq(1)
-                    yield
-                    self.assertEqual((yield dut.last_be), 0)
-                    self.assertEqual((yield dut.keep_o),  full)
-
-                run_simulation(dut, tb())
 
 # Test Stream to UDP max packet length -------------------------------------------------------------
 
