@@ -32,7 +32,8 @@ class K7_1000BASEX(LiteXModule):
     supported_refclk_freqs = (200e6,)
 
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
-        assert refclk_freq in self.supported_refclk_freqs
+        if refclk_freq not in self.supported_refclk_freqs:
+            raise ValueError(f"Unsupported reference clock {refclk_freq/1e6:g} MHz for {type(self).__name__}.")
         self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
 
         self.sink    = pcs.sink

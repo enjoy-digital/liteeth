@@ -101,6 +101,14 @@ class TestGeneratedCore(unittest.TestCase):
                 verilog = generate_config("udp_s7phyrgmii", phy=phy)
                 self.assertIn(primitive, verilog)
 
+    def test_basex_explicit_reference_overrides_constructor_default(self):
+        for refclk, divider in ((None, 8), (156.25e6, 7)):
+            with self.subTest(refclk=refclk):
+                verilog = generate_config("udp_s7phyrgmii", phy="KU_1000BASEX", refclk_freq=refclk)
+                match = re.search(r"\.TX_CLK25_DIV\s*\(\s*(?:\d+'d)?(\d+)\s*\)", verilog)
+                self.assertIsNotNone(match, "Missing TX_CLK25_DIV parameter")
+                self.assertEqual(int(match[1]), divider)
+
     def test_udp_streamer_tkeep_pins(self):
         # tkeep pins are exposed by default and removed with with_tkeep: False.
         verilog = generate_config("udp_xgmii_jumbo")
