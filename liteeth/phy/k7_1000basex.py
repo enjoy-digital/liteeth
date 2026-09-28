@@ -4,6 +4,8 @@
 # Copyright (c) 2018-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import math
+
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
@@ -76,6 +78,9 @@ class K7_1000BASEX(LiteXModule):
 
         pll = GTXChannelPLL(refclk, refclk_freq, self.linerate)
         self.submodules.pll = pll
+
+        # Divide the reference clock to at most 25MHz for GTX calibration.
+        clk25_div = math.ceil(refclk_freq/25e6)
 
         # Work around Python's 255 argument limitation.
         gtx_params = dict(
@@ -175,8 +180,8 @@ class K7_1000BASEX(LiteXModule):
             p_TERM_RCAL_CFG                = 0b10000,
             p_TERM_RCAL_OVRD               = 0b0,
             p_TST_RSV                      = 0x00000000,
-            p_RX_CLK25_DIV                 = 5,
-            p_TX_CLK25_DIV                 = 5,
+            p_RX_CLK25_DIV                 = clk25_div,
+            p_TX_CLK25_DIV                 = clk25_div,
             p_UCODEER_CLR                  = 0b0,
 
             # PCI Express Attributes

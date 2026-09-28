@@ -86,6 +86,14 @@ class TestPHYPortability(unittest.TestCase):
                     if isinstance(special, Instance)}
                 self.assertIn(primitive, primitives)
                 self.assertTrue(hasattr(phy, "pcs"))
+                if name.startswith("k7"):
+                    gtx = next(special for special in fragment.specials
+                        if isinstance(special, Instance) and special.of == primitive)
+                    gtx_params = {item.name: item.value for item in gtx.items
+                        if isinstance(item, Instance.Parameter)}
+                    clk25_div = {"k7_1000": 8, "k7_2500": 5}[name]
+                    self.assertEqual(gtx_params["RX_CLK25_DIV"].value, clk25_div)
+                    self.assertEqual(gtx_params["TX_CLK25_DIV"].value, clk25_div)
                 if name == "k7_2500":
                     self.assertEqual(phy.pll.config["clkin"], 125e6)
 
