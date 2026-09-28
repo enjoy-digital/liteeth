@@ -8,7 +8,7 @@ when implementation files move.
 | PHY group | Current implementation | Public entry points |
 | --- | --- | --- |
 | MII, RMII, GMII, XGMII | `liteeth/phy/{mii,rmii,gmii,gmii_mii,xgmii}.py` | `liteeth.phy` and the individual modules |
-| Vendor RGMII | `liteeth/phy/*rgmii.py` | Individual modules and the aliases in `liteeth.phy` |
+| Vendor RGMII | `liteeth/phy/parallel/rgmii/` | Original vendor modules and the aliases in `liteeth.phy` |
 | 1000/2500BASE-X | `serial/basex/pcs.py` and device adapters | Original device modules and the aliases in `liteeth.phy` |
 | 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, diagnostics, and device wrappers | Every preexisting module and submodule path forwards to the implementation |
 | GTP initialization | `a7_gtp.py` | Direct imports from targets and BASE-R PMAs |
@@ -25,9 +25,12 @@ BASE-X PCS and device adapters live in `basex/`. Existing top-level BASE-R
 modules forward imports to their new implementations. Legacy BASE-X module
 names alias the new modules, so code that patches a module-level PCS helper
 still affects the class implementation.
-Parallel and RGMII PHYs can be grouped separately after the serial modes are
-stable. Keep device-specific primitive parameters visible; sharing a PLL or
-reset helper does not imply that two line codes share a PMA.
+Vendor RGMII adapters are grouped under `liteeth/phy/parallel/rgmii/`, with
+their original modules retained as aliases. The MII, RMII, GMII, and XGMII
+entry points stay at the top level: each already has a protocol-specific name
+and direct users in LiteX or LiteEth. Keep device-specific primitive parameters
+visible; sharing a PLL or reset helper does not imply that two line codes
+share a PMA.
 
 For each move, preserve class identity through the old import path, positional
 and keyword constructor arguments, stream widths, clock-domain names, CSR
