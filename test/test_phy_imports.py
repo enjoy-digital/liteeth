@@ -22,6 +22,19 @@ class TestPHYImports(unittest.TestCase):
         "pma_baser.gtx_7series", "pma_baser.gty_usp",
     )
 
+    baser_moves = {
+        "baser": "serial.baser.diagnostics",
+        "a7_gtp_baser": "serial.baser.a7_gtp",
+        "k7_gtx_baser": "serial.baser.k7_gtx",
+        "us_gt_baser": "serial.baser.usp_gt",
+        "pcs_baser": "serial.baser.pcs",
+        "pma_baser": "serial.baser.pma",
+    }
+    for submodule in baser_submodules:
+        group, name = submodule.split(".")
+        new_group = {"pcs_baser": "pcs", "pma_baser": "pma"}[group]
+        baser_moves[submodule] = f"serial.baser.{new_group}.{name}"
+
     package_exports = {
         "a7_1000basex":      ("A7_1000BASEX", "A7_2500BASEX"),
         "k7_1000basex":      ("K7_1000BASEX", "K7_2500BASEX"),
@@ -67,6 +80,17 @@ class TestPHYImports(unittest.TestCase):
         for module_name in self.baser_submodules:
             with self.subTest(module=module_name):
                 self.assertIsNotNone(importlib.import_module(f"liteeth.phy.{module_name}"))
+
+    def test_baser_legacy_names_are_identical_to_new_names(self):
+        for old_name, new_name in self.baser_moves.items():
+            old = importlib.import_module(f"liteeth.phy.{old_name}")
+            new = importlib.import_module(f"liteeth.phy.{new_name}")
+            names = set(self.direct_imports.get(old_name, ()))
+            names.update(name for name, value in vars(new).items()
+                if callable(value) and getattr(value, "__module__", None) == new.__name__)
+            for name in names:
+                with self.subTest(module=old_name, name=name):
+                    self.assertIs(getattr(old, name), getattr(new, name))
 
     def test_generator_names_remain_resolvable(self):
         for class_names in self.package_exports.values():
