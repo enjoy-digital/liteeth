@@ -42,7 +42,7 @@ class TestIPGateway(unittest.TestCase):
         def generator():
             yield dut.tx.sink.valid.eq(1)
             yield dut.tx.sink.last.eq(1)
-            yield dut.tx.sink.last_be.eq(1)
+            yield dut.tx.sink.be.eq(1)
             yield dut.tx.sink.length.eq(1)
             yield dut.tx.sink.protocol.eq(udp_protocol)
             yield dut.tx.sink.ip_address.eq(destination_ip)

@@ -163,7 +163,7 @@ class LiteEthUDPTX(LiteXModule):
                 "valid",
                 "ready",
                 "last",
-                "last_be",
+                "be",
                 "src_port",
                 "dst_port",
                 "data"}),
@@ -239,20 +239,20 @@ class LiteEthUDPRX(LiteXModule):
             depacketizer.source.connect(source, keep={"valid", "ready"}),
             source.last.eq(depacketizer.source.last | (count >= source.length)),
             # The UDP length ends the packet when reached: Ethernet padding can share the last data
-            # word and the padded frame's last_be must then be ignored. Otherwise (truncated
-            # packet), use the frame's last_be.
+            # word and the padded frame's be must then be ignored. Otherwise (truncated
+            # packet), use the frame's be.
             If(count < source.length,
-               source.last_be.eq(depacketizer.source.last_be),
+               source.be.eq(depacketizer.source.be),
             ).Else(
               Case(source.length & (dw//8 - 1), {
-                  1         : source.last_be.eq(0b00000001),
-                  2         : source.last_be.eq(0b00000010),
-                  3         : source.last_be.eq(0b00000100),
-                  4         : source.last_be.eq(0b00001000),
-                  5         : source.last_be.eq(0b00010000),
-                  6         : source.last_be.eq(0b00100000),
-                  7         : source.last_be.eq(0b01000000),
-                  "default" : source.last_be.eq(2**(dw//8 - 1)),
+                  1         : source.be.eq(0b00000001),
+                  2         : source.be.eq(0b00000011),
+                  3         : source.be.eq(0b00000111),
+                  4         : source.be.eq(0b00001111),
+                  5         : source.be.eq(0b00011111),
+                  6         : source.be.eq(0b00111111),
+                  7         : source.be.eq(0b01111111),
+                  "default" : source.be.eq((1 << (dw//8)) - 1),
               })
             ),
             If(source.valid & source.ready,

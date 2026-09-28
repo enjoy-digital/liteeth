@@ -47,6 +47,7 @@ class LiteEthMACPreambleInserter(Module):
         )
         fsm.act("PREAMBLE",
             self.source.valid.eq(1),
+            self.source.be.eq((1 << (dw//8)) - 1),
             # Separate `n` is required as for 64-bit the chooser-statements'
             # generated Verilog will otherwise contain a statement which reads
             # beyond the bounds of preamble. This is in a branch which can never
@@ -62,10 +63,10 @@ class LiteEthMACPreambleInserter(Module):
         )
         self.comb += [
             self.source.data.eq(self.sink.data),
-            self.source.last_be.eq(self.sink.last_be)
+            self.source.be.eq(self.sink.be)
         ]
         fsm.act("COPY",
-            self.sink.connect(self.source, omit={"data", "last_be"}),
+            self.sink.connect(self.source, omit={"data", "be"}),
 
             If(self.sink.valid & self.sink.last & self.source.ready,
                 NextState("IDLE"),
@@ -109,10 +110,10 @@ class LiteEthMACPreambleChecker(Module):
         )
         self.comb += [
             source.data.eq(sink.data),
-            source.last_be.eq(sink.last_be)
+            source.be.eq(sink.be)
         ]
         fsm.act("COPY",
-            sink.connect(source, omit={"data", "last_be"}),
+            sink.connect(source, omit={"data", "be"}),
             If(source.valid & source.last & source.ready,
                 NextState("PREAMBLE"),
             )

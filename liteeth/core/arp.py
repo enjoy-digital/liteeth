@@ -37,9 +37,10 @@ class LiteEthARPTX(LiteXModule):
 
         # # #
 
-        packet_length = max(arp_header.length, arp_min_length)
-        packet_words  = packet_length//(dw//8)
-        counter       = Signal(max=packet_words, reset_less=True)
+        packet_length  = max(arp_header.length, arp_min_length)
+        payload_length = packet_length - arp_header.length
+        payload_words  = (payload_length + dw//8 - 1)//(dw//8)
+        counter        = Signal(max=max(payload_words, 2), reset_less=True)
 
         self.packetizer = packetizer = LiteEthARPPacketizer(dw)
 
@@ -51,10 +52,10 @@ class LiteEthARPTX(LiteXModule):
             )
         )
         self.comb += [
-            packetizer.sink.last.eq(counter == (packet_words - 1)),
-            If(packetizer.sink.last,
-                packetizer.sink.last_be.eq(max(1, 2**(packet_length % (dw // 8) - 1))),
-            ),
+            packetizer.sink.last.eq(counter == (payload_words - 1)),
+            packetizer.sink.be.eq(Mux(packetizer.sink.last,
+                (1 << ((payload_length - 1) % (dw//8) + 1)) - 1,
+                (1 << (dw//8)) - 1)),
             packetizer.sink.hwtype.eq(arp_hwtype_ethernet),
             packetizer.sink.proto.eq(arp_proto_ip),
             packetizer.sink.hwsize.eq(6),
@@ -79,8 +80,10 @@ class LiteEthARPTX(LiteXModule):
         fsm.act("SEND",
             packetizer.sink.valid.eq(1),
             packetizer.source.connect(source, keep={"valid", "ready"}),
-            If(source.valid & source.ready,
+            If(packetizer.sink.valid & packetizer.sink.ready,
                 NextValue(counter, counter + 1),
+            ),
+            If(source.valid & source.ready,
                 If(source.last,
                     sink.ready.eq(1),
                     NextState("IDLE")

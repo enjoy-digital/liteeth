@@ -211,6 +211,7 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
         self.rx_ctl  = rx_ctl  = Signal(2)
         self.rx_data = rx_data = Signal(8)
         self.source  = source  = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         # # #
 
@@ -278,6 +279,7 @@ class LiteEthRGMIIRXDatapath(LiteXModule):
 class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads, rx_delay=2e-9, with_inband_status=True, link_state=None):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         if with_inband_status:
             self.inband_status = CSRStatus(fields=[

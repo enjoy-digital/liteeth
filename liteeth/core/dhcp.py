@@ -91,7 +91,7 @@ class LiteEthDHCPTX(LiteXModule):
             udp_port.sink.dst_port.eq(DHCP_SERVER_PORT),
             udp_port.sink.ip_address.eq(convert_ip("255.255.255.255")),
             udp_port.sink.length.eq(length * 4),
-            udp_port.sink.last_be.eq(0b1000), # 32-bit.
+            udp_port.sink.be.eq(0b1111), # 32-bit.
         ]
 
         # Common FSM.

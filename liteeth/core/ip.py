@@ -126,7 +126,7 @@ class LiteEthIPTX(LiteXModule):
         self.comb += [
             sink.connect(packetizer.sink, keep={
                 "last",
-                "last_be",
+                "be",
                 "protocol",
                 "data",
             }),
@@ -259,7 +259,7 @@ class LiteEthIPRX(LiteXModule):
                 "protocol",
                 "data",
                 "error",
-                "last_be"}),
+                "be"}),
             source.length.eq(depacketizer.source.total_length - ipv4_header_length),
             source.ip_address.eq(depacketizer.source.sender_ip),
         ]

@@ -23,7 +23,7 @@ class LiteEthMACPaddingInserter(Module):
         # # #
 
         padding_limit = math.ceil(padding/(dw/8))-1
-        last_be       = 2**((padding-1)%(dw//8))
+        be            = (1 << ((padding - 1) % (dw//8) + 1)) - 1
 
         counter      = Signal(16)
         counter_done = Signal()
@@ -32,21 +32,21 @@ class LiteEthMACPaddingInserter(Module):
         self.submodules.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             sink.connect(source),
+            If(sink.last,
+                # Padding bytes are zero, including lanes in a partially occupied word.
+                *[If(~sink.be[i], source.data[8*i:8*(i+1)].eq(0)) for i in range(dw//8)],
+                If(~counter_done,
+                    source.last.eq(0),
+                    source.be.eq((1 << (dw//8)) - 1),
+                ).Elif((counter == padding_limit) & (be > sink.be),
+                    source.be.eq(be),
+                ),
+            ),
             If(source.valid & source.ready,
                 NextValue(counter, counter + 1),
                 If(sink.last,
                     If(~counter_done,
-                        source.last.eq(0),
-                        source.last_be.eq(0),
-                        NextState("PADDING")
-                    ).Elif((counter == padding_limit) & (last_be > sink.last_be),
-                        # If the right amount of data words are transmitted, but
-                        # too few bytes, transmit more bytes of the word. The
-                        # formerly "unused" bytes get transmitted as well.
-                        source.last_be.eq(last_be),
-                        # End of frame: reset the counter for the next frame (otherwise the next
-                        # short frame would be sent unpadded).
-                        NextValue(counter, 0),
+                        NextState("PADDING"),
                     ).Else(
                         NextValue(counter, 0),
                     )
@@ -55,8 +55,9 @@ class LiteEthMACPaddingInserter(Module):
         )
         fsm.act("PADDING",
             source.valid.eq(1),
+            source.be.eq((1 << (dw//8)) - 1),
             If(counter_done,
-                source.last_be.eq(last_be),
+                source.be.eq(be),
                 source.last.eq(1)),
             source.data.eq(0),
             If(source.valid & source.ready,
@@ -84,17 +85,8 @@ class LiteEthMACPaddingChecker(Module):
         length     = Signal(max=eth_mtu)
         length_inc = Signal(4)
 
-        # Decode Length increment from from last_be.
-        self.comb += Case(sink.last_be, {
-            0b00000001 : length_inc.eq(1),
-            0b00000010 : length_inc.eq(2),
-            0b00000100 : length_inc.eq(3),
-            0b00001000 : length_inc.eq(4),
-            0b00010000 : length_inc.eq(5),
-            0b00100000 : length_inc.eq(6),
-            0b01000000 : length_inc.eq(7),
-            "default"  : length_inc.eq(dw//8)
-        })
+        # Count valid bytes.
+        self.comb += length_inc.eq(sum(sink.be[i] for i in range(dw//8)))
 
         self.sync += [
             If(sink.valid & sink.ready,

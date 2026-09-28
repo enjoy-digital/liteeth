@@ -48,7 +48,7 @@ class TestUDPRX(unittest.TestCase):
     def test_padded_minimum_frames(self):
         # Minimum Ethernet frame: 60 bytes = 14 (MAC) + 20 (IPv4) + 26 bytes of IPv4 payload, so
         # UDP payloads < 18 bytes are received with padding. When the padding shares the last data
-        # word, the IP length (not the padded frame's last_be) must end the packet (regression:
+        # word, the IP length (not the padded frame's be) must end the packet (regression:
         # a 17-byte payload was received as 18 bytes on 16/32/64-bit data paths).
         for dw in [8, 16, 32, 64]:
             lengths = list(range(1, 25))

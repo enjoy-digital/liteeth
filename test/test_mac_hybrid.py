@@ -43,7 +43,7 @@ def send_packet(source, packet):
         yield source.valid.eq(1)
         yield source.data.eq(byte)
         yield source.last.eq(last)
-        yield source.last_be.eq(1 if last else 0)
+        yield source.be.eq(1)
         for _ in range(128):
             yield
             if (yield source.ready):
@@ -52,7 +52,7 @@ def send_packet(source, packet):
             raise TimeoutError
     yield source.valid.eq(0)
     yield source.last.eq(0)
-    yield source.last_be.eq(0)
+    yield source.be.eq(0)
     yield
 
 # DUT ----------------------------------------------------------------------------------------------

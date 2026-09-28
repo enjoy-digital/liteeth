@@ -24,14 +24,14 @@ class TestMACGap(unittest.TestCase):
             # Send a single one-byte packet.
             yield dut.sink.valid.eq(1)
             yield dut.sink.last.eq(1)
-            yield dut.sink.last_be.eq(1)
+            yield dut.sink.be.eq(1)
             while not (yield dut.sink.ready):
                 yield
             yield
 
             yield dut.sink.valid.eq(0)
             yield dut.sink.last.eq(0)
-            yield dut.sink.last_be.eq(0)
+            yield dut.sink.be.eq(0)
 
             # The sink must remain stalled for the configured gap cycles.
             for _ in range(cycles):

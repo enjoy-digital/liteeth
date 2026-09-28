@@ -16,6 +16,10 @@ from litex.soc.interconnect.csr import *
 
 from litex.soc.interconnect.packet import Header, HeaderField
 
+# Byte-enabled packet streams require the matching LiteX stream/packet helpers.
+if not hasattr(stream, "LastBEConverter"):
+    raise ImportError("LiteEth byte-enable streams require an updated LiteX; update LiteX first.")
+
 # Ethernet Constants -------------------------------------------------------------------------------
 
 # Datapaths faster than this are likely to need extra pipeline stages to close timing. For example,
@@ -198,7 +202,7 @@ def convert_ip(s):
 def eth_phy_description(dw):
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout)
@@ -214,7 +218,7 @@ def eth_packet_description(dw):
 def eth_mac_description(dw):
     payload_layout = mac_header.get_layout() + [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout)
@@ -224,7 +228,7 @@ def eth_arp_description(dw):
     param_layout = arp_header.get_layout()
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -243,7 +247,7 @@ def eth_ipv4_description(dw):
     param_layout = ipv4_header.get_layout()
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -256,7 +260,7 @@ def eth_ipv4_user_description(dw):
     ]
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -266,7 +270,7 @@ def eth_icmp_description(dw):
     param_layout = icmp_header.get_layout()
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -278,7 +282,7 @@ def eth_icmp_user_description(dw):
     ]
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -288,7 +292,7 @@ def eth_udp_description(dw):
     param_layout = udp_header.get_layout()
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -302,7 +306,7 @@ def eth_udp_user_description(dw):
     ]
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -312,7 +316,7 @@ def eth_etherbone_packet_description(dw):
     param_layout = etherbone_packet_header.get_layout()
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -323,7 +327,7 @@ def eth_etherbone_packet_user_description(dw):
     param_layout += eth_udp_user_description(dw).param_layout
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -332,34 +336,38 @@ def eth_etherbone_record_description(dw):
     param_layout = etherbone_record_header.get_layout()
     payload_layout = [
         ("data",       dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8)
     ]
     return EndpointDescription(payload_layout, param_layout)
 
 def eth_etherbone_mmap_description(dw):
     param_layout = [
-        ("we",            1),
-        ("count",         8),
-        ("base_addr",    32),
-        ("be",        dw//8)
+        ("we",              1),
+        ("count",           8),
+        ("base_addr",      32),
+        ("byte_enable", dw//8)
     ]
     payload_layout = [
         ("addr",       32),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("data",       dw)
     ]
     return EndpointDescription(payload_layout, param_layout)
 
 # TTY / Stream
-def eth_tty_tx_description(dw, with_last_be=False):
+def eth_tty_tx_description(dw, with_last_be=False, with_be=False):
     payload_layout = [("data", dw)]
-    if with_last_be:
-        payload_layout += [("last_be", dw//8)]
+    if with_be and with_last_be:
+        raise ValueError("Select either be or legacy last_be, not both.")
+    if with_be or with_last_be:
+        payload_layout += [("last_be" if with_last_be else "be", dw//8)]
     return EndpointDescription(payload_layout)
 
-def eth_tty_rx_description(dw, with_last_be=False):
+def eth_tty_rx_description(dw, with_last_be=False, with_be=False):
     payload_layout = [("data", dw), ("error", 1)]
-    if with_last_be:
-        payload_layout += [("last_be", dw//8)]
+    if with_be and with_last_be:
+        raise ValueError("Select either be or legacy last_be, not both.")
+    if with_be or with_last_be:
+        payload_layout += [("last_be" if with_last_be else "be", dw//8)]
     return EndpointDescription(payload_layout)

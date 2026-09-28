@@ -66,11 +66,11 @@ def parse_options(data):
         offset += length
     return options
 
-def last_be_for_length(length):
+def be_for_length(length):
     remainder = length % 4
     if remainder == 0:
-        return 0b1000
-    return 1 << (remainder - 1)
+        return 0b1111
+    return (1 << remainder) - 1
 
 def build_dhcp_response(
     message_type      = DHCP_OPTVAL_MESSAGE_TYPE_OFFER,
@@ -143,7 +143,7 @@ class TestDHCPTX(unittest.TestCase):
                         params["length"]     = (yield dut.udp_port.sink.length)
                     packet.extend(split_word((yield dut.udp_port.sink.data)))
                     if (yield dut.udp_port.sink.last):
-                        params["last_be"] = (yield dut.udp_port.sink.last_be)
+                        params["be"] = (yield dut.udp_port.sink.be)
                         saw_last[0] = True
                         break
                 yield
@@ -159,7 +159,7 @@ class TestDHCPTX(unittest.TestCase):
         self.assertEqual(params["dst_port"], DHCP_SERVER_PORT)
         self.assertEqual(params["ip_address"], convert_ip("255.255.255.255"))
         self.assertEqual(params["length"], DHCP_FIXED_DISCOVER_LENGTH)
-        self.assertEqual(params["last_be"], 0b1000)
+        self.assertEqual(params["be"], 0b1111)
 
         self.assertEqual(packet[0:4], [0x01, 0x01, 0x06, 0x00])
         self.assertEqual(packet[4:8], split_word(transaction_id))
@@ -196,8 +196,8 @@ class TestDHCPTX(unittest.TestCase):
 class TestDHCPRX(unittest.TestCase):
     def receive_packet(self, packet, src_port=DHCP_SERVER_PORT, dst_port=DHCP_CLIENT_PORT, length=None):
         class RXDUT(LiteXModule):
-            def __init__(self, last_be):
-                self.streamer        = PacketStreamer(eth_udp_user_description(32), last_be=last_be)
+            def __init__(self, be):
+                self.streamer        = PacketStreamer(eth_udp_user_description(32), be=be)
                 self.udp_port        = udp_port = type("UDPPort", (), {})()
                 self.udp_port.sink   = stream.Endpoint(eth_udp_user_description(32))
                 self.udp_port.source = stream.Endpoint(eth_udp_user_description(32))
@@ -206,7 +206,7 @@ class TestDHCPRX(unittest.TestCase):
                 self.comb += self.streamer.source.connect(udp_port.source)
 
         length = len(packet) if length is None else length
-        dut    = RXDUT(last_be_for_length(length))
+        dut    = RXDUT(be_for_length(length))
         result = {"present": False}
 
         words = words_from_bytes(packet)
@@ -320,7 +320,7 @@ class TestDHCPCore(unittest.TestCase):
     def test_handshake_with_simulated_server(self):
         class CoreDUT(LiteXModule):
             def __init__(self):
-                self.streamer        = PacketStreamer(eth_udp_user_description(32), last_be=0b1000)
+                self.streamer        = PacketStreamer(eth_udp_user_description(32), be=0b1111)
                 self.udp_port        = udp_port = type("UDPPort", (), {})()
                 self.udp_port.sink   = stream.Endpoint(eth_udp_user_description(32))
                 self.udp_port.source = stream.Endpoint(eth_udp_user_description(32))
@@ -436,7 +436,7 @@ class TestDHCPCore(unittest.TestCase):
         class CoreDUT(LiteXModule):
             def __init__(self):
                 self.streamer        = PacketStreamer(eth_udp_user_description(32),
-                    last_be=last_be_for_length(len(bad_packet)))
+                    be=be_for_length(len(bad_packet)))
                 self.udp_port        = udp_port = type("UDPPort", (), {})()
                 self.udp_port.sink   = stream.Endpoint(eth_udp_user_description(32))
                 self.udp_port.source = stream.Endpoint(eth_udp_user_description(32))

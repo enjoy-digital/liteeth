@@ -40,7 +40,7 @@ class LiteEthICMPTX(LiteXModule):
             "checksum",
             "quench",
             "data",
-            "last_be"
+            "be"
         })
 
         # FSM.
@@ -105,7 +105,7 @@ class LiteEthICMPRX(LiteXModule):
                 "quench",
                 "data",
                 "error",
-                "last_be"
+                "be"
             }),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length - icmp_header.length),

@@ -88,6 +88,17 @@ class TestExamples(unittest.TestCase):
 # Test Generated Core ------------------------------------------------------------------------------
 
 class TestGeneratedCore(unittest.TestCase):
+    def test_raw_byte_enable_pins(self):
+        for legacy in [False, True]:
+            with self.subTest(legacy=legacy):
+                ports = {"raw" : {"data_width" : 32, "mode" : "raw", "with_last_be" : legacy}}
+                verilog = generate_config("udp_raw_ecp5rgmii", udp_ports=ports)
+                field = "last_be" if legacy else "be"
+                self.assertIn(f"raw_sink_{field}", verilog)
+                self.assertIn(f"raw_source_{field}", verilog)
+                if not legacy:
+                    self.assertNotIn("raw_sink_last_be", verilog)
+
     def test_basex_phy_generation(self):
         for phy, primitive in [
             ("K7_1000BASEX", "GTXE2_CHANNEL"),

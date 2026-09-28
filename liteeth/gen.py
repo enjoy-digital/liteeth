@@ -50,7 +50,7 @@ from liteeth.mac import LiteEthMAC
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.core.dhcp import LiteEthDHCP
 
-from liteeth.frontend.stream import LiteEthUDPStreamer, tkeep2last_be, last_be2tkeep
+from liteeth.frontend.stream import LiteEthUDPStreamer
 from liteeth.frontend.etherbone import LiteEthEtherbone
 
 # IOs ----------------------------------------------------------------------------------------------
@@ -187,7 +187,7 @@ def get_udp_port_ios(name, data_width, dynamic_params=False, with_tkeep=True):
             Subsignal("sink_last",  Pins(1)),
             Subsignal("sink_ready", Pins(1)),
             Subsignal("sink_data",  Pins(data_width)),
-            # AXI-Stream tkeep: valid bytes of the last word (left unconnected/0: full word).
+            # AXI-Stream tkeep: one enable per byte, on every beat.
             *([Subsignal("sink_keep",   Pins(keep_width))] if with_tkeep else []),
 
             # Source.
@@ -200,7 +200,8 @@ def get_udp_port_ios(name, data_width, dynamic_params=False, with_tkeep=True):
         ),
     ]
 
-def get_udp_raw_port_ios(name, data_width):
+def get_udp_raw_port_ios(name, data_width, with_last_be=False):
+    byte_enable = "last_be" if with_last_be else "be"
     return [
         (f"{name}", 0,
 
@@ -213,7 +214,7 @@ def get_udp_raw_port_ios(name, data_width):
             Subsignal("sink_last",       Pins(1)),
             Subsignal("sink_ready",      Pins(1)),
             Subsignal("sink_data",       Pins(data_width)),
-            Subsignal("sink_last_be",    Pins(data_width//8)),
+            Subsignal(f"sink_{byte_enable}", Pins(data_width//8)),
 
             # Source.
             Subsignal("source_ip_address", Pins(32)),
@@ -224,7 +225,7 @@ def get_udp_raw_port_ios(name, data_width):
             Subsignal("source_last",       Pins(1)),
             Subsignal("source_ready",      Pins(1)),
             Subsignal("source_data",       Pins(data_width)),
-            Subsignal("source_last_be",    Pins(data_width//8)),
+            Subsignal(f"source_{byte_enable}", Pins(data_width//8)),
             Subsignal("source_error",      Pins(1)),
         ),
     ]
@@ -510,13 +511,8 @@ class UDPCore(PHYCore):
         # UDP payload for the MTU (ex 8972 with Jumbo Frames) so split packets fit in frames.
         tx_max_packet_length = port_cfg.get("tx_max_packet_length", None)
 
-        # AXI-Stream tkeep (exposed by default, "with_tkeep": False removes the pins): contiguous
-        # mask of the valid bytes of the last word, allows byte-granular packet lengths on the
-        # stream port (converted to/from LiteEth's last_be). A sink_keep of 0 on the last word (pin
-        # left unconnected/undriven by the user logic) means a full word, so user logic that only
-        # sends whole words does not need to drive it.
+        # AXI-Stream tkeep maps directly to native byte enables. Disable the pins for whole words.
         with_tkeep = port_cfg.get("with_tkeep", port_cfg.get("tkeep", True))
-        keep_width = data_width//8
 
         # Create/Add IOs.
         # ---------------
@@ -543,7 +539,7 @@ class UDPCore(PHYCore):
             data_width           = data_width,
             tx_fifo_depth        = tx_fifo_depth,
             rx_fifo_depth        = rx_fifo_depth,
-            with_last_be         = with_tkeep,
+            with_be              = with_tkeep,
             tx_max_packet_length = tx_max_packet_length,
         )
         self.submodules += udp_streamer
@@ -558,7 +554,7 @@ class UDPCore(PHYCore):
             udp_streamer.sink.data.eq(port_ios.sink_data)
         ]
         if with_tkeep:
-            self.comb += udp_streamer.sink.last_be.eq(tkeep2last_be(port_ios.sink_keep))
+            self.comb += udp_streamer.sink.be.eq(port_ios.sink_keep)
 
         # Connect UDP Streamer to UDP Source IOs.
         self.comb += [
@@ -569,53 +565,61 @@ class UDPCore(PHYCore):
             port_ios.source_error.eq(udp_streamer.source.error),
         ]
         if with_tkeep:
-            self.comb += port_ios.source_keep.eq(last_be2tkeep(
-                last_be    = udp_streamer.source.last_be,
-                last       = udp_streamer.source.last,
-                keep_width = keep_width,
-            ))
+            self.comb += port_ios.source_keep.eq(udp_streamer.source.be)
 
     def add_raw_port(self, platform, name, port_cfg):
         # Use default Data-Width of 8-bit when not specified.
-        data_width = port_cfg.get("data_width", 8)
+        data_width   = port_cfg.get("data_width", 8)
+        with_last_be = port_cfg.get("with_last_be", False)
 
         # Create/Add IOs.
          # ---------------
         platform.add_extension(get_udp_raw_port_ios(name,
-            data_width     = data_width,
+            data_width   = data_width,
+            with_last_be = with_last_be,
          ))
 
         port_ios = platform.request(name)
 
         raw_port = self.core.udp.crossbar.get_port(port_ios.sink_dst_port, dw=data_width)
 
+        if with_last_be:
+            tx_legacy = stream.LastBEConverter(raw_port.sink.description)
+            rx_legacy = stream.LastBEConverter(raw_port.source.description, reverse=True)
+            self.submodules += tx_legacy, rx_legacy
+            self.comb += [tx_legacy.source.connect(raw_port.sink), raw_port.source.connect(rx_legacy.sink)]
+            raw_sink, raw_source = tx_legacy.sink, rx_legacy.source
+        else:
+            raw_sink, raw_source = raw_port.sink, raw_port.source
+        byte_enable = "last_be" if with_last_be else "be"
+
         # Connect IOs.
         # ------------
         # Connect UDP Sink IOs to UDP.
         self.comb += [
-            raw_port.sink.valid.eq(port_ios.sink_valid),
-            raw_port.sink.last.eq(port_ios.sink_last),
-            raw_port.sink.dst_port.eq(port_ios.sink_dst_port),
-            raw_port.sink.src_port.eq(port_ios.sink_src_port),
-            raw_port.sink.ip_address.eq(port_ios.sink_ip_address),
-            raw_port.sink.length.eq(port_ios.sink_length),
-            port_ios.sink_ready.eq(raw_port.sink.ready),
-            raw_port.sink.data.eq(port_ios.sink_data),
-            raw_port.sink.last_be.eq(port_ios.sink_last_be),
+            raw_sink.valid.eq(port_ios.sink_valid),
+            raw_sink.last.eq(port_ios.sink_last),
+            raw_sink.dst_port.eq(port_ios.sink_dst_port),
+            raw_sink.src_port.eq(port_ios.sink_src_port),
+            raw_sink.ip_address.eq(port_ios.sink_ip_address),
+            raw_sink.length.eq(port_ios.sink_length),
+            port_ios.sink_ready.eq(raw_sink.ready),
+            raw_sink.data.eq(port_ios.sink_data),
+            getattr(raw_sink, byte_enable).eq(getattr(port_ios, f"sink_{byte_enable}")),
         ]
 
         # Connect UDP to UDP Source IOs.
         self.comb += [
-            port_ios.source_valid.eq(raw_port.source.valid),
-            port_ios.source_last.eq(raw_port.source.last),
-            port_ios.source_dst_port.eq(raw_port.source.dst_port),
-            port_ios.source_src_port.eq(raw_port.source.src_port),
-            port_ios.source_ip_address.eq(raw_port.source.ip_address),
-            port_ios.source_length.eq(raw_port.source.length),
-            raw_port.source.ready.eq(port_ios.source_ready),
-            port_ios.source_data.eq(raw_port.source.data),
-            port_ios.source_last_be.eq(raw_port.source.last_be),
-            port_ios.source_error.eq(raw_port.source.error),
+            port_ios.source_valid.eq(raw_source.valid),
+            port_ios.source_last.eq(raw_source.last),
+            port_ios.source_dst_port.eq(raw_source.dst_port),
+            port_ios.source_src_port.eq(raw_source.src_port),
+            port_ios.source_ip_address.eq(raw_source.ip_address),
+            port_ios.source_length.eq(raw_source.length),
+            raw_source.ready.eq(port_ios.source_ready),
+            port_ios.source_data.eq(raw_source.data),
+            getattr(port_ios, f"source_{byte_enable}").eq(getattr(raw_source, byte_enable)),
+            port_ios.source_error.eq(raw_source.error),
         ]
 
     def __init__(self, platform, core_config):

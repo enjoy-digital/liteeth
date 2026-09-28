@@ -18,14 +18,14 @@ from test.test_stream import StreamPacket, stream_inserter, stream_collector, co
 
 # Helper -------------------------------------------------------------------------------------------
 
-def mask_last_be(dw, data, last_be):
-    """Mark some data by a last_be data qualifier. The rest of the data
+def mask_be(dw, data, be):
+    """Mark some data by a be data qualifier. The rest of the data
     passed in will be zeroed.
     """
     masked_data = 0
 
     for byte in range(dw // 8):
-        if 2**byte > last_be:
+        if 2**byte > be:
             break
         masked_data |= data & (0xFF << (byte * 8))
 

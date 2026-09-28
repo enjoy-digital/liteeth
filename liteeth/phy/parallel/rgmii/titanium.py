@@ -64,6 +64,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
 class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads, clk):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         # # #
 

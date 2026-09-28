@@ -43,15 +43,6 @@ class LiteEthPHYXGMIITX(LiteXModule):
 
         # ---------- Generic signals ----------
 
-        # Masked last_be signal of current clock cycle. last_be should only be
-        # respected when last is also asserted.
-        masked_last_be = Signal.like(sink.last_be)
-        self.comb += [
-            If(sink.last,
-                masked_last_be.eq(sink.last_be),
-            ),
-        ]
-
         # ---------- Inter-frame gap state ----------
 
         # State to keep track of the current inter-frame gap we are required to
@@ -163,15 +154,13 @@ class LiteEthPHYXGMIITX(LiteXModule):
 
         # Upper half of the data of the previous clock cycle.
         prev_valid_data = Signal(dw)
-        prev_valid_last_be = Signal(dw // 8)
+        prev_be         = Signal(dw // 8)
+        prev_last       = Signal()
         self.sync += [
             If(sink.valid & sink.ready,
                prev_valid_data.eq(sink.data),
-               If(sink.last,
-                  prev_valid_last_be.eq(masked_last_be)
-               ).Else(
-                   prev_valid_last_be.eq(0),
-               ),
+               prev_be.eq(sink.be),
+               prev_last.eq(sink.last),
             ),
         ]
 
@@ -179,13 +168,11 @@ class LiteEthPHYXGMIITX(LiteXModule):
         prev_valid = Signal()
         self.sync += prev_valid.eq(sink.valid)
 
-        # Adjusted sink data & last_be. If our transmission is shifted, this
-        # will contain the upper-half of the previous and lower-half of the
-        # current clock cycle. Otherwise, simply equal to data and the masked
-        # last_be.
-        adjusted_sink_valid = Signal()
+        # Shift data, byte enables and packet termination together for lane-four starts.
+        adjusted_sink_last       = Signal()
+        adjusted_sink_valid      = Signal()
         adjusted_sink_valid_data = Signal.like(sink.data)
-        adjusted_sink_valid_last_be = Signal.like(sink.last_be)
+        adjusted_sink_be         = Signal.like(sink.be)
         self.comb += [
             If(transmit_shifted,
                 # Because we are injecting data from the previous cycle, we need
@@ -199,14 +186,16 @@ class LiteEthPHYXGMIITX(LiteXModule):
                     prev_valid_data[(dw // 2):],
                     sink.data[:(dw // 2)],
                 )),
-                adjusted_sink_valid_last_be.eq(Cat(
-                    prev_valid_last_be[(dw // 8 // 2):],
-                    masked_last_be[:(dw // 8 // 2)],
+                adjusted_sink_be.eq(Cat(
+                    prev_be[(dw // 8 // 2):],
+                    Mux(prev_last, 0, sink.be[:(dw // 8 // 2)]),
                 )),
+                adjusted_sink_last.eq(prev_last | (sink.last & (sink.be[4:] == 0))),
             ).Else(
                 adjusted_sink_valid.eq(sink.valid),
                 adjusted_sink_valid_data.eq(sink.data),
-                adjusted_sink_valid_last_be.eq(masked_last_be),
+                adjusted_sink_be.eq(sink.be),
+                adjusted_sink_last.eq(sink.last),
             ),
         ]
 
@@ -378,19 +367,16 @@ class LiteEthPHYXGMIITX(LiteXModule):
             ).Else(
                 # The data is valid. For each byte, determine whether it is
                 # valid or must be an XGMII idle or end of frame control
-                # character based on the value of last_be.
+                # character based on the value of be.
                 *[
-                    If((adjusted_sink_valid_last_be == 0)
-                       | (adjusted_sink_valid_last_be >= (1 << i)),
-                        # Either not the last data word or last_be indicates
-                        # this byte is still valid
+                    If(adjusted_sink_be[i],
+                        # Enabled lanes carry packet data.
                         pads.tx_ctl[i].eq(0),
                         pads.tx_data[8*i:8*(i+1)].eq(
                             adjusted_sink_valid_data[8*i:8*(i+1)]
                         ),
-                    ).Elif((adjusted_sink_valid_last_be == (1 << (i - 1)))
-                           if i > 0 else 0,
-                        # last_be indicates that this byte is the first one
+                    ).Elif(adjusted_sink_be[i - 1] if i > 0 else 1,
+                        # be indicates that this byte is the first one
                         # which is no longer valid, hence transmit the XGMII end
                         # of frame character
                         pads.tx_ctl[i].eq(1),
@@ -426,7 +412,7 @@ class LiteEthPHYXGMIITX(LiteXModule):
                 # XGMII bus word containing the XGMII end of frame and idle
                 # control characters. This happens if we remain in the TRANSMIT
                 # state.
-                If(adjusted_sink_valid_last_be == 0,
+                If(~adjusted_sink_last,
                     # This hasn't been the last bus word. However, before we can
                     # tell the data sink to send us additional data, in case
                     # we're performing a shifted transmission, we must see
@@ -435,7 +421,7 @@ class LiteEthPHYXGMIITX(LiteXModule):
                     # additional data. Otherwise we could loose valid data, as
                     # we're transmitting the IFG first.
                     If(transmit_shifted & sink.last
-                       & ((sink.last_be & 0xF0) != 0),
+                       & ((sink.be & 0xF0) != 0),
                         # We're in a shifted transmit and already have received
                         # the last data bytes from the sink.
                         NextValue(sink.ready, 0),
@@ -444,7 +430,7 @@ class LiteEthPHYXGMIITX(LiteXModule):
                         NextValue(sink.ready, 1),
                     ),
                     NextState("TRANSMIT"),
-                ).Elif(adjusted_sink_valid_last_be == (1 << 7),
+                ).Elif(adjusted_sink_be == 0xff,
                     # Last data word, but all bytes were valid. Thus we still
                     # need to transmit the XGMII end control character.
                     NextValue(end_transmission, 1),
@@ -560,18 +546,18 @@ class LiteEthPHYXGMIIRX(LiteXModule):
         # Scan over the entire XGMII bus word and search for an XGMII_END
         # control character. If found, the octet before that must've been the
         # last valid byte.
-        encoded_last_be = Signal(8)
+        encoded_be = Signal(8)
         self.comb += [
             reduce(lambda a, b: a.Else(b), [
                 If((xgmii_bus.ctl[i] == 1) & \
                    (xgmii_bus.data[i*8:(i+1)*8] == XGMII_END),
-                    encoded_last_be.eq((1 << i - 1) if i > 0 else 0))
+                    encoded_be.eq((1 << i) - 1))
                 for i in range(8)
-            ]).Else(encoded_last_be.eq(1 << 7)),
+            ]).Else(encoded_be.eq(0xff)),
         ]
 
         # If either the current XGMII bus word indicates an end of a XGMII bus
-        # transfer (i.e. the encoded last_be is not 1 << 7, so the XGMII bus
+        # transfer (i.e. the encoded be is not 0xff, so the XGMII bus
         # word is only partially valid) OR the next bus word immediately
         # _starts_ with an XGMII end control character, the current bus data
         # must be last. Nonetheless, mask last by valid to avoid triggering
@@ -583,14 +569,10 @@ class LiteEthPHYXGMIIRX(LiteXModule):
             ),
             source.last.eq(
                 source.valid & (
-                    (encoded_last_be != (1 << 7)) | xgmii_bus_next_immediate_end
+                    (encoded_be != 0xff) | xgmii_bus_next_immediate_end
                 ),
             ),
-            If(source.last,
-                source.last_be.eq(encoded_last_be),
-            ).Else(
-                source.last_be.eq(0),
-            ),
+            source.be.eq(encoded_be),
         ]
 
         # Receive FSM

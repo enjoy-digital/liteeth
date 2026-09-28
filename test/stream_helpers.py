@@ -94,9 +94,9 @@ class Packet(list):
 
 
 class PacketStreamer(Module):
-    def __init__(self, description, last_be=None, packet_cls=Packet, byte_data=False):
+    def __init__(self, description, be=None, packet_cls=Packet, byte_data=False):
         self.source = stream.Endpoint(description)
-        self.last_be = last_be
+        self.be = be
         self.byte_data = byte_data
 
         self.packets = []
@@ -110,8 +110,8 @@ class PacketStreamer(Module):
         for i in range(nbytes):
             data |= self.packet.pop(0) << (8*i)
         last = len(self.packet) == 0
-        last_be = 1 << (nbytes - 1)
-        return data, last, last_be
+        be = (1 << nbytes) - 1
+        return data, last, be
 
     def send(self, packet):
         packet = deepcopy(packet)
@@ -130,37 +130,40 @@ class PacketStreamer(Module):
                 self.packet = self.packets.pop(0)
             if self.byte_data:
                 if not self.packet.ongoing and not self.packet.done:
-                    data, last, last_be = self._pop_word()
+                    data, last, be = self._pop_word()
                     yield self.source.valid.eq(1)
                     yield self.source.data.eq(data)
                     yield self.source.last.eq(last)
-                    if hasattr(self.source, "last_be"):
-                        yield self.source.last_be.eq(last_be if last else 0)
+                    if hasattr(self.source, "be"):
+                        yield self.source.be.eq(be if last else (1 << (len(self.source.data)//8)) - 1)
                     self.packet.ongoing = True
                 elif (yield self.source.valid) and (yield self.source.ready):
                     if len(self.packet):
-                        data, last, last_be = self._pop_word()
+                        data, last, be = self._pop_word()
                         yield self.source.valid.eq(1)
                         yield self.source.data.eq(data)
                         yield self.source.last.eq(last)
-                        if hasattr(self.source, "last_be"):
-                            yield self.source.last_be.eq(last_be if last else 0)
+                        if hasattr(self.source, "be"):
+                            yield self.source.be.eq(be if last else (1 << (len(self.source.data)//8)) - 1)
                     else:
                         self.packet.done = True
                         yield self.source.valid.eq(0)
                         yield self.source.last.eq(0)
-                        if hasattr(self.source, "last_be"):
-                            yield self.source.last_be.eq(0)
+                        if hasattr(self.source, "be"):
+                            yield self.source.be.eq(0)
                 yield
                 continue
             if not self.packet.ongoing and not self.packet.done:
                 yield self.source.valid.eq(1)
                 yield self.source.data.eq(self.packet.pop(0))
+                if hasattr(self.source, "be"):
+                    yield self.source.be.eq((1 << (len(self.source.data)//8)) - 1)
                 self.packet.ongoing = True
             elif (yield self.source.valid) and (yield self.source.ready):
                 yield self.source.last.eq(len(self.packet) == 1)
-                if self.last_be is not None:
-                    yield self.source.last_be.eq(self.last_be & (len(self.packet) == 1))
+                if hasattr(self.source, "be"):
+                    yield self.source.be.eq(self.be if self.be is not None and len(self.packet) == 1
+                        else (1 << (len(self.source.data)//8)) - 1)
                 if len(self.packet):
                     yield self.source.valid.eq(1)
                     yield self.source.data.eq(self.packet.pop(0))
@@ -206,13 +209,12 @@ class PacketLogger(Module):
                 data = (yield self.sink.data)
                 if self.byte_data:
                     bytes_per_clk = len(self.sink.data)//8
-                    nbytes = bytes_per_clk
-                    if (yield self.sink.last) and hasattr(self.sink, "last_be"):
-                        last_be = (yield self.sink.last_be)
-                        if last_be != 0:
-                            nbytes = last_be.bit_length()
-                    for i in range(nbytes):
-                        self.packet.append((data >> (8*i)) & 0xff)
+                    be = (yield self.sink.be) if hasattr(self.sink, "be") else (1 << bytes_per_clk) - 1
+                    assert be != 0 and (be & (be + 1)) == 0, "Invalid packet byte mask"
+                    assert (yield self.sink.last) or be == (1 << bytes_per_clk) - 1, "Partial intermediate beat"
+                    for i in range(bytes_per_clk):
+                        if be & (1 << i):
+                            self.packet.append((data >> (8*i)) & 0xff)
                 else:
                     self.packet.append(data)
                 if (yield self.sink.last):

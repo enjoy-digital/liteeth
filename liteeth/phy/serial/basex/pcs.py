@@ -289,6 +289,7 @@ class PCS(LiteXModule):
         self.tbi_rx_ce = self.rx.decoder.ce
         self.sink      = stream.Endpoint(eth_phy_description(8))
         self.source    = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         self.link_up = Signal()
         self.restart = Signal()
@@ -307,8 +308,8 @@ class PCS(LiteXModule):
 
         # Sink -> TX / RX -> Source.
         self.comb += [
-            self.sink.connect(self.tx.sink,     omit={"last_be", "error"}),
-            self.rx.source.connect(self.source, omit={"last_be"}),
+            self.sink.connect(self.tx.sink,     omit={"be", "error"}),
+            self.rx.source.connect(self.source, omit={"be"}),
         ]
 
         # Pulse Synchronizers.

@@ -38,6 +38,7 @@ class LiteEthPHYGMIITX(LiteXModule):
 class LiteEthPHYGMIIRX(LiteXModule):
     def __init__(self, pads):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         # # #
 

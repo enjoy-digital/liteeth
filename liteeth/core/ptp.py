@@ -84,7 +84,7 @@ def ptp_description(dw):
     param_layout   = ptp_header.get_layout()
     payload_layout = [
         ("data",    dw),
-        ("last_be", dw//8),
+        ("be",      dw//8),
         ("error",   dw//8),
     ]
     return EndpointDescription(payload_layout, param_layout)
@@ -288,13 +288,13 @@ class LiteEthPTPTX(LiteXModule):
             packetizer.sink.sequence_id.eq(self.seq_id),
 
             # Payload Control.
+            packetizer.sink.be.eq(1),
             packetizer.sink.error.eq(0),
         ]
 
         # Pipeline.
         # ---------
         self.comb += packetizer.source.connect(source)
-        self.comb += source.last_be.eq(source.last)
 
         # UDP Metadata.
         # -------------
