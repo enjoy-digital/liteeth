@@ -26,13 +26,14 @@ from liteeth.phy.pcs_1000basex import (
 # Helpers ------------------------------------------------------------------------------------------
 
 class PCSLoopbackDUT(LiteXModule):
-    def __init__(self, lsb_first=False):
+    def __init__(self, lsb_first=False, **pcs_kwargs):
         self.pcs_a = PCS(
             lsb_first=lsb_first,
             check_period=32/125e6,
             breaklink_time=1/125e6,
             more_ack_time=1/125e6,
             sgmii_ack_time=1/125e6,
+            **pcs_kwargs
         )
         self.pcs_b = PCS(
             lsb_first=lsb_first,
@@ -40,13 +41,15 @@ class PCSLoopbackDUT(LiteXModule):
             breaklink_time=1/125e6,
             more_ack_time=1/125e6,
             sgmii_ack_time=1/125e6,
+            **pcs_kwargs
         )
+        self.b_rx_ce = Signal(reset=1) # Clear to cut the A -> B direction.
 
         self.comb += [
             self.pcs_a.tbi_rx.eq(self.pcs_b.tbi_tx),
             self.pcs_b.tbi_rx.eq(self.pcs_a.tbi_tx),
             self.pcs_a.tbi_rx_ce.eq(1),
-            self.pcs_b.tbi_rx_ce.eq(1),
+            self.pcs_b.tbi_rx_ce.eq(self.b_rx_ce),
         ]
 
 
@@ -344,6 +347,87 @@ class TestPCSAutonegConfig(unittest.TestCase):
             })
 
         self.assertEqual(state_cycles[250e6] - 1, 2 * (state_cycles[125e6] - 1))
+
+
+# Test PCS without Auto-Negotiation ----------------------------------------------------------------
+
+class TestPCSNoAutoneg(unittest.TestCase):
+    clocks = {
+        "sys":    10,
+        "eth_tx": 10,
+        "eth_rx": 10,
+    }
+
+    def test_two_pcs_link_up_without_config_words_and_stay_up(self):
+        dut = PCSLoopbackDUT(with_autoneg=False)
+
+        def generator():
+            up_since = None
+            for cycle in range(400): # Several check periods (32 cycles each).
+                up = (yield dut.pcs_a.link_up) and (yield dut.pcs_b.link_up)
+                if up_since is None:
+                    if up:
+                        up_since = cycle
+                else:
+                    self.assertTrue(up, f"link_up dropped at cycle {cycle}, up since {up_since}")
+                # No Auto-Negotiation: configuration words are never sent.
+                self.assertEqual((yield dut.pcs_a.tx.config_valid), 0)
+                self.assertEqual((yield dut.pcs_b.tx.config_valid), 0)
+                yield
+            self.assertIsNotNone(up_since, "PCS pair without autoneg did not link up")
+
+        run_simulation(dut, generator(), clocks=self.clocks)
+
+    def test_link_drops_and_restarts_without_valid_code_groups(self):
+        dut = PCSLoopbackDUT(with_autoneg=False)
+
+        def generator():
+            for _ in range(100):
+                yield
+            self.assertEqual((yield dut.pcs_b.link_up), 1)
+
+            # Cut A -> B: B sees no valid code groups, its link must drop and RX restart.
+            yield dut.b_rx_ce.eq(0)
+            restarts = 0
+            for _ in range(100):
+                restarts += (yield dut.pcs_b.restart)
+                yield
+            self.assertEqual((yield dut.pcs_b.link_up), 0)
+            self.assertGreater(restarts, 0)
+            self.assertEqual((yield dut.pcs_a.link_up), 1) # B -> A still fine.
+
+            # Restore, the link comes back.
+            yield dut.b_rx_ce.eq(1)
+            for _ in range(100):
+                yield
+            self.assertEqual((yield dut.pcs_b.link_up), 1)
+
+        run_simulation(dut, generator(), clocks=self.clocks)
+
+    def test_sgmii_defaults_to_true_and_can_be_overridden(self):
+        for sgmii, expected in [(None, 1), (True, 1), (False, 0)]:
+            dut = PCS(with_autoneg=False, sgmii=sgmii)
+
+            def generator():
+                yield
+                self.assertEqual((yield dut.is_sgmii), expected)
+
+            run_simulation(dut, generator(), clocks=self.clocks)
+
+    def test_with_csr_has_csr_fsm_but_no_autoneg_fsm(self):
+        class Top:
+            sys_clk_freq = int(100e6)
+
+        old_top = LiteXContext.top
+        LiteXContext.top = Top()
+        try:
+            dut = PCS(with_csr=True, with_autoneg=False)
+        finally:
+            LiteXContext.top = old_top
+
+        self.assertFalse(hasattr(dut, "fsm"))
+        self.assertIn("DOWN", dut.csr_fsm.actions)
+        self.assertIn("UP", dut.csr_fsm.actions)
 
 
 # Test PCS TX --------------------------------------------------------------------------------------
