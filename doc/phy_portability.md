@@ -35,6 +35,12 @@ reference clocks explicitly. For example, `K7_1000BASEX` uses a 200 MHz
 reference, while `K7_2500BASEX` needs 125 MHz for its 3.125 Gb/s channel
 PLL configuration.
 
+Virtex-7 GTH BASE-X supports 200 MHz and 156.25 MHz references at 1G, with
+200 MHz as the default. `V7_2500BASEX` uses a 156.25 MHz reference by default
+and rejects 200 MHz: the channel PLL cannot generate 3.125 Gb/s from that
+reference. The calibration divider follows the reference frequency, and
+the CDR configuration follows the PLL's output divider.
+
 ## Reuse with LiteICLink
 
 The BASE-R GTY/GTH/GTX PMAs already reuse LiteICLink PLL, DRP, and reset/init
