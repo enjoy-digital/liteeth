@@ -1,10 +1,15 @@
 #
 # This file is part of LiteEth.
 #
+# Copyright (c) 2026 Enjoy-Digital <enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from liteeth.phy.pma_baser.gth_usp import PMA_USP_GTH_10G_BASER as PMA_USP_GTH_10G_BASER
-from liteeth.phy.pma_baser.gth_usp import PMA_USP_GTH_5G_BASER  as PMA_USP_GTH_5G_BASER
-from liteeth.phy.pma_baser.gty_usp import PMA_USP_GTY_10G_BASER as PMA_USP_GTY_10G_BASER
-from liteeth.phy.pma_baser.gty_usp import PMA_USP_GTY_5G_BASER  as PMA_USP_GTY_5G_BASER
-from liteeth.phy.pma_baser.gty_usp import PMA_USP_GTY_25G_BASER as PMA_USP_GTY_25G_BASER
+# Compatibility import; implementation lives in liteeth.phy.serial.baser.pma.
+from liteeth.phy.serial.baser import pma as _impl
+from liteeth.phy.serial.baser.pma import *
+
+def __getattr__(name):
+    return getattr(_impl, name)
+
+def __dir__():
+    return sorted(set(globals()) | set(dir(_impl)))
