@@ -17,7 +17,7 @@ from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 from liteeth.fifo import PacketDropFIFO
-from liteeth.mac import crc, gap, last_be, padding, preamble
+from liteeth.mac import crc, gap, padding, preamble
 from liteeth.mac.common import *
 
 # MAC Core -----------------------------------------------------------------------------------------
@@ -122,13 +122,6 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += tx_converter
                 self.pipeline.append(tx_converter)
 
-            def add_last_be(self):
-                """Add TX last-byte-enable handling after down-conversion."""
-                tx_last_be = last_be.LiteEthMACTXLastBE(phy_dw)
-                tx_last_be = ClockDomainsRenamer("eth_tx")(tx_last_be)
-                self.submodules += tx_last_be
-                self.pipeline.append(tx_last_be)
-
             def add_padding(self):
                 """Add minimum-frame padding insertion."""
                 tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, (eth_min_frame_length - eth_fcs_length))
@@ -184,7 +177,6 @@ class LiteEthMACCore(LiteXModule):
                 self.add_cdc(dw)
                 if core_dw > phy_dw:
                     self.add_converter("eth_tx")
-                    self.add_last_be()
 
             def do_finalize(self):
                 """Finalize the stream pipeline once all stages have been selected."""
@@ -249,7 +241,7 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += rx_crc
                 self.pipeline.append(rx_crc)
 
-                # source.error is combinational from last_be through the per-lane CRC engine
+                # source.error is combinational from be through the per-lane CRC engine
                 # select. Buffering here avoids disturbing error/last alignment inside the checker.
                 if eth_needs_pipelining(phy):
                     rx_crc_buffer = stream.Buffer(eth_phy_description(datapath_dw),
@@ -270,13 +262,6 @@ class LiteEthMACCore(LiteXModule):
                 rx_padding = ClockDomainsRenamer(cd_rx)(rx_padding)
                 self.submodules += rx_padding
                 self.pipeline.append(rx_padding)
-
-            def add_last_be(self):
-                """Add RX last-byte-enable handling before up-conversion."""
-                rx_last_be = last_be.LiteEthMACRXLastBE(phy_dw)
-                rx_last_be = ClockDomainsRenamer("eth_rx")(rx_last_be)
-                self.submodules += rx_last_be
-                self.pipeline.append(rx_last_be)
 
             def add_converter(self, cd):
                 """Add a stride converter in the selected clock domain."""
@@ -320,11 +305,8 @@ class LiteEthMACCore(LiteXModule):
                 self.sync += If(ps.o, self.drops.status.eq(self.drops.status + 1))
 
             def add_domain_switch(self):
-                """Add last_be/converter/CDC stages in the order required by the data widths."""
+                """Add converter/CDC stages in the order required by the data widths."""
                 dw = phy_dw
-                # Eight-bit PHYs only drive last, even when no width conversion is needed.
-                if phy_dw <= core_dw:
-                    self.add_last_be()
                 if phy_dw < core_dw:
                     dw = core_dw
                     self.add_converter("eth_rx")
@@ -333,9 +315,6 @@ class LiteEthMACCore(LiteXModule):
                 self.add_cdc(dw)
                 if phy_dw > core_dw:
                     self.add_converter("sys")
-                    last_handler = LiteEthLastHandler(eth_phy_description(core_dw))
-                    self.submodules += last_handler
-                    self.pipeline.append(last_handler)
 
             def do_finalize(self):
                 """Finalize the stream pipeline once all stages have been selected."""

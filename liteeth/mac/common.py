@@ -55,31 +55,3 @@ class LiteEthMACCrossbar(LiteEthCrossbar):
             raise ValueError("Ethernet type {0:#x} already assigned".format(ethernet_type))
         self.users[ethernet_type] = port
         return port
-
-# Last Handler -------------------------------------------------------------------------------------
-
-class LiteEthLastHandler(LiteXModule):
-    def __init__(self, layout):
-        self.sink   =   sink = stream.Endpoint(layout)
-        self.source = source = stream.Endpoint(layout)
-
-        # # #
-
-        self.fsm = fsm = FSM(reset_state="COPY")
-        fsm.act("COPY",
-            sink.connect(source),
-            source.last.eq(sink.last_be != 0),
-            If(sink.valid & sink.ready,
-                # If last Byte but not last packet token.
-                If(source.last & ~sink.last,
-                    NextState("WAIT-LAST")
-                )
-            )
-        )
-        fsm.act("WAIT-LAST",
-            # Accept incoming stream until we receive last packet token.
-            sink.ready.eq(1),
-            If(sink.valid & sink.last,
-                NextState("COPY")
-            )
-        )

@@ -129,7 +129,7 @@ class LiteEthIGMPJoiner(LiteXModule):
         fsm.act("SEND",
             source.valid.eq(1),
             source.last.eq(last),
-            source.last_be.eq(last),
+            source.be.eq(1),
             source.error.eq(0),
             source.data.eq(igmp_data),
             source.ip_address.eq(igmp_ip),

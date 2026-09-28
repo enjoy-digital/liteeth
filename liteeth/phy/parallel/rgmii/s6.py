@@ -93,6 +93,7 @@ class LiteEthPHYRGMIITX(LiteXModule):
 class LiteEthPHYRGMIIRX(LiteXModule):
     def __init__(self, pads, rx_delay=2e-9):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         # # #
 

@@ -1021,7 +1021,7 @@ class TestStreamPCSLoopback(unittest.TestCase):
     def test_packets_survive_the_pcs(self):
         """A packet framed onto XGMII and put through the PCS must come back byte for byte."""
         dut = StreamPCSLoopbackDUT()
-        # 64 bytes fills whole bus words; 60 leaves a partial one, so last_be has to survive the
+        # 64 bytes fills whole bus words; 60 leaves a partial one, so be has to survive the
         # trip out to XGMII and back.
         packets = [phy_packet(length, seed) for seed, length in enumerate((64, 60))]
 

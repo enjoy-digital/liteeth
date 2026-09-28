@@ -116,6 +116,7 @@ class LiteEthPHYRMIITX(LiteXModule):
 class LiteEthPHYRMIIRX(LiteXModule):
     def __init__(self, pads, clk_signal, speed_counter_threshold=20):
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
         self.speed = Signal() # 0: 10Mbps / 1: 100Mbps.
 
         # # #

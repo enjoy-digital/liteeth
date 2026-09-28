@@ -22,8 +22,6 @@ from liteeth.common import *
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.packet import *
 
-from liteeth.mac.common import LiteEthLastHandler
-
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # Etherbone Packet ---------------------------------------------------------------------------------
@@ -46,7 +44,7 @@ class LiteEthEtherbonePacketTX(LiteXModule):
 
         self.packetizer = packetizer = LiteEthEtherbonePacketPacketizer()
         self.comb += [
-            sink.connect(packetizer.sink, keep={"valid", "last", "last_be", "ready", "data"}),
+            sink.connect(packetizer.sink, keep={"valid", "last", "be", "ready", "data"}),
             sink.connect(packetizer.sink, keep={"pf", "pr", "nr"}),
             packetizer.sink.version.eq(etherbone_version),
             packetizer.sink.magic.eq(etherbone_magic),
@@ -80,7 +78,7 @@ class LiteEthEtherbonePacketDepacketizer(Depacketizer):
 
 
 class LiteEthEtherbonePacketRX(LiteXModule):
-    def __init__(self, with_last_handler=False):
+    def __init__(self):
         self.sink   = sink   = stream.Endpoint(eth_udp_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
@@ -88,14 +86,7 @@ class LiteEthEtherbonePacketRX(LiteXModule):
 
         self.depacketizer = depacketizer = LiteEthEtherbonePacketDepacketizer()
 
-        if with_last_handler:
-            self.last_handler = LiteEthLastHandler(eth_udp_user_description(32))
-            self.comb += [
-                sink.connect(self.last_handler.sink),
-                self.last_handler.source.connect(depacketizer.sink),
-            ]
-        else:
-            self.comb += sink.connect(depacketizer.sink)
+        self.comb += sink.connect(depacketizer.sink)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -107,7 +98,7 @@ class LiteEthEtherbonePacketRX(LiteXModule):
             )
         )
         self.comb += [
-            depacketizer.source.connect(source, keep={"last", "last_be", "pf", "pr", "nr", "data"}),
+            depacketizer.source.connect(source, keep={"last", "be", "pf", "pr", "nr", "data"}),
             source.src_port.eq(sink.src_port),
             source.dst_port.eq(sink.dst_port),
             source.ip_address.eq(sink.ip_address),
@@ -134,7 +125,7 @@ class LiteEthEtherbonePacketRX(LiteXModule):
 class LiteEthEtherbonePacket(LiteXModule):
     def __init__(self, udp, udp_port, cd="sys", max_packet_length=None):
         self.tx = tx = LiteEthEtherbonePacketTX(udp_port)
-        self.rx = rx = LiteEthEtherbonePacketRX(with_last_handler=(udp.crossbar.dw == 64)) # FIXME: Avoid 64-bit specific behavior.
+        self.rx = rx = LiteEthEtherbonePacketRX()
         # On a UDP crossbar wider than 32-bit, buffer TX packets after the up-conversion so they are
         # sent back-to-back (required by PHYs that cannot pause a frame, ex XGMII).
         port_kwargs = {}
@@ -238,9 +229,9 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
         fsm.act("RECEIVE_WRITES",
             source.valid.eq(fifo.source.valid),
             source.last.eq(count == fifo.source.wcount-1),
-            source.last_be.eq(source.last << 3),
+            source.be.eq(0xf),
             source.count.eq(fifo.source.wcount),
-            source.be.eq(fifo.source.byte_enable),
+            source.byte_enable.eq(fifo.source.byte_enable),
             source.addr.eq(base_addr[2:] + count),
             source.we.eq(1),
             source.data.eq(fifo.source.data),
@@ -266,9 +257,9 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
         fsm.act("RECEIVE_READS",
             source.valid.eq(fifo.source.valid),
             source.last.eq(count == fifo.source.rcount-1),
-            source.last_be.eq(source.last << 3),
+            source.be.eq(0xf),
             source.count.eq(fifo.source.rcount),
-            source.be.eq(fifo.source.byte_enable),
+            source.byte_enable.eq(fifo.source.byte_enable),
             source.base_addr.eq(base_addr),
             source.addr.eq(fifo.source.data[2:]),
             fifo.source.ready.eq(source.ready),
@@ -303,7 +294,7 @@ class LiteEthEtherboneRecordSender(LiteXModule):
             )
         )
         self.comb += [
-            source.byte_enable.eq(fifo.source.be),
+            source.byte_enable.eq(fifo.source.byte_enable),
             If(fifo.source.we,
                 source.wcount.eq(fifo.source.count)
             ).Else(
@@ -312,6 +303,7 @@ class LiteEthEtherboneRecordSender(LiteXModule):
         ]
         fsm.act("SEND_BASE_ADDRESS",
             source.valid.eq(1),
+            source.be.eq(0xf),
             source.last.eq(0),
             source.data.eq(fifo.source.base_addr),
             If(source.ready,
@@ -321,7 +313,7 @@ class LiteEthEtherboneRecordSender(LiteXModule):
         fsm.act("SEND_DATA",
             source.valid.eq(1),
             source.last.eq(fifo.source.last),
-            source.last_be.eq(fifo.source.last_be),
+            source.be.eq(fifo.source.be),
             source.data.eq(fifo.source.data),
             If(source.valid & source.ready,
                 fifo.source.ready.eq(1),
@@ -405,7 +397,7 @@ class LiteEthEtherboneWishboneMaster(LiteXModule):
         fsm.act("WRITE_DATA",
             bus.adr.eq(sink.addr),
             bus.dat_w.eq(sink.data),
-            bus.sel.eq(sink.be),
+            bus.sel.eq(sink.byte_enable),
             bus.stb.eq(sink.valid),
             bus.we.eq(1),
             bus.cyc.eq(1),
@@ -418,7 +410,7 @@ class LiteEthEtherboneWishboneMaster(LiteXModule):
         )
         fsm.act("READ_DATA",
             bus.adr.eq(sink.addr),
-            bus.sel.eq(sink.be),
+            bus.sel.eq(sink.byte_enable),
             bus.stb.eq(sink.valid),
             bus.cyc.eq(1),
             If(bus.stb & bus.ack,
@@ -431,12 +423,12 @@ class LiteEthEtherboneWishboneMaster(LiteXModule):
                 "base_addr",
                 "addr",
                 "count",
-                "be"}),
+                "byte_enable"}),
             source.we.eq(1),
             If(data_update, source.data.eq(bus.dat_r))
         ]
         fsm.act("SEND_DATA",
-            sink.connect(source, keep={"valid", "last", "last_be", "ready"}),
+            sink.connect(source, keep={"valid", "last", "be", "ready"}),
             If(source.valid & source.ready,
                 If(source.last,
                     NextState("IDLE")
@@ -470,10 +462,10 @@ class LiteEthEtherboneWishboneSlave(LiteXModule):
         fsm.act("SEND_WRITE",
             source.valid.eq(1),
             source.last.eq(1),
-            source.last_be.eq(1 << 3),
+            source.be.eq(0xf),
             source.base_addr[2:].eq(bus.adr),
             source.count.eq(1),
-            source.be.eq(bus.sel),
+            source.byte_enable.eq(bus.sel),
             source.we.eq(1),
             source.data.eq(bus.dat_w),
             If(source.valid & source.ready,
@@ -484,10 +476,10 @@ class LiteEthEtherboneWishboneSlave(LiteXModule):
         fsm.act("SEND_READ",
             source.valid.eq(1),
             source.last.eq(1),
-            source.last_be.eq(1 << 3),
+            source.be.eq(0xf),
             source.base_addr.eq(0),
             source.count.eq(1),
-            source.be.eq(bus.sel),
+            source.byte_enable.eq(bus.sel),
             source.we.eq(0),
             source.data[2:].eq(bus.adr),
             If(source.valid & source.ready,

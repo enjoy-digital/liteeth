@@ -15,14 +15,14 @@ from liteeth.mac.crc import *
 
 from litex.gen.sim import *
 
-from test.test_stream import mask_last_be, StreamPacket, stream_inserter, stream_collector, compare_packets
+from test.test_stream import mask_be, StreamPacket, stream_inserter, stream_collector, compare_packets
 
 # Layout -------------------------------------------------------------------------------------------
 
 def get_stream_desc(dw):
     return [
         ("data",    dw),
-        ("last_be", dw // 8),
+        ("be", dw // 8),
         ("error",   dw // 8),
     ]
 
@@ -42,7 +42,7 @@ class TestCRC(unittest.TestCase):
 
         dut  = DUT(dw)
         desc = get_stream_desc(dw)
-        full_last_be = (1 << (dw // 8)) - 1
+        full_be = (1 << (dw // 8)) - 1
 
         packets = []
 
@@ -122,7 +122,7 @@ class TestCRC(unittest.TestCase):
                                     error = ((1 << lanes) - 1) ^ ((1 << len(word)) - 1)
                                 yield dut.sink.data.eq(int.from_bytes(word, "little"))
                                 yield dut.sink.last.eq(last)
-                                yield dut.sink.last_be.eq(1 << (len(word) - 1) if last else 0)
+                                yield dut.sink.be.eq((1 << len(word)) - 1)
                                 yield dut.sink.error.eq(error)
                                 yield dut.sink.valid.eq(1)
                                 yield
@@ -139,12 +139,12 @@ class TestCRC(unittest.TestCase):
                                     crc_errors.append(1)
                                 if (yield dut.source.valid) and (yield dut.source.ready):
                                     last = (yield dut.source.last)
-                                    last_be = (yield dut.source.last_be)
-                                    count = last_be.bit_length() if last else lanes
+                                    be = (yield dut.source.be)
+                                    count = be.bit_length() if last else lanes
                                     value = (yield dut.source.data)
                                     received.extend((value >> (8*i)) & 0xff for i in range(count))
                                     if last:
-                                        errors.append(bool((yield dut.source.error) & last_be))
+                                        errors.append(bool((yield dut.source.error) & be))
                                 yield
 
                         run_simulation(dut, [driver(), monitor()])

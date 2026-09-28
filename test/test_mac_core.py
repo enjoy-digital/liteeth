@@ -29,7 +29,7 @@ class DUT(LiteXModule):
         self.core      = LiteEthMACCore(phy=self.phy_model, dw=8, with_preamble_crc=True,
             with_store_and_forward=with_store_and_forward)
 
-        self.streamer = PacketStreamer(eth_phy_description(8), last_be=1)
+        self.streamer = PacketStreamer(eth_phy_description(8), be=1)
         self.streamer_randomizer = Randomizer(eth_phy_description(8), level=50)
 
         self.logger_randomizer = Randomizer(eth_phy_description(8), level=50)

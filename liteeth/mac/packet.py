@@ -46,24 +46,15 @@ class LiteEthMACPacketWriter(LiteXModule):
             timestamp_value = Signal(timestampbits)
             self.comb += self.timestamp.eq(timestamp_value)
 
-        # Decode Length increment from last_be.
+        # Count valid bytes.
         length_inc = Signal(4)
-        self.comb += Case(packet_source.last_be, {
-            0b00000001 : length_inc.eq(1),
-            0b00000010 : length_inc.eq(2),
-            0b00000100 : length_inc.eq(3),
-            0b00001000 : length_inc.eq(4),
-            0b00010000 : length_inc.eq(5),
-            0b00100000 : length_inc.eq(6),
-            0b01000000 : length_inc.eq(7),
-            "default"  : length_inc.eq(dw//8)
-        })
+        self.comb += length_inc.eq(sum(packet_source.be[i] for i in range(dw//8)))
 
         next_length = Signal.like(self.length)
         last_error  = Signal()
         self.comb += [
             next_length.eq(length + length_inc),
-            last_error.eq((packet_source.error & packet_source.last_be) != 0),
+            last_error.eq((packet_source.error & packet_source.be) != 0),
             self.offset.eq(length),
             self.length.eq(Mux(self.done, pkt_len, next_length)),
         ]
@@ -192,20 +183,23 @@ class LiteEthMACPacketReader(LiteXModule):
             sink.ready.eq(source.ready & direct_read),
         ]
 
-        # Encode Length to last_be.
+        # Encode Length to be.
         length_lsb = self.length[:int(math.log2(dw/8))] if (dw != 8) else 0
-        self.comb += If(source.last,
-            Case(length_lsb, {
-                1         : source.last_be.eq(0b00000001),
-                2         : source.last_be.eq(0b00000010),
-                3         : source.last_be.eq(0b00000100),
-                4         : source.last_be.eq(0b00001000),
-                5         : source.last_be.eq(0b00010000),
-                6         : source.last_be.eq(0b00100000),
-                7         : source.last_be.eq(0b01000000),
-                "default" : source.last_be.eq(2**(dw//8 - 1)),
-            })
-        )
+        self.comb += [
+            source.be.eq((1 << (dw//8)) - 1),
+            If(source.last,
+                Case(length_lsb, {
+                    1         : source.be.eq(0b00000001),
+                    2         : source.be.eq(0b00000011),
+                    3         : source.be.eq(0b00000111),
+                    4         : source.be.eq(0b00001111),
+                    5         : source.be.eq(0b00011111),
+                    6         : source.be.eq(0b00111111),
+                    7         : source.be.eq(0b01111111),
+                    "default" : source.be.eq((1 << (dw//8)) - 1),
+                })
+            )
+        ]
 
         if timestamp is not None:
             self.sync += If(self.idle & self.enable, timestamp_value.eq(timestamp))

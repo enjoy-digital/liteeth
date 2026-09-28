@@ -31,10 +31,10 @@ class TestMACPaddingInserter(unittest.TestCase):
         self.assertEqual(len(recvd), len(packets))
         for sent, got in zip(packets, recvd):
             msg      = f"dw={dw} lengths={lengths} length={len(sent.data)}"
-            # Frames are padded to the minimum length (padding content is unspecified: the rest of
-            # the last data word, then zeros), longer frames are unchanged.
+            # Every added byte is zero, including unused lanes in the final payload word.
             self.assertEqual(got.data[:len(sent.data)], sent.data, msg)
             self.assertEqual(len(got.data), max(len(sent.data), self.padding), msg)
+            self.assertEqual(got.data[len(sent.data):], [0]*max(0, self.padding - len(sent.data)), msg)
 
     def test_lengths(self):
         for dw in [8, 16, 32, 64]:
@@ -43,7 +43,7 @@ class TestMACPaddingInserter(unittest.TestCase):
                     self.run_inserter(dw, [length])
 
     def test_short_frame_after_near_minimum_frame(self):
-        # A frame of 57..59 bytes ends in the last padding word with a smaller last_be: the next
+        # A frame of 57..59 bytes ends in the last padding word with a smaller be: the next
         # short frame must still be padded (regression: counter not reset, next frame sent as a
         # runt).
         for dw in [16, 32, 64]:

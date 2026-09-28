@@ -38,8 +38,8 @@ class TestUDPCrossbar(unittest.TestCase):
                 if (yield source.valid):
                     data    = (yield source.data)
                     last    = (yield source.last)
-                    last_be = (yield source.last_be)
-                    nbytes  = last_be.bit_length() if (last and last_be) else crossbar_dw//8
+                    be = (yield source.be)
+                    nbytes  = be.bit_length() if (last and be) else crossbar_dw//8
                     current += list(data.to_bytes(crossbar_dw//8, "little")[:nbytes])
                     in_packet = not last
                     if last:

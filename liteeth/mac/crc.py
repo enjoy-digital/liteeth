@@ -147,7 +147,7 @@ class LiteEthMACCRC32(LiteXModule):
     check   = 0xc704dd7b
     def __init__(self, data_width):
         self.data  = Signal(data_width)
-        self.be    = Signal(data_width//8, reset=2**data_width//8 - 1)
+        self.be    = Signal(data_width//8, reset=(1 << (data_width//8)) - 1)
         self.value = Signal(self.width)
         self.error = Signal()
 
@@ -209,7 +209,7 @@ class LiteEthMACCRC32Check(LiteXModule):
     check   = 0xc704dd7b
     def __init__(self, data_width):
         self.data  = Signal(data_width)
-        self.be    = Signal(data_width//8, reset=2**data_width//8 - 1)
+        self.be    = Signal(data_width//8, reset=(1 << (data_width//8)) - 1)
         self.value = Signal(self.width)
         self.error = Signal()
 
@@ -276,13 +276,13 @@ class LiteEthMACCRC32Inserter(LiteXModule):
 
         # Signals.
         crc_packet = Signal(32,            reset_less=True)
-        last_be    = Signal(data_width//8, reset_less=True)
+        be         = Signal(data_width//8, reset_less=True)
 
         # CRC32 Generator.
         self.crc = crc = LiteEthMACCRC32(data_width)
         self.comb += [
             crc.data.eq(sink.data),
-            crc.be.eq(sink.last_be),
+            crc.be.eq(sink.be),
         ]
 
         # FSM.
@@ -299,28 +299,28 @@ class LiteEthMACCRC32Inserter(LiteXModule):
             crc.ce.eq(sink.valid & source.ready),
             sink.connect(source),
             source.last.eq(0),
-            source.last_be.eq(0),
+            source.be.eq((1 << (data_width//8)) - 1),
             If(sink.last,
                 # Fill the empty space of the last data word with the beginning of the CRC value.
-                [If(sink.last_be[e],
+                [If(sink.be[e],
                     source.data.eq(Cat(sink.data[:(e+1)*8],
                         crc.value)[:data_width])) for e in range(data_width//8)],
                 # If the whole crc value fits in the last sink packet, signal the end. This also
                 # means the next state is idle
-                If((data_width == 64) & (sink.last_be <= 0xf),
+                If((data_width == 64) & (sink.be <= 0xf),
                     source.last.eq(1),
-                    source.last_be.eq(sink.last_be << (data_width//8 - 4))
+                    source.be.eq((sink.be << 4) | 0xf)
                 ),
             ),
             If(sink.valid & sink.last & source.ready,
-                If((data_width == 64) & (sink.last_be <= 0xf),
+                If((data_width == 64) & (sink.be <= 0xf),
                     NextState("IDLE"),
                 ).Else(
                     NextValue(crc_packet, crc.value),
                     If(data_width == 64,
-                        NextValue(last_be, sink.last_be >> 4),
+                        NextValue(be, sink.be >> 4),
                     ).Else (
-                        NextValue(last_be, sink.last_be),
+                        NextValue(be, sink.be),
                     ),
                     NextState("CRC"),
                 )
@@ -331,6 +331,7 @@ class LiteEthMACCRC32Inserter(LiteXModule):
             cnt_done = Signal()
             fsm.act("CRC",
                 source.valid.eq(1),
+                source.be.eq(1),
                 chooser(crc_packet, cnt, source.data, reverse=True),
                 If(cnt_done,
                     source.last.eq(1),
@@ -351,8 +352,8 @@ class LiteEthMACCRC32Inserter(LiteXModule):
                 source.valid.eq(1),
                 source.last.eq(1),
                 source.data.eq(crc.value),
-                source.last_be.eq(last_be),
-                [If(last_be[e],
+                source.be.eq(be),
+                [If(be[e],
                     source.data.eq(crc_packet[-(e+1)*8:])) for e in range(data_width//8)],
                 If(source.ready,
                     NextState("IDLE")
@@ -406,7 +407,6 @@ class LiteEthMACCRC32Checker(LiteXModule):
 
         self.comb += [
             fifo_full.eq(fifo.level == ratio),
-            fifo_in.eq(sink.valid & (~fifo_full | fifo_out)),
             fifo_out.eq(source.valid & source.ready),
 
             sink.connect(fifo.sink),
@@ -416,6 +416,10 @@ class LiteEthMACCRC32Checker(LiteXModule):
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="RESET")
+        # Do not accept the next packet while draining the final payload word or resetting
+        # the CRC/FIFO. Otherwise a back-to-back packet can lose its first word.
+        self.comb += fifo_in.eq(sink.valid & (~fifo_full | fifo_out) &
+            ~fsm.ongoing("RESET") & ~fsm.ongoing("COPY_LAST"))
         fsm.act("RESET",
             crc.reset.eq(1),
             fifo.reset.eq(1),
@@ -423,7 +427,7 @@ class LiteEthMACCRC32Checker(LiteXModule):
         )
         self.comb += [
             crc.data.eq(sink.data),
-            crc.be.eq(sink.last_be),
+            crc.be.eq(sink.be),
         ]
         fsm.act("IDLE",
             If(sink.valid & sink.ready,
@@ -431,40 +435,46 @@ class LiteEthMACCRC32Checker(LiteXModule):
                 NextState("COPY")
             )
         )
-        last_be         = Signal().like(sink.last_be)
+        be              = Signal.like(sink.be)
         last_error      = Signal()
         last_word_error = Signal()
-        # Errors in discarded FCS bytes must still invalidate the final payload word.
-        # last_be is one-hot; zero denotes a full word on legacy 8-bit paths.
-        self.comb += last_word_error.eq(crc.error | ((sink.error & ((sink.last_be << 1) - 1)) != 0))
-        self.comb += fifo.source.connect(source, omit={"valid", "ready", "last", "last_be"})
+        # Retain errors in any valid byte, including FCS bytes that are removed below.
+        packet_error = Signal()
+        self.sync += If(fsm.ongoing("RESET"),
+            packet_error.eq(0),
+        ).Elif(sink.valid & sink.ready,
+            packet_error.eq(packet_error | ((sink.error & sink.be) != 0)),
+        )
+        self.comb += last_word_error.eq(crc.error | packet_error | ((sink.error & sink.be) != 0))
+        self.comb += fifo.source.connect(source, omit={"valid", "ready", "last", "be"})
         fsm.act("COPY",
             fifo.source.ready.eq(fifo_out),
             source.valid.eq(sink.valid & fifo_full),
 
+            source.be.eq((1 << (data_width//8)) - 1),
             If(data_width <= 32,
                 source.last.eq(sink.last),
-                source.last_be.eq(sink.last_be),
+                If(sink.last, source.be.eq(sink.be)),
             # For data_width == 64 bit, we need to look wether the last word contains only the crc value or both crc and data
             # In the latter case, the last word also needs to be output
-            # In both cases, last_be needs to be adjusted for the new end position
-            ).Elif(sink.last_be & 0xF,
+            # In both cases, be needs to be adjusted for the new end position
+            ).Elif(sink.be <= 0xF,
                 source.last.eq(sink.last),
-                source.last_be.eq(sink.last_be << (data_width//8 - 4)),
+                source.be.eq((sink.be << 4) | 0xf),
             ).Else(
-                NextValue(last_be, sink.last_be >> 4),
+                NextValue(be, sink.be >> 4),
                 NextValue(last_error, last_word_error),
             ),
 
             # CRC failures and errors in discarded FCS bytes affect the whole packet.
             # Mark every lane of the final payload word so width conversion cannot lose them.
-            source.error.eq(Mux(sink.last, Replicate(last_word_error, data_width//8), sink.error)),
+            source.error.eq(Mux(sink.last, Replicate(last_word_error, data_width//8), fifo.source.error)),
             self.error.eq(sink.valid & sink.last & crc.error),
 
             If(sink.valid & sink.ready,
                 crc.ce.eq(1),
                 # Can only happen for data_width == 64
-                If(sink.last & (sink.last_be > 0xF),
+                If(sink.last & (sink.be > 0xF),
                    NextState("COPY_LAST"),
                 ).Elif(sink.last,
                     NextState("RESET")
@@ -477,7 +487,7 @@ class LiteEthMACCRC32Checker(LiteXModule):
         fsm.act("COPY_LAST",
             fifo.source.connect(source, keep={"valid", "ready", "last"}),
             source.error.eq(fifo.source.error | Replicate(last_error, data_width//8)),
-            source.last_be.eq(last_be),
+            source.be.eq(be),
             If(source.valid & source.ready,
                 NextState("RESET")
             )

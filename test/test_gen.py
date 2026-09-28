@@ -88,6 +88,12 @@ class TestExamples(unittest.TestCase):
 # Test Generated Core ------------------------------------------------------------------------------
 
 class TestGeneratedCore(unittest.TestCase):
+    def test_raw_byte_enable_pins(self):
+        ports = {"raw" : {"data_width" : 32, "mode" : "raw"}}
+        verilog = generate_config("udp_raw_ecp5rgmii", udp_ports=ports)
+        self.assertIn("raw_sink_be", verilog)
+        self.assertIn("raw_source_be", verilog)
+
     def test_basex_phy_generation(self):
         for phy, primitive in [
             ("K7_1000BASEX", "GTXE2_CHANNEL"),

@@ -107,7 +107,7 @@ def _send_udp_packet(port, data_bytes, ip_address=MASTER_IP, src_port=319, dst_p
         yield port.source.valid.eq(1)
         yield port.source.data.eq(b)
         yield port.source.last.eq(1 if i == len(data_bytes) - 1 else 0)
-        yield port.source.last_be.eq(1 if i == len(data_bytes) - 1 else 0)
+        yield port.source.be.eq(1)
         yield port.source.ip_address.eq(ip_address)
         yield port.source.src_port.eq(src_port)
         yield port.source.dst_port.eq(dst_port)
@@ -623,7 +623,7 @@ class TestPTPTX(unittest.TestCase):
 
         captured = []
         results  = {}
-        last_bes = []
+        bes = []
 
         def gen(dut):
             yield dut.tx.msg_type.eq(msg_type)
@@ -647,14 +647,14 @@ class TestPTPTX(unittest.TestCase):
                 if valid:
                     data = (yield dut.tx.source.data)
                     last = (yield dut.tx.source.last)
-                    last_be = (yield dut.tx.source.last_be)
+                    be = (yield dut.tx.source.be)
                     captured.append(data)
-                    last_bes.append(last_be)
+                    bes.append(be)
                     if last:
                         break
 
             results["launch"] = (yield dut.tx.launch)
-            results["last_bes"] = last_bes
+            results["bes"] = bes
 
         run_simulation(dut, gen(dut))
 
@@ -694,16 +694,16 @@ class TestPTPTX(unittest.TestCase):
             spid = (spid << 8) | captured[20 + i]
         self.assertEqual(spid, SLAVE_CLOCK_ID)
 
-    def test_tx_last_be_only_marks_final_byte(self):
-        """TX should not assert last_be on non-final 8-bit beats."""
+    def test_tx_be_marks_every_byte(self):
+        """Every accepted eight-bit beat carries one valid byte."""
         captured, results = self._capture_tx(PTP_MSG_DELAY_REQ)
 
         self.assertEqual(len(captured), 44)
-        self.assertEqual(results["last_bes"][:-1], [0] * 43)
-        self.assertEqual(results["last_bes"][-1], 1)
+        self.assertEqual(results["bes"][:-1], [1] * 43)
+        self.assertEqual(results["bes"][-1], 1)
 
-    def test_tx_last_be_after_8_to_32_conversion(self):
-        """TX last_be should remain one-hot after the UDP 8-to-32 converter."""
+    def test_tx_be_after_8_to_32_conversion(self):
+        """Full 32-bit output words must enable all four bytes."""
         dut_cls = type("DUT", (LiteXModule,), {})
         dut = dut_cls()
         dut.tsu = LiteEthTSU(clk_freq=SYS_CLK_FREQ)
@@ -715,7 +715,7 @@ class TestPTPTX(unittest.TestCase):
         dut.submodules += [dut.tsu, dut.tx, dut.converter]
         dut.comb += dut.tx.source.connect(dut.converter.sink)
 
-        captured_last_bes = []
+        captured_bes = []
 
         def gen(dut):
             yield dut.tx.msg_type.eq(PTP_MSG_DELAY_REQ)
@@ -735,15 +735,15 @@ class TestPTPTX(unittest.TestCase):
                 yield dut.converter.source.ready.eq(1)
                 yield
                 if (yield dut.converter.source.valid):
-                    captured_last_bes.append((yield dut.converter.source.last_be))
+                    captured_bes.append((yield dut.converter.source.be))
                     if (yield dut.converter.source.last):
                         break
 
         run_simulation(dut, gen(dut))
 
-        self.assertEqual(len(captured_last_bes), 11)
-        self.assertEqual(captured_last_bes[:-1], [0] * 10)
-        self.assertEqual(captured_last_bes[-1], 0b1000)
+        self.assertEqual(len(captured_bes), 11)
+        self.assertEqual(captured_bes[:-1], [0xf] * 10)
+        self.assertEqual(captured_bes[-1], 0b1111)
 
 # Test PTP Top-Level -------------------------------------------------------------------------------
 

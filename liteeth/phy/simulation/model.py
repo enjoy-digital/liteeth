@@ -40,6 +40,7 @@ class LiteEthPHYModel(LiteXModule):
         self.crg    = LiteEthPHYModelCRG()
         self.sink   = sink   = stream.Endpoint(eth_phy_description(8))
         self.source = source = stream.Endpoint(eth_phy_description(8))
+        self.comb += self.source.be.eq(1)
 
         self.comb += [
             pads.source_valid.eq(self.sink.valid),

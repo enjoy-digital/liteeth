@@ -50,7 +50,7 @@ class DUT(LiteXModule):
 # DUT (64-bit / Jumbo) -----------------------------------------------------------------------------
 
 class DUT64(LiteXModule):
-    """64-bit core and user port with jumbo MTU, byte-granular (last_be) packets."""
+    """64-bit core and user port with jumbo MTU, byte-granular (be) packets."""
     def __init__(self, packet_length, eth_mtu=eth_mtu_jumboframe, dw=64):
         self.dw        = dw
         # 64-bit PHY model (8x fewer cycles than the byte model).
@@ -123,7 +123,7 @@ class TestUDP(unittest.TestCase):
                 run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
 
     def test_64bit_jumbo(self):
-        # 64-bit datapath with jumbo MTU: byte-granular (last_be) and jumbo-sized UDP packets are
+        # 64-bit datapath with jumbo MTU: byte-granular (be) and jumbo-sized UDP packets are
         # looped back by the UDP model and must come back intact without error flag. 2060 bytes is
         # above the standard MTU (the RX padding checker length counter, sized from eth_mtu, wraps
         # with eth_mtu_default). Larger packets are kept out of the unit tests (the Python packet
