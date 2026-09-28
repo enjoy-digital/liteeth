@@ -15,7 +15,8 @@ LiteX architecture rules are documented in
 | BASE-R PMAs | `liteeth/phy/pma_baser/` | Vendor primitive in 64b/66b mode, gearbox cadence, clock/reset, and bitslip |
 | PHY wrappers | `liteeth/phy/*basex.py`, `*baser.py` | MAC stream, PCS/PMA wiring, public controls, and CSRs |
 | Shared transceiver helpers | `liteiclink/serdes/` | PLLs, DRP, and applicable initialization sequences |
-| Board targets | LiteX targets and platforms | Pins, reference clock source, transceiver channel, and timing constraints |
+| Board targets and platforms | LiteX targets/platforms | Pins, reference clock source, transceiver channel, and timing constraints |
+| Standalone generator | `liteeth/gen.py` | Core configuration, PHY selection, and rate-compatible reference clock defaults |
 
 The BASE-R PCS presents a 64-bit block and two sync-header bits in each
 direction. Its PMA contract includes `tx_data`, `tx_header`, `rx_data`,
