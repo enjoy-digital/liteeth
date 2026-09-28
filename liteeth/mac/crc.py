@@ -376,8 +376,8 @@ class LiteEthMACCRC32Checker(LiteXModule):
     sink : in
         Packet data with CRC.
     source : out
-        Packet data without CRC and "error" set to 0
-        on last when CRC OK / set to 1 when CRC KO.
+        Packet data without CRC. CRC failures and receive errors in the final
+        input word mark the final payload word as erroneous.
     error : out
         Pulses every time a CRC error is detected.
     """
@@ -431,8 +431,12 @@ class LiteEthMACCRC32Checker(LiteXModule):
                 NextState("COPY")
             )
         )
-        last_be   = Signal().like(sink.last_be)
-        crc_error = Signal()
+        last_be         = Signal().like(sink.last_be)
+        last_error      = Signal()
+        last_word_error = Signal()
+        # Errors in discarded FCS bytes must still invalidate the final payload word.
+        # last_be is one-hot; zero denotes a full word on legacy 8-bit paths.
+        self.comb += last_word_error.eq(crc.error | ((sink.error & ((sink.last_be << 1) - 1)) != 0))
         self.comb += fifo.source.connect(source, omit={"valid", "ready", "last", "last_be"})
         fsm.act("COPY",
             fifo.source.ready.eq(fifo_out),
@@ -449,14 +453,12 @@ class LiteEthMACCRC32Checker(LiteXModule):
                 source.last_be.eq(sink.last_be << (data_width//8 - 4)),
             ).Else(
                 NextValue(last_be, sink.last_be >> 4),
-                NextValue(crc_error, crc.error),
+                NextValue(last_error, last_word_error),
             ),
 
-            # `source.error` has a width > 1 for data_width > 8, but since the crc error
-            # applies to the whole ethernet packet, all the bytes are marked as
-            # containing an error. This way later reducing the data width
-            # doesn't run into issues with missing the error
-            source.error.eq(sink.error | Replicate(crc.error & sink.last, data_width//8)),
+            # CRC failures and errors in discarded FCS bytes affect the whole packet.
+            # Mark every lane of the final payload word so width conversion cannot lose them.
+            source.error.eq(Mux(sink.last, Replicate(last_word_error, data_width//8), sink.error)),
             self.error.eq(sink.valid & sink.last & crc.error),
 
             If(sink.valid & sink.ready,
@@ -474,7 +476,7 @@ class LiteEthMACCRC32Checker(LiteXModule):
         # the last value here. Can only happen for data_width == 64
         fsm.act("COPY_LAST",
             fifo.source.connect(source, keep={"valid", "ready", "last"}),
-            source.error.eq(fifo.source.error | Replicate(crc_error, data_width//8)),
+            source.error.eq(fifo.source.error | Replicate(last_error, data_width//8)),
             source.last_be.eq(last_be),
             If(source.valid & source.ready,
                 NextState("RESET")

@@ -6,6 +6,7 @@
 
 import unittest
 import random
+import zlib
 
 from migen import *
 
@@ -91,6 +92,65 @@ class TestCRC(unittest.TestCase):
         for seed in range(42, 48):
             with self.subTest(seed=seed):
                 self.crc_inserter_checker_test(dw=32, seed=seed)
+
+    def test_receive_error_in_discarded_fcs(self):
+        for dw in (8, 32, 64):
+            for length in (8, 12):
+                for location in (None, "fcs", "unused"):
+                    payload = bytes(range(length))
+                    frame = payload + zlib.crc32(payload).to_bytes(4, "little")
+                    lanes = dw//8
+                    if location == "unused" and len(frame) % lanes == 0:
+                        continue
+                    with self.subTest(dw=dw, length=length, location=location):
+                        dut = LiteEthMACCRC32Checker(eth_phy_description(dw))
+                        received = []
+                        errors = []
+                        crc_errors = []
+
+                        def driver():
+                            yield dut.source.ready.eq(1)
+                            for _ in range(3):
+                                yield
+                            for offset in range(0, len(frame), lanes):
+                                word = frame[offset:offset + lanes]
+                                last = offset + lanes >= len(frame)
+                                error = 0
+                                if last and location == "fcs":
+                                    error = 1 << (len(word) - 1)
+                                elif last and location == "unused":
+                                    error = ((1 << lanes) - 1) ^ ((1 << len(word)) - 1)
+                                yield dut.sink.data.eq(int.from_bytes(word, "little"))
+                                yield dut.sink.last.eq(last)
+                                yield dut.sink.last_be.eq(1 << (len(word) - 1) if last else 0)
+                                yield dut.sink.error.eq(error)
+                                yield dut.sink.valid.eq(1)
+                                yield
+                                while not (yield dut.sink.ready):
+                                    yield
+                            yield dut.sink.valid.eq(0)
+                            for _ in range(12):
+                                yield
+
+                        @passive
+                        def monitor():
+                            while True:
+                                if (yield dut.error):
+                                    crc_errors.append(1)
+                                if (yield dut.source.valid) and (yield dut.source.ready):
+                                    last = (yield dut.source.last)
+                                    last_be = (yield dut.source.last_be)
+                                    count = last_be.bit_length() if last else lanes
+                                    value = (yield dut.source.data)
+                                    received.extend((value >> (8*i)) & 0xff for i in range(count))
+                                    if last:
+                                        errors.append(bool((yield dut.source.error) & last_be))
+                                yield
+
+                        run_simulation(dut, [driver(), monitor()])
+                        self.assertEqual(received, list(payload))
+                        self.assertEqual(errors, [location == "fcs"])
+                        self.assertEqual(crc_errors, [])
 
     # TODO the 64 bit case has a few issues unrelated to LiteEthMACCRC32Check
     # def test_64bit_loopback(self):
