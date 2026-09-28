@@ -21,7 +21,7 @@ from litex.soc.interconnect.csr import *
 from litex.soc.integration.soc import *
 from litex.soc.integration.builder import *
 
-from liteeth.phy.s7rgmii import LiteEthPHYRGMII
+from liteeth.phy.parallel.rgmii.s7 import LiteEthPHYRGMII
 
 # Bench SoC ----------------------------------------------------------------------------------------
 
