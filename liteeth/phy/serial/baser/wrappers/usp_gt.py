@@ -4,6 +4,8 @@
 # Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import math
+
 from migen import *
 from migen.genlib.cdc import PulseSynchronizer
 
@@ -46,6 +48,7 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
 
     # Overridden in the subclasses for GTH and for 5GBASE-R
     transceiver = (GTYQuadPLL, PMA_USP_GTY_10G_BASER)
+    pll_kwargs  = {}
 
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
         with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False,
@@ -64,29 +67,33 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
 
         self.reset = Signal()
 
-        # Reference clock ---------------------------------------------------------------------------
-        refclk = Signal()
-        if isinstance(refclk_or_clk_pads, Signal):
-            self.comb += refclk.eq(refclk_or_clk_pads)
-        elif refclk_from_fabric:
-            self.comb += refclk.eq(refclk_or_clk_pads)
-        else:
-            self.refclk_buf = Instance("IBUFDS_GTE4",
-                i_CEB = 0,
-                i_I   = refclk_or_clk_pads.p,
-                i_IB  = refclk_or_clk_pads.n,
-                o_O   = refclk,
-                p_REFCLK_HROW_CK_SEL = 0b00,
-            )
-
+        # Reference clock / PLL --------------------------------------------------------------------
         pll_cls, pma_cls = self.transceiver
-
-        # A GTY quad has one GTYE4_COMMON, so channels sharing a quad must share a QPLL. The
-        # reference bypasses LiteXModule's automatic submodule registration, which would
-        # otherwise duplicate the PLL into this PHY's hierarchy.
         if pll is None:
-            self.pll = pll = pll_cls(refclk, refclk_freq, self.linerate)
+            refclk = Signal()
+            if isinstance(refclk_or_clk_pads, Signal) or refclk_from_fabric:
+                self.comb += refclk.eq(refclk_or_clk_pads)
+            else:
+                self.refclk_buf = Instance("IBUFDS_GTE4",
+                    i_CEB = 0,
+                    i_I   = refclk_or_clk_pads.p,
+                    i_IB  = refclk_or_clk_pads.n,
+                    o_O   = refclk,
+                    p_REFCLK_HROW_CK_SEL = 0b00,
+                )
+            self.pll = pll = pll_cls(refclk, refclk_freq, self.linerate,
+                refclk_from_fabric=refclk_from_fabric, **self.pll_kwargs)
         else:
+            if not isinstance(pll, pll_cls) or not math.isclose(pll.config["linerate"], self.linerate, rel_tol=1e-12):
+                raise ValueError(f"External PLL must provide {self.linerate/1e9:g} Gb/s using {pll_cls.__name__}.")
+            if "qpll" in self.pll_kwargs:
+                if pll.config["qpll"] != self.pll_kwargs["qpll"]:
+                    raise ValueError(f"External PLL must use {self.pll_kwargs['qpll']}.")
+                for name, value in self.pll_kwargs["qpll_params"].items():
+                    if pll.gty_params["p_" + name] != value:
+                        raise ValueError(f"External PLL has incompatible {name} tuning.")
+            # The parent owns a shared common primitive and its reference-clock routing.
+            # Bypass automatic submodule registration to avoid instantiating the PLL twice.
             object.__setattr__(self, "pll", pll)
 
         # PMA (Clause 51) ---------------------------------------------------------------------------
@@ -216,22 +223,6 @@ class USP_GTH_5G_BASER(USP_GTH_10G_BASER):
     transceiver = (GTH4QuadPLL, PMA_USP_GTH_5G_BASER)
 
 
-class GTYQuadPLL0(GTYQuadPLL):
-    """GTYQuadPLL constrained to QPLL0.
-
-    liteiclink tries QPLL1 (8.0 - 13.0 GHz) before QPLL0 (9.8 - 16.375 GHz), so 25GBASE-R's
-    12.890625 GHz VCO lands on QPLL1. The wizard selects QPLL0 at this rate. Everything
-    downstream keys off config["qpll"].
-    """
-    @staticmethod
-    def compute_config(refclk_freq, linerate):
-        config = GTYQuadPLL.compute_config(refclk_freq, linerate)
-        assert 9.8e9 <= config["vco_freq"] <= 16.375e9, \
-            f"VCO {config['vco_freq']/1e9:.6f} GHz is outside the QPLL0 range"
-        config["qpll"] = "qpll0"
-        return config
-
-
 class USP_GTY_25G_BASER(USP_GTY_10G_BASER):
     """25GBASE-R via UltraScale+ GTY transceiver
 
@@ -244,36 +235,5 @@ class USP_GTY_25G_BASER(USP_GTY_10G_BASER):
     rx_clk_freq = linerate/66   # one 66-bit block per user clock: 390.625 MHz
     tx_clk_freq = linerate/66
 
-    transceiver = (GTYQuadPLL0, PMA_USP_GTY_25G_BASER)
-
-    # QPLL0 overrides for 25.78125 Gb/s from gtwizard_ultrascale (v1.7, Vivado 2026.1).
-    # liteiclink hardcodes values correct for 10G but not for the full-rate VCO.
-    qpll_overrides = {
-        "PPF0_CFG"      : 0b0000100000000000,
-        "QPLL0_CFG2"    : 0b0000111111000011,
-        "QPLL0_CFG2_G3" : 0b0000111111000011,
-        "QPLL0_CFG4"    : 0b0000000010000100,
-        "QPLL0_LPF"     : 0b0000001000011111,
-    }
-
-    def __init__(self, *args, **kwargs):
-        USP_GTY_10G_BASER.__init__(self, *args, **kwargs)
-
-        assert self.pll.config["qpll"] == "qpll0"
-
-        overrides = dict(self.qpll_overrides)
-
-        # Bit 7 *bypasses* the sigma-delta modulator, so it must be clear for fractional-N.
-        # liteiclink hardcodes it set, which would silently give N = 82 rather than 82.5, i.e.
-        # 25.0 Gb/s. It already drives SDM0DATA with round(f * 2**24).
-        fractional = abs(self.pll.config["f"]) > 1e-9
-        overrides["QPLL0_SDM_CFG0"] = 0b0000000000000000 if fractional else 0b0000000010000000
-
-        # Patch the hardcoded attributes on liteiclink's GTYE4_COMMON instance.
-        remaining = dict(overrides)
-        for special in self.pll._fragment.specials:
-            if isinstance(special, Instance) and special.of == "GTYE4_COMMON":
-                for item in special.items:
-                    if isinstance(item, Instance.Parameter) and item.name in remaining:
-                        item.value = Constant(remaining.pop(item.name))
-        assert not remaining, f"QPLL0 attributes not found to patch: {list(remaining)}"
+    transceiver = (GTYQuadPLL, PMA_USP_GTY_25G_BASER)
+    pll_kwargs  = dict(qpll="qpll0", qpll_params=PMA_USP_GTY_25G_BASER.qpll_params)
