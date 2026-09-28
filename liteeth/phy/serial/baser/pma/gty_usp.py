@@ -842,6 +842,16 @@ class PMA_USP_GTY_25G_BASER(PMA_USP_GTY_10G_BASER):
     The channel output divider stays at d=1, but the QPLL output goes full-rate and PROGDIV
     becomes 16.5 with PROGDIV_RATE=0, giving the 390.625 MHz user clock.
     """
+    # QPLL0 tuning for 25.78125 Gb/s from gtwizard_ultrascale (v1.7, Vivado 2026.1).
+    # LiteICLink derives the divider and fractional-N SDM settings from the reference clock.
+    qpll_params = {
+        "PPF0_CFG"      : 0b0000100000000000,
+        "QPLL0_CFG2"    : 0b0000111111000011,
+        "QPLL0_CFG2_G3" : 0b0000111111000011,
+        "QPLL0_CFG4"    : 0b0000000010000100,
+        "QPLL0_LPF"     : 0b0000001000011111,
+    }
+
     rate_config = dict(PMA_USP_GTY_10G_BASER.rate_config,
         RXCDR_CFG2               = 0b0000000111101001,
         ADAPT_CFG1               = 0b1111101100011100,
