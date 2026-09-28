@@ -88,11 +88,14 @@ class TestExamples(unittest.TestCase):
 # Test Generated Core ------------------------------------------------------------------------------
 
 class TestGeneratedCore(unittest.TestCase):
-    def test_7series_basex_phy_generation(self):
+    def test_basex_phy_generation(self):
         for phy, primitive in [
             ("K7_1000BASEX", "GTXE2_CHANNEL"),
             ("K7_2500BASEX", "GTXE2_CHANNEL"),
             ("KU_1000BASEX", "GTHE3_CHANNEL"),
+            ("KU_2500BASEX", "GTHE3_CHANNEL"),
+            ("USP_GTH_2500BASEX", "GTHE4_CHANNEL"),
+            ("USP_GTY_2500BASEX", "GTYE4_CHANNEL"),
         ]:
             with self.subTest(phy=phy):
                 verilog = generate_config("udp_s7phyrgmii", phy=phy)

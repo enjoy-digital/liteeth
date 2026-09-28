@@ -964,4 +964,3 @@ class PMA_USP_GTY_BASEX(LiteXModule):
         ]
         self.tx_data = gearbox.tx_data
         self.rx_data = gearbox.rx_data
-
