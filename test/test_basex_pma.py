@@ -98,7 +98,11 @@ class TestBASEXPMA(unittest.TestCase):
             for with_csr in (False, True):
                 with self.subTest(usp=usp, with_csr=with_csr):
                     constraints = []
-                    platform = SimpleNamespace(add_false_path_constraints=lambda *clocks: constraints.append(clocks))
+                    commands = []
+                    platform = SimpleNamespace(
+                        add_false_path_constraints=lambda *clocks: constraints.append(clocks),
+                        add_platform_command=lambda command, **signals: commands.append((command, signals)),
+                    )
                     pads = Record([("tx_p", 1), ("tx_n", 1), ("rx_p", 1), ("rx_n", 1), ("rst_n", 1)])
                     with mock.patch.object(LiteXContext, "platform", platform), \
                          mock.patch.object(LiteXContext, "top", SimpleNamespace(sys_clk_freq=100e6)):
@@ -107,6 +111,12 @@ class TestBASEXPMA(unittest.TestCase):
                     self.assertEqual(constraints, [
                         (phy.crg.cd_eth_rx.clk, phy.crg.cd_eth_rx_div.clk),
                         (phy.crg.cd_eth_tx.clk, phy.crg.cd_eth_tx_div.clk),
+                    ])
+                    self.assertEqual(commands, [
+                        ("set_property CLOCK_DELAY_GROUP eth_rx_ser_clks [get_nets {{{ser} {div}}}]",
+                            {"ser" : phy.crg.cd_eth_rx_ser.clk, "div" : phy.crg.cd_eth_rx_div.clk}),
+                        ("set_property CLOCK_DELAY_GROUP eth_tx_ser_clks [get_nets {{{ser} {div}}}]",
+                            {"ser" : phy.crg.cd_eth_tx_ser.clk, "div" : phy.crg.cd_eth_tx_div.clk}),
                     ])
                     if with_csr:
                         self.assertEqual(phy.cdr_control.size, 4)
