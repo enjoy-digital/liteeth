@@ -72,6 +72,11 @@ def fingerprint(module):
         node(key, ['cell', cell['type'], parameters])
         for port, connection in cell['connections'].items():
             for index, bit in enumerate(connection):
+                # Yosys can reorder reduction inputs when internal names change.
+                # These bits are commutative; all other port bit order is significant.
+                if port == 'A' and cell['type'] in (
+                    '$reduce_and', '$reduce_or', '$reduce_xor', '$reduce_xnor', '$reduce_bool'):
+                    index = 0
                 connect(key, ('bit', bit), [port, index])
     initial = {}
     for net in module['netnames'].values():
