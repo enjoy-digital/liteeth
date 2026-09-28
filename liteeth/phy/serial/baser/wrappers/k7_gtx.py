@@ -1,47 +1,47 @@
 #
 # This file is part of LiteEth.
 #
-# Ported from A7_5000BASER on enjoy-digital's feature/a7-5000baser branch. That PHY implementation
-# drove a vendored Verilog PCS; this one is adapted to the pure-LiteX BASE-R PCS.
-#
 # Copyright (c) 2026 Scott Torborg <scott@quadraturecat.com>
-# Copyright (c) 2026 Enjoy-Digital <enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
 
 from litex.gen import *
 
+from liteiclink.serdes.gtx_7series import GTXQuadPLL
+
 from liteeth.common import *
-from liteeth.phy.serial.baser.diagnostics import LiteEthBASERPHY
+from liteeth.phy.serial.baser.wrappers.diagnostics import LiteEthBASERPHY
 from liteeth.phy.parallel.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
 from liteeth.phy.serial.baser.pcs import PCS
-from liteeth.phy.serial.baser.pma.gtp_7series import PMA_A7_GTP_5G_BASER
+from liteeth.phy.serial.baser.pma.gtx_7series import PMA_K7_GTX_10G_BASER, PMA_K7_GTX_5G_BASER
 
-# A7_GTP_5G_BASER ----------------------------------------------------------------------------------
+# K7_GTX_10G_BASER ---------------------------------------------------------------------------------
 
-class A7_GTP_5G_BASER(LiteEthBASERPHY):
-    """5GBASE-R via an Artix-7 GTP transceiver.
+class K7_GTX_10G_BASER(LiteEthBASERPHY):
+    """10GBASE-R via a Kintex-7 GTX transceiver.
 
     Data path:
         sink/source: LiteX stream endpoints, 64 bits wide
         LiteEthPHYXGMII: adapts to the 64-bit SDR form of XGMII
         PCS: 64b/66b coding, scrambling, block sync, BER monitor
-        PMA: GTP transceiver wrapper
+        PMA: GTX transceiver wrapper
         data_pads: serdes pads
     """
     dw          = 64
-    linerate    = 5.15625e9
-    tx_clk_freq = linerate/32
-    rx_clk_freq = linerate/32
+    linerate    = 10.3125e9
+    tx_clk_freq = linerate/64
+    rx_clk_freq = linerate/64
     loopback_description = (
-        "Transceiver loopback (UG482): 0 off, 1 near-end PCS, "
+        "Transceiver loopback (UG476 ch 2): 0 off, 1 near-end PCS, "
         "2 near-end PMA, 4 far-end PMA, 6 far-end PCS"
     )
 
-    def __init__(self, qpll_channel, data_pads, sys_clk_freq, refclk_freq, with_csr=True,
-        rx_polarity=0, tx_polarity=0, with_prbs=True, prbs_errors_width=32):
-        self.with_prbs = with_prbs
+    # Overridden in the 5G subclass.
+    transceiver = (GTXQuadPLL, PMA_K7_GTX_10G_BASER)
+
+    def __init__(self, qpll, data_pads, sys_clk_freq, with_csr=True,
+        rx_polarity=0, tx_polarity=0, prbs_errors_width=32):
 
         self.sink   = stream.Endpoint(eth_phy_description(self.dw))
         self.source = stream.Endpoint(eth_phy_description(self.dw))
@@ -50,17 +50,17 @@ class A7_GTP_5G_BASER(LiteEthBASERPHY):
 
         # # #
 
-        # PMA ---------------------------------------------------------------------------------------
-        self.pma = pma = PMA_A7_GTP_5G_BASER(
-            qpll_channel = qpll_channel,
+        # PMA (Clause 51) ---------------------------------------------------------------------------
+        _, pma_cls = self.transceiver
+        self.pma = pma = pma_cls(
+            qpll         = qpll,
             data_pads    = data_pads,
             sys_clk_freq = sys_clk_freq,
-            refclk_freq  = refclk_freq,
             tx_polarity  = tx_polarity,
             rx_polarity  = rx_polarity,
         )
 
-        # The transceiver owns the user clock domains.
+        # The transceiver owns the user clock domains; alias them the way the UltraScale+ PHYs do.
         self.cd_eth_tx = pma.cd_eth_tx
         self.cd_eth_rx = pma.cd_eth_rx
 
@@ -77,11 +77,13 @@ class A7_GTP_5G_BASER(LiteEthBASERPHY):
         ]
 
         # PCS ---------------------------------------------------------------------------------------
+        # The gearbox is gapped (see the class docstring), so the PCS may only advance on the cycles
+        # a block moves. The PCS itself knows nothing of this: CEInserter adds an enable per clock
+        # domain from outside, reaching every register the PCS clocks in eth_tx and eth_rx.
         self.pcs = pcs = CEInserter(["eth_tx", "eth_rx"])(PCS(
-            dw              = self.dw,
-            count_125us     = int(125e-6*self.linerate/66),
-            prbs31_enable   = with_prbs,
-            with_pipelining = True,
+            dw            = self.dw,
+            count_125us   = int(125e-6*self.linerate/66),
+            prbs31_enable = True,
         ))
 
         self.tx_prbs31_enable = Signal()
@@ -106,8 +108,7 @@ class A7_GTP_5G_BASER(LiteEthBASERPHY):
             self.link_up.eq(pcs.rx_status),
         ]
 
-        if with_prbs:
-            self.add_prbs_counter(prbs_errors_width, rx_ce=pma.rx_ce)
+        self.add_prbs_counter(prbs_errors_width, rx_ce=pma.rx_ce)
 
         # XGMII -------------------------------------------------------------------------------------
         self.xgmii_pads = xgmii_pads = LiteEthPHYXGMIIPads()
@@ -118,23 +119,23 @@ class A7_GTP_5G_BASER(LiteEthBASERPHY):
         self.xgmii_rx = ClockDomainsRenamer("eth_rx")(CEInserter()(
             LiteEthPHYXGMIIRX(xgmii_pads, self.dw)))
 
-        # Pipeline the MAC -> XGMII handoff
+        # Pipeline the MAC -> XGMII handoff. This domain runs at 161.13MHz at 10GBASE-R and the
+        # MAC's TX CRC into the XGMII adapter is the critical path. Costs one cycle of latency.
+        # Must live in eth_tx like xgmii_tx: a bare stream.Buffer lands in sys and silently creates
+        # an unsynchronised sys <-> eth_tx crossing.
         self.tx_pipe = tx_pipe = ClockDomainsRenamer("eth_tx")(
             stream.Buffer(eth_phy_description(self.dw)))
-
-        # And the XGMII -> MAC handoff
-        self.rx_pipe = rx_pipe = ClockDomainsRenamer("eth_rx")(
-            stream.Buffer(eth_phy_description(self.dw)))
-        self.comb += rx_pipe.source.connect(self.source)
 
         self.comb += [
             self.sink.connect(tx_pipe.sink),
             tx_pipe.source.connect(self.xgmii_tx.sink, omit={"valid", "ready"}),
+            # Qualify the handshake with the enable, or the MAC hands over a word on the pause
+            # cycle and it is silently dropped.
             self.xgmii_tx.sink.valid.eq(tx_pipe.source.valid & pma.tx_ce),
             tx_pipe.source.ready.eq(self.xgmii_tx.sink.ready & pma.tx_ce),
 
-            self.xgmii_rx.source.connect(rx_pipe.sink, omit={"valid", "ready"}),
-            self.xgmii_rx.source.ready.eq(rx_pipe.sink.ready),
+            self.xgmii_rx.source.connect(self.source, omit={"valid", "ready"}),
+            self.xgmii_rx.source.ready.eq(self.source.ready),
 
             pcs.xgmii_txd.eq(xgmii_pads.tx_data),
             pcs.xgmii_txc.eq(xgmii_pads.tx_ctl),
@@ -145,20 +146,23 @@ class A7_GTP_5G_BASER(LiteEthBASERPHY):
             self.xgmii_rx.ce.eq(pma.rx_ce),
         ]
 
-        # Delay the MAC-facing valid by one cycle to match the enable.
+        # Delay the MAC-facing valid by one cycle to match the enable, as the A7 BASE-R PHY does.
         rx_mac_ce = Signal()
         self.sync.eth_rx += rx_mac_ce.eq(pma.rx_ce)
-        self.comb += rx_pipe.sink.valid.eq(self.xgmii_rx.source.valid & rx_mac_ce)
+        self.comb += self.source.valid.eq(self.xgmii_rx.source.valid & rx_mac_ce)
 
         if with_csr:
             self.add_csr()
 
     def add_timing_constraints(self, platform):
-        """Declare TXOUTCLK/RXOUTCLK at linerate/16."""
-        period = "%.3f" % (1e9/(self.linerate/16))
-        platform.add_platform_command(
-            "create_clock -name {txoutclk} -period " + period + " [get_nets {txoutclk}]",
-            txoutclk = self.txoutclk)
-        platform.add_platform_command(
-            "create_clock -name {rxoutclk} -period " + period + " [get_nets {rxoutclk}]",
-            rxoutclk = self.rxoutclk)
+        pass
+
+
+# K7_GTX_5G_BASER ----------------------------------------------------------------------------------
+
+class K7_GTX_5G_BASER(K7_GTX_10G_BASER):
+    linerate    = 5.15625e9
+    tx_clk_freq = linerate/64
+    rx_clk_freq = linerate/64
+
+    transceiver = (GTXQuadPLL, PMA_K7_GTX_5G_BASER)

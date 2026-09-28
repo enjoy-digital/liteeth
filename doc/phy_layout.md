@@ -9,8 +9,8 @@ Established public imports remain available when implementation files move.
 | MII, RMII, GMII, XGMII | `liteeth/phy/parallel/` | Original module names and the classes in `liteeth.phy` |
 | Vendor RGMII | `liteeth/phy/parallel/rgmii/` | Original vendor module names and the classes in `liteeth.phy` |
 | Simulation model | `liteeth/phy/simulation/model.py` | `liteeth.phy.model` |
-| 1000/2500BASE-X | `serial/basex/pcs.py` and device adapters | Original module names and the classes in `liteeth.phy` |
-| 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, diagnostics, and device wrappers | Canonical `liteeth.phy.serial.baser.*` imports |
+| 1000/2500BASE-X | `serial/basex/pcs.py` and `wrappers/` | Original module names and the classes in `liteeth.phy` |
+| 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, and `wrappers/` | Canonical `liteeth.phy.serial.baser.*` imports |
 | Shared 7-series GTP initialization | `serial/gtp_7series.py` | `liteeth.phy.a7_gtp` |
 | MDIO and hardware-reset helpers | `liteeth/phy/common.py` | `liteeth.phy.common` |
 
@@ -22,9 +22,12 @@ BASE-R was recently introduced, so its former top-level `baser`, `pcs_baser`,
 
 Serial Ethernet modes are grouped under `liteeth/phy/serial/`. The 64b/66b
 BASE-R PCS, PMAs, diagnostics, and wrappers live in `baser/`; the 8b/10b
-BASE-X PCS and device adapters live in `basex/`. The established BASE-X module
-names are registered as aliases in `liteeth.phy.__init__`, so code that patches
-a module-level PCS helper still affects the class implementation.
+BASE-X PCS and device adapters live in `basex/`. Both modes put device PHYs
+in `wrappers/`. BASE-X has one PCS module and keeps its transceiver setup in
+each wrapper; BASE-R has a multi-module PCS and separate PMAs because of its
+64b/66b interface and gearbox. The established BASE-X module names are
+registered as aliases in `liteeth.phy.__init__`, so code that patches a
+module-level PCS helper still affects the class implementation.
 MII, RMII, GMII, GMII/MII, and XGMII implementations sit directly under
 `liteeth/phy/parallel/`; vendor RGMII adapters are under `parallel/rgmii/`.
 The stream-based PHY model lives under `simulation/`. Their established module

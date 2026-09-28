@@ -13,7 +13,7 @@ LiteX architecture rules are documented in
 | 1000/2500BASE-X PCS | `liteeth/phy/serial/basex/pcs.py` | 8b/10b Ethernet coding, autonegotiation, and the byte stream |
 | 5/10/25GBASE-R PCS | `liteeth/phy/serial/baser/pcs/` | 64b/66b coding, scrambling, block sync, BER, and XGMII |
 | BASE-R PMAs | `liteeth/phy/serial/baser/pma/` | Vendor primitive in 64b/66b mode, gearbox cadence, clock/reset, and bitslip |
-| PHY wrappers | `liteeth/phy/serial/{basex,baser}/` | MAC stream, PCS/PMA wiring, public controls, and CSRs |
+| PHY wrappers | `liteeth/phy/serial/{basex,baser}/wrappers/` | MAC stream, PCS/PMA wiring, public controls, and CSRs |
 | Parallel PHYs | `liteeth/phy/parallel/` | MII, RMII, GMII, XGMII, and vendor RGMII adapters |
 | Simulation PHY | `liteeth/phy/simulation/model.py` | Stream-based model for software and gateware simulation |
 | Shared transceiver helpers | `liteiclink/serdes/` | PLLs, DRP, and applicable initialization sequences |
@@ -46,7 +46,7 @@ adding the 64b/66b gearbox and matching its clock and reset behavior. The
 device-specific primitive parameter tables therefore remain in the PMAs.
 
 The BASE-R PHYs share their PRBS error counter and CSR layout through
-`serial/baser/diagnostics.py` (`LiteEthBASERPHY`). The PMA clocking, restart
+`serial/baser/wrappers/diagnostics.py` (`LiteEthBASERPHY`). The PMA clocking, restart
 path, XGMII pipeline, and gearbox sequencing stay in the device wrappers
 because their timing differs.
 Before moving another helper to LiteICLink, compare its reset sequence and

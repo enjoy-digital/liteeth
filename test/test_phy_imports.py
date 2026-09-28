@@ -44,15 +44,15 @@ class TestPHYImports(unittest.TestCase):
 
     basex_moves = {
         "pcs_1000basex": "serial.basex.pcs",
-        "a7_1000basex": "serial.basex.a7_gtp",
-        "k7_1000basex": "serial.basex.k7_gtx",
-        "v7_1000basex": "serial.basex.v7_gth",
-        "ku_1000basex": "serial.basex.ku_gth",
-        "usp_gth_1000basex": "serial.basex.usp_gth",
-        "usp_gty_1000basex": "serial.basex.usp_gty",
-        "gw5_1000basex": "serial.basex.gw5",
-        "us_lvds_1000basex": "serial.basex.us_lvds",
-        "titanium_lvds_1000basex": "serial.basex.titanium_lvds",
+        "a7_1000basex": "serial.basex.wrappers.a7_gtp",
+        "k7_1000basex": "serial.basex.wrappers.k7_gtx",
+        "v7_1000basex": "serial.basex.wrappers.v7_gth",
+        "ku_1000basex": "serial.basex.wrappers.ku_gth",
+        "usp_gth_1000basex": "serial.basex.wrappers.usp_gth",
+        "usp_gty_1000basex": "serial.basex.wrappers.usp_gty",
+        "gw5_1000basex": "serial.basex.wrappers.gw5",
+        "us_lvds_1000basex": "serial.basex.wrappers.us_lvds",
+        "titanium_lvds_1000basex": "serial.basex.wrappers.titanium_lvds",
     }
 
     package_exports = {
@@ -78,10 +78,10 @@ class TestPHYImports(unittest.TestCase):
     }
 
     baser_imports = {
-        "serial.baser.diagnostics": ("LiteEthBASERPHY",),
-        "serial.baser.a7_gtp":    ("A7_GTP_5G_BASER",),
-        "serial.baser.k7_gtx":    ("K7_GTX_5G_BASER", "K7_GTX_10G_BASER"),
-        "serial.baser.usp_gt":    ("USP_GTH_5G_BASER", "USP_GTH_10G_BASER",
+        "serial.baser.wrappers.diagnostics": ("LiteEthBASERPHY",),
+        "serial.baser.wrappers.a7_gtp":    ("A7_GTP_5G_BASER",),
+        "serial.baser.wrappers.k7_gtx":    ("K7_GTX_5G_BASER", "K7_GTX_10G_BASER"),
+        "serial.baser.wrappers.usp_gt":    ("USP_GTH_5G_BASER", "USP_GTH_10G_BASER",
                                    "USP_GTY_5G_BASER", "USP_GTY_10G_BASER", "USP_GTY_25G_BASER"),
         "serial.baser.pcs":       ("PCS",),
         "serial.baser.pcs.rx":    ("PCSRX",),
