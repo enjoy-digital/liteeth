@@ -13,6 +13,25 @@ import liteeth.phy as phy
 # Public PHY Imports -------------------------------------------------------------------------------
 
 class TestPHYImports(unittest.TestCase):
+    rgmii_moves = {
+        "s6rgmii": "parallel.rgmii.s6",
+        "s7rgmii": "parallel.rgmii.s7",
+        "usrgmii": "parallel.rgmii.us",
+        "ecp5rgmii": "parallel.rgmii.ecp5",
+        "gw5rgmii": "parallel.rgmii.gw5",
+        "titaniumrgmii": "parallel.rgmii.titanium",
+        "trionrgmii": "parallel.rgmii.trion",
+        "agilex_rgmii": "parallel.rgmii.agilex",
+    }
+
+    rgmii_exports = {
+        "s6rgmii": "LiteEthS6PHYRGMII",
+        "s7rgmii": "LiteEthS7PHYRGMII",
+        "usrgmii": "LiteEthUSPHYRGMII",
+        "ecp5rgmii": "LiteEthECP5PHYRGMII",
+        "agilex_rgmii": "LiteEthAgilexPHYRGMII",
+    }
+
     basex_moves = {
         "pcs_1000basex": "serial.basex.pcs",
         "a7_1000basex": "serial.basex.a7_gtp",
@@ -81,6 +100,19 @@ class TestPHYImports(unittest.TestCase):
             for class_name in class_names:
                 with self.subTest(module=module_name, name=class_name):
                     self.assertIs(getattr(phy, class_name), getattr(module, class_name))
+
+    def test_rgmii_package_exports_match_legacy_modules(self):
+        for module_name, export_name in self.rgmii_exports.items():
+            with self.subTest(module=module_name):
+                module = importlib.import_module(f"liteeth.phy.{module_name}")
+                self.assertIs(getattr(phy, export_name), module.LiteEthPHYRGMII)
+
+    def test_rgmii_legacy_modules_are_aliases(self):
+        for old_name, new_name in self.rgmii_moves.items():
+            with self.subTest(module=old_name):
+                old = importlib.import_module(f"liteeth.phy.{old_name}")
+                new = importlib.import_module(f"liteeth.phy.{new_name}")
+                self.assertIs(old, new)
 
     def test_basex_legacy_modules_are_aliases(self):
         for old_name, new_name in self.basex_moves.items():
