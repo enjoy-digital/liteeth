@@ -26,7 +26,7 @@ from liteeth.phy.pcs_1000basex import (
 # Helpers ------------------------------------------------------------------------------------------
 
 class PCSLoopbackDUT(LiteXModule):
-    def __init__(self, lsb_first=False, **pcs_kwargs):
+    def __init__(self, lsb_first=False, with_rx_restart=False, **pcs_kwargs):
         self.pcs_a = PCS(
             lsb_first=lsb_first,
             check_period=32/125e6,
@@ -49,7 +49,8 @@ class PCSLoopbackDUT(LiteXModule):
             self.pcs_a.tbi_rx.eq(self.pcs_b.tbi_tx),
             self.pcs_b.tbi_rx.eq(self.pcs_a.tbi_tx),
             self.pcs_a.tbi_rx_ce.eq(1),
-            self.pcs_b.tbi_rx_ce.eq(self.b_rx_ce),
+            # Model a receiver that cannot provide code groups while held in reset.
+            self.pcs_b.tbi_rx_ce.eq(self.b_rx_ce & (~self.pcs_b.restart if with_rx_restart else 1)),
         ]
 
 
@@ -353,9 +354,9 @@ class TestPCSAutonegConfig(unittest.TestCase):
 
 class TestPCSNoAutoneg(unittest.TestCase):
     clocks = {
-        "sys":    10,
-        "eth_tx": 10,
-        "eth_rx": 10,
+        "sys"    : 10,
+        "eth_tx" : 10,
+        "eth_rx" : 10,
     }
 
     def test_two_pcs_link_up_without_config_words_and_stay_up(self):
@@ -363,7 +364,7 @@ class TestPCSNoAutoneg(unittest.TestCase):
 
         def generator():
             up_since = None
-            for cycle in range(400): # Several check periods (32 cycles each).
+            for cycle in range(400): # Several checker periods.
                 up = (yield dut.pcs_a.link_up) and (yield dut.pcs_b.link_up)
                 if up_since is None:
                     if up:
@@ -414,16 +415,47 @@ class TestPCSNoAutoneg(unittest.TestCase):
 
             run_simulation(dut, generator(), clocks=self.clocks)
 
-    def test_with_csr_has_csr_fsm_but_no_autoneg_fsm(self):
-        class Top:
-            sys_clk_freq = int(100e6)
+    def test_restart_is_a_pulse_and_receiver_recovers(self):
+        for sys_period in (6, 14, 22):
+            with self.subTest(sys_period=sys_period):
+                dut = PCSLoopbackDUT(with_autoneg=False, with_rx_restart=True,
+                    with_csr=True, sys_clk_freq=16)
 
-        old_top = LiteXContext.top
-        LiteXContext.top = Top()
-        try:
-            dut = PCS(with_csr=True, with_autoneg=False)
-        finally:
-            LiteXContext.top = old_top
+                def generator():
+                    for _ in range(100):
+                        yield
+                    self.assertEqual((yield dut.pcs_b.status.fields.link_up), 1)
+
+                    yield dut.b_rx_ce.eq(0)
+                    restarts = []
+                    for cycle in range(150):
+                        if (yield dut.pcs_b.restart):
+                            restarts.append(cycle)
+                        yield
+                    self.assertEqual((yield dut.pcs_b.link_up), 0)
+                    self.assertEqual((yield dut.pcs_b.status.fields.link_up), 0)
+                    self.assertGreaterEqual(len(restarts), 2)
+                    self.assertTrue(all(b - a > 1 for a, b in zip(restarts, restarts[1:])),
+                        "Restart must deassert between failed checks, even while the link is down")
+
+                    yield dut.b_rx_ce.eq(1)
+                    for _ in range(150):
+                        yield
+                    self.assertEqual((yield dut.pcs_b.link_up), 1)
+                    self.assertEqual((yield dut.pcs_b.status.fields.link_up), 1)
+                    for _ in range(100):
+                        self.assertEqual((yield dut.pcs_b.restart), 0)
+                        self.assertEqual((yield dut.pcs_b.link_up), 1)
+                        yield
+
+                run_simulation(dut, {"eth_tx": generator()}, clocks={
+                    "sys"    : sys_period,
+                    "eth_tx" : 10,
+                    "eth_rx" : (10, 3), # Same line rate, independent receive clock phase.
+                })
+
+    def test_with_csr_has_csr_fsm_but_no_autoneg_fsm(self):
+        dut = PCS(with_csr=True, with_autoneg=False, sys_clk_freq=100e6)
 
         self.assertFalse(hasattr(dut, "fsm"))
         self.assertIn("DOWN", dut.csr_fsm.actions)

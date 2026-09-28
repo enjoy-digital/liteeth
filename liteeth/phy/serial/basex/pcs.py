@@ -480,10 +480,13 @@ class PCS(LiteXModule):
         else:
             # Fixed-rate link, no Clause 37 autonegotiation.
             self.comb += self.align.eq(1)
-            self.sync.eth_tx += If(checker_tick,
-                self.link_up.eq(~checker_error),
-                self.restart.eq(checker_error),
-            )
+            self.sync.eth_tx += [
+                # Release RX reset between failed checks so valid code groups can return.
+                self.restart.eq(checker_tick & checker_error),
+                If(checker_tick,
+                    self.link_up.eq(~checker_error),
+                ),
+            ]
 
         if with_csr:
             self.add_csr()
