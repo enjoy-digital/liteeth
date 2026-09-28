@@ -866,3 +866,9 @@ class KU_2500BASEX(KU_1000BASEX):
     linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6
+
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
+        with_csr=True, rx_polarity=0, tx_polarity=0):
+        super().__init__(refclk_or_clk_pads, data_pads, sys_clk_freq,
+            refclk_freq=refclk_freq, with_csr=with_csr,
+            rx_polarity=rx_polarity, tx_polarity=tx_polarity)
