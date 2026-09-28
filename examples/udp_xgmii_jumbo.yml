@@ -32,6 +32,8 @@ udp_ports: {
   "udp0": {
     "data_width"    : 64,   # UDP Port Data-width.
     "tx_fifo_depth" : 2048, # UDP Port TX FIFO Depth (in words), must hold a full jumbo packet.
+    "tx_max_packet_length" : 8972, # Packets not closed by last are split at this length (bytes,
+                                   # rounded down to words: 8968), the max UDP payload for MTU 9000.
     "rx_fifo_depth" : 2048, # UDP Port RX FIFO Depth (in words).
     # sink_keep/source_keep (AXI-Stream tkeep) pins are exposed by default for byte-granular packet
     # lengths ("with_tkeep": False removes them; an undriven sink_keep means full words).

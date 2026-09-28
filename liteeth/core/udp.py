@@ -6,13 +6,12 @@
 
 from litex.gen import *
 
-from litex.soc.interconnect import stream
-from litex.soc.interconnect.packet import PacketFIFO
+from litex.soc.interconnect        import stream
+from litex.soc.interconnect.packet import Depacketizer, PacketFIFO, Packetizer
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
 from liteeth.fifo import PacketDropFIFO
-from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # UDP Crossbar -------------------------------------------------------------------------------------
 
@@ -42,7 +41,15 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         self.with_store_and_forward = with_store_and_forward
         LiteEthCrossbar.__init__(self, LiteEthUDPMasterPort, "dst_port", dw=dw)
 
-    def get_port(self, udp_port, dw=8, cd="sys", depth=None):
+    def get_port(self, udp_port, dw=8, cd="sys", depth=None, tx_buffer_depth=None):
+        """Get a UDP user port of data width dw in clock domain cd.
+
+        When dw is narrower than the crossbar, the TX up-converter only provides a full-width word
+        every dw_crossbar/dw cycles, which PHYs that cannot pause a frame (ex XGMII) do not support.
+        tx_buffer_depth (in crossbar words) adds a store-and-forward buffer after the converter
+        so packets are sent back-to-back: it must hold the largest packet sent on the port.
+        When automatic store-and-forward is enabled, the buffer holds at least a full frame.
+        """
         if udp_port in self.users.keys():
             raise ValueError("Port {0:#x} already assigned".format(udp_port))
 
@@ -74,17 +81,20 @@ class LiteEthUDPCrossbar(LiteEthCrossbar):
         )
         self.comb += tx_cdc.source.connect(tx_converter.sink)
 
-        # Store-and-Forward (Optional): assembles the whole packet before sending.
+        # Store-and-Forward (Optional): assemble the whole packet before sending.
         tx_source = tx_converter.source
-        if with_packet_fifos:
-            self.tx_packet_fifo = tx_packet_fifo = PacketFIFO(
+        if with_packet_fifos or tx_buffer_depth is not None:
+            fifo_depth = tx_buffer_depth
+            if with_packet_fifos:
+                fifo_depth = max(packet_fifo_depth, fifo_depth or 0)
+            self.tx_buffer = tx_buffer = PacketFIFO(
                 eth_udp_user_description(self.dw),
-                payload_depth = packet_fifo_depth,
-                param_depth   = 4,
-                buffered      = True,
+                payload_depth = fifo_depth,
+                param_depth   = 4 if with_packet_fifos else 2,
+                buffered      = with_packet_fifos,
             )
-            self.comb += tx_converter.source.connect(tx_packet_fifo.sink)
-            tx_source = tx_packet_fifo.source
+            self.comb += tx_converter.source.connect(tx_buffer.sink)
+            tx_source = tx_buffer.source
 
         # Interface.
         self.comb += tx_source.connect(internal_port.sink)
@@ -228,10 +238,12 @@ class LiteEthUDPRX(LiteXModule):
         fsm.act("RECEIVE",
             depacketizer.source.connect(source, keep={"valid", "ready"}),
             source.last.eq(depacketizer.source.last | (count >= source.length)),
-            If(depacketizer.source.last_be,
+            # The UDP length ends the packet when reached: Ethernet padding can share the last data
+            # word and the padded frame's last_be must then be ignored. Otherwise (truncated
+            # packet), use the frame's last_be.
+            If(count < source.length,
                source.last_be.eq(depacketizer.source.last_be),
-            ).Elif(
-              source.last,
+            ).Else(
               Case(source.length & (dw//8 - 1), {
                   1         : source.last_be.eq(0b00000001),
                   2         : source.last_be.eq(0b00000010),

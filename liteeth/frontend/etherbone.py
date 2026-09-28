@@ -132,10 +132,17 @@ class LiteEthEtherbonePacketRX(LiteXModule):
 
 
 class LiteEthEtherbonePacket(LiteXModule):
-    def __init__(self, udp, udp_port, cd="sys"):
+    def __init__(self, udp, udp_port, cd="sys", max_packet_length=None):
         self.tx = tx = LiteEthEtherbonePacketTX(udp_port)
         self.rx = rx = LiteEthEtherbonePacketRX(with_last_handler=(udp.crossbar.dw == 64)) # FIXME: Avoid 64-bit specific behavior.
-        udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd)
+        # On a UDP crossbar wider than 32-bit, buffer TX packets after the up-conversion so they are
+        # sent back-to-back (required by PHYs that cannot pause a frame, ex XGMII).
+        port_kwargs = {}
+        if (udp.crossbar.dw > 32) and (max_packet_length is not None):
+            bytes_per_word  = udp.crossbar.dw//8
+            tx_buffer_depth = (max_packet_length + bytes_per_word - 1)//bytes_per_word
+            port_kwargs["tx_buffer_depth"] = tx_buffer_depth
+        udp_port = udp.crossbar.get_port(udp_port, dw=32, cd=cd, **port_kwargs)
         self.comb += [
             tx.source.connect(udp_port.sink),
             udp_port.source.connect(rx.sink)
@@ -501,8 +508,13 @@ class LiteEthEtherboneWishboneSlave(LiteXModule):
 
 class LiteEthEtherbone(LiteXModule):
     def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
-        # Encode/encode etherbone packets.
-        self.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd)
+        # Encode/encode etherbone packets. Largest packet sent: a record with buffer_depth words
+        # (packet header + record header + base address + data).
+        max_packet_length  = etherbone_packet_header_length + etherbone_record_header_length
+        max_packet_length += 4 + 4*buffer_depth
+        self.packet = packet = LiteEthEtherbonePacket(udp, udp_port, cd,
+            max_packet_length = max_packet_length,
+        )
 
         # Packets can be probe (etherbone discovering) or records with writes and reads.
         self.probe  = probe  = LiteEthEtherboneProbe()
