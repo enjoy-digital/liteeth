@@ -10,6 +10,7 @@ from migen import Instance, Record, Signal
 from liteeth.phy.serial.basex.pcs import PCSGearbox as LegacyPCSGearbox
 from liteeth.phy.serial.basex.pma.gearbox import PCSGearbox
 from liteeth.phy.serial.basex.wrappers.k7_gtx import K7_1000BASEX, K7_2500BASEX
+from liteeth.phy.serial.basex.wrappers.v7_gth import V7_1000BASEX, V7_2500BASEX
 from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_1000BASEX, USP_GTY_2500BASEX
 from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_1000BASEX, USP_GTH_2500BASEX
 from liteeth.phy.serial.basex.wrappers.ku_gth import KU_1000BASEX, KU_2500BASEX
@@ -29,6 +30,8 @@ class TestBASEXPMA(unittest.TestCase):
         for cls, primitive, kwargs in (
             (K7_1000BASEX, "GTXE2_CHANNEL", {}),
             (K7_2500BASEX, "GTXE2_CHANNEL", {}),
+            (V7_1000BASEX, "GTHE2_CHANNEL", {}),
+            (V7_2500BASEX, "GTHE2_CHANNEL", {}),
             (USP_GTY_1000BASEX, "GTYE4_CHANNEL", {}),
             (USP_GTY_2500BASEX, "GTYE4_CHANNEL", {"refclk_freq": 156.25e6}),
             (USP_GTH_1000BASEX, "GTHE4_CHANNEL", {}),
@@ -48,7 +51,7 @@ class TestBASEXPMA(unittest.TestCase):
                     # Aliasing public handles must not instantiate a second clock/init/gearbox.
                     instances = [special.of for special in fragment.specials if isinstance(special, Instance)]
                     self.assertEqual(instances.count(primitive), 1)
-                    if primitive == "GTXE2_CHANNEL":
+                    if primitive in ("GTXE2_CHANNEL", "GTHE2_CHANNEL"):
                         for name in ("tx_mmcm", "rx_mmcm", "tx_init", "rx_init"):
                             self.assertIs(getattr(phy, name), getattr(phy.pma, name))
                         self.assertEqual(instances.count("MMCME2_ADV"), 2)
