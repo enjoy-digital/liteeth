@@ -65,6 +65,26 @@ primitive parameters at every supported rate, then check on hardware. In
 particular, replacing the GTP initialization path needs reset and DRP
 validation on an Artix-7 board.
 
+## Reading BASE-R Diagnostics
+
+The per-block error field reports a coherently sampled receive block, not every
+block. The accumulated PRBS counter saturates at its configured width and only
+advances on valid receive blocks when the PMA supplies an enable.
+
+To read the complete counter, including multiple CSR words:
+
+1. Enable the PRBS checker and leave it enabled throughout the measurement.
+2. Set `control.prbs_pause` and poll `status.prbs_paused` until it is one.
+3. Read `rx_prbs_errors`; the acknowledgment travels with the frozen counter value.
+4. Clear `control.prbs_pause` and wait for `status.prbs_paused` to become zero
+   before requesting another snapshot.
+
+Disabling the checker or resetting its receive domain clears the counter,
+including while paused. Existing register addresses and field offsets remain
+unchanged; `status.prbs_paused` occupies previously unused bit 12 and is zero
+when PRBS support is disabled. Software polling must use a timeout if the
+receive clock can stop.
+
 ## Porting and Validation
 
 1. Pick the existing PCS for the Ethernet mode. Define the PMA data width,
