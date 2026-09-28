@@ -5,22 +5,23 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
+from migen.genlib.cdc import PulseSynchronizer
+
 from litex.gen import *
 
-from migen.genlib.cdc import MultiReg, PulseSynchronizer
-
-from litex.soc.interconnect.csr import CSRField, CSRStatus, CSRStorage
+from liteiclink.serdes.gth4_ultrascale import GTH4QuadPLL
+from liteiclink.serdes.gty_ultrascale import GTYQuadPLL
 
 from liteeth.common import *
-from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
-from liteiclink.serdes.gty_ultrascale import GTYQuadPLL
-from liteiclink.serdes.gth4_ultrascale import GTH4QuadPLL
+from liteeth.phy.baser import LiteEthBASERPHY
 from liteeth.phy.pcs_baser import PCS
 from liteeth.phy.pma_baser import (PMA_USP_GTY_10G_BASER, PMA_USP_GTH_10G_BASER,
                                 PMA_USP_GTY_5G_BASER, PMA_USP_GTH_5G_BASER, PMA_USP_GTY_25G_BASER)
+from liteeth.phy.xgmii import LiteEthPHYXGMIIRX, LiteEthPHYXGMIITX, LiteEthPHYXGMIIPads
 
+# UltraScale+ BASE-R PHY ---------------------------------------------------------------------------
 
-class USP_GTY_10G_BASER(LiteXModule):
+class USP_GTY_10G_BASER(LiteEthBASERPHY):
     """10GBASE-R via UltraScale+ GTY transceiver
 
     Data path:
@@ -37,6 +38,11 @@ class USP_GTY_10G_BASER(LiteXModule):
     linerate    = 10.3125e9
     rx_clk_freq = 156.25e6
     tx_clk_freq = 156.25e6
+    loopback_description = (
+        "Transceiver loopback (UG578 ch 2): 0 off, 1 near-end PCS, "
+        "2 near-end PMA, 4 far-end PMA, 6 far-end PCS"
+    )
+    prbs_rate_description = "receive clock frequency times 66 bits per block."
 
     # Overridden in the subclasses for GTH and for 5GBASE-R
     transceiver = (GTYQuadPLL, PMA_USP_GTY_10G_BASER)
@@ -122,30 +128,7 @@ class USP_GTY_10G_BASER(LiteXModule):
             pcs.cfg_rx_prbs31_enable.eq(self.rx_prbs31_enable),
         ]
 
-        # PRBS31 error counter, tries to match the convention of other LiteEth PHYs while
-        # staying lightweight.
-        self.rx_prbs_pause  = Signal()
-        self.rx_prbs_errors = Signal(prbs_errors_width)
-
-        prbs_pause  = Signal()
-        prbs_errors = Signal(prbs_errors_width)
-        prbs_next   = Signal(prbs_errors_width + 1)
-
-        self.specials += MultiReg(self.rx_prbs_pause, prbs_pause, "eth_rx")
-
-        self.comb += prbs_next.eq(prbs_errors + pcs.rx_error_count)
-        self.sync.eth_rx += If(~self.rx_prbs31_enable,
-            prbs_errors.eq(0),
-        ).Elif(~prbs_pause,
-            # Saturate rather than wrap
-            If(prbs_next[prbs_errors_width],
-                prbs_errors.eq(2**prbs_errors_width - 1),
-            ).Else(
-                prbs_errors.eq(prbs_next[:prbs_errors_width]),
-            ),
-        )
-
-        self.specials += MultiReg(prbs_errors, self.rx_prbs_errors)
+        self.add_prbs_counter(prbs_errors_width)
 
         self.comb += [
             pma.tx_data.eq(pcs.serdes_tx_data),
@@ -204,73 +187,6 @@ class USP_GTY_10G_BASER(LiteXModule):
 
         if with_csr:
             self.add_csr()
-
-    def add_csr(self):
-        self._reset = CSRStorage(description="PHY reset.")
-        self.comb += self.reset.eq(self._reset.storage)
-
-        self._control = CSRStorage(description="PHY control.", fields=[
-            CSRField("loopback", size=3, description=
-                     "Transceiver loopback (UG578 ch 2): 0 off, 1 near-end PCS, "
-                     "2 near-end PMA, 4 far-end PMA, 6 far-end PCS"),
-            CSRField("tx_prbs31_enable", size=1, description=
-                "Transmit PRBS31 test pattern (49.2.8)"),
-            CSRField("rx_prbs31_enable", size=1, description=
-                "Check received stream against PRBS31 (49.2.12)"),
-            CSRField("prbs_pause", size=1, description=
-                "Freeze the PRBS31 error counter so that it can be read coherently"),
-        ])
-
-        self.specials += [
-            MultiReg(self._control.fields.loopback,         self.loopback),
-            MultiReg(self._control.fields.tx_prbs31_enable, self.tx_prbs31_enable, "eth_tx"),
-            MultiReg(self._control.fields.rx_prbs31_enable, self.rx_prbs31_enable, "eth_rx"),
-        ]
-
-        self._status = CSRStatus(description="PHY status.", fields=[
-            CSRField("block_lock", size=1, description=
-                "Block synchronisation acquired (49.2.9, Figure 49-12)"),
-            CSRField("high_ber", size=1, description=
-                "Bit error ratio worse than 1e-4 (Figure 49-13)"),
-            CSRField("link_up", size=1, description=
-                "PCS_status: block lock held and no high BER (49.2.14.1)"),
-            CSRField("error_count", size=7, description=
-                "PRBS31 bit errors in the last block, valid in receive test-pattern mode"),
-            CSRField("block_lock_lost", size=1, description=
-                "Block lock has been absent at some point since this register was last read"),
-            CSRField("high_ber_latched", size=1, description=
-                "high_ber has been asserted at some point since this register was last read"),
-        ])
-
-        self.specials += [
-            MultiReg(self.pcs.rx_block_lock,   self._status.fields.block_lock),
-            MultiReg(self.pcs.rx_high_ber,     self._status.fields.high_ber),
-            MultiReg(self.link_up,             self._status.fields.link_up),
-            MultiReg(self.pcs.rx_error_count,  self._status.fields.error_count),
-        ]
-
-        block_lock_lost  = Signal()
-        high_ber_latched = Signal()
-        # Reset on read
-        self.sync += If(self._status.we,
-            block_lock_lost.eq( ~self._status.fields.block_lock),
-            high_ber_latched.eq(self._status.fields.high_ber),
-        ).Else(
-            If(~self._status.fields.block_lock, block_lock_lost.eq(1)),
-            If(self._status.fields.high_ber,    high_ber_latched.eq(1)),
-        )
-        self.comb += [
-            self._status.fields.block_lock_lost.eq( block_lock_lost),
-            self._status.fields.high_ber_latched.eq(high_ber_latched),
-            self.rx_prbs_pause.eq(self._control.fields.prbs_pause),
-        ]
-
-        self._rx_prbs_errors = CSRStatus(len(self.rx_prbs_errors), description=
-            "PRBS31 bit errors since the test was last enabled, saturating rather than wrapping."
-            " Set prbs_pause before reading: the counter lives in the receive clock domain and is"
-            " only stable while paused. For a bit error ratio, the denominator is the elapsed time"
-            " times the receive clock frequency times 66 bits per block.")
-        self.comb += self._rx_prbs_errors.status.eq(self.rx_prbs_errors)
 
 
 class USP_GTH_10G_BASER(USP_GTY_10G_BASER):

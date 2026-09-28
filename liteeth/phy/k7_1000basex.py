@@ -4,6 +4,8 @@
 # Copyright (c) 2018-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+import math
+
 from migen import *
 from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
@@ -12,20 +14,23 @@ from litex.gen import *
 
 from litex.soc.cores.clock import S7MMCM
 
+from liteiclink.serdes.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
+
 from liteeth.common import *
 from liteeth.phy.pcs_1000basex import *
 
 # K7_1000BASEX PHY ---------------------------------------------------------------------------------
 
 class K7_1000BASEX(LiteXModule):
-    # Configured for 200MHz transceiver reference clock.
     dw          = 8
     linerate    = 1.25e9
     rx_clk_freq = 125e6
     tx_clk_freq = 125e6
+
+    supported_refclk_freqs = (200e6,)
+
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0):
-        from liteiclink.transceiver.gtx_7series import GTXChannelPLL, GTXTXInit, GTXRXInit
-        assert refclk_freq in [200e6]
+        assert refclk_freq in self.supported_refclk_freqs
         self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
 
         self.sink    = pcs.sink
@@ -37,7 +42,7 @@ class K7_1000BASEX(LiteXModule):
         self.cd_eth_tx_half = ClockDomain(reset_less=True)
         self.cd_eth_rx_half = ClockDomain(reset_less=True)
 
-        # for specifying clock constraints. 62.5MHz clocks.
+        # Transceiver output clocks for timing constraints.
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
@@ -71,8 +76,16 @@ class K7_1000BASEX(LiteXModule):
         rx_data           = Signal(20)
         rx_reset_done     = Signal()
 
-        pll = GTXChannelPLL(refclk, 200e6, self.linerate)
+        pll = GTXChannelPLL(refclk, refclk_freq, self.linerate)
         self.submodules.pll = pll
+
+        # Divide the reference clock to at most 25MHz for GTX calibration.
+        clk25_div = math.ceil(refclk_freq/25e6)
+        # Match the CDR setting to the GTX output divider, as in LiteICLink.
+        rxcdr_cfg = {
+            2: 0x03000023ff10200020,
+            4: 0x03000023ff10100020,
+        }[pll.config["d"]]
 
         # Work around Python's 255 argument limitation.
         gtx_params = dict(
@@ -172,8 +185,8 @@ class K7_1000BASEX(LiteXModule):
             p_TERM_RCAL_CFG                = 0b10000,
             p_TERM_RCAL_OVRD               = 0b0,
             p_TST_RSV                      = 0x00000000,
-            p_RX_CLK25_DIV                 = 5,
-            p_TX_CLK25_DIV                 = 5,
+            p_RX_CLK25_DIV                 = clk25_div,
+            p_TX_CLK25_DIV                 = clk25_div,
             p_UCODEER_CLR                  = 0b0,
 
             # PCI Express Attributes
@@ -207,7 +220,7 @@ class K7_1000BASEX(LiteXModule):
             p_RX_DEFER_RESET_BUF_EN        = "TRUE",
 
             # CDR Attributes
-            p_RXCDR_CFG                    = 0x03000023ff10100020, # FIXME: Add 2.5Gbps config.
+            p_RXCDR_CFG                    = rxcdr_cfg,
             p_RXCDR_FR_RESET_ON_EIDLE      = 0b0,
             p_RXCDR_HOLD_DURING_EIDLE      = 0b0,
             p_RXCDR_PH_RESET_ON_EIDLE      = 0b0,
@@ -708,7 +721,7 @@ class K7_1000BASEX(LiteXModule):
         )
         self.specials += Instance("GTXE2_CHANNEL", **gtx_params)
 
-        # Get 125MHz clocks back - the GTX is outputting 62.5MHz.
+        # Rebuffer the GTX output clocks before the TX/RX MMCMs.
         txoutclk_rebuffer = Signal()
         self.specials += Instance("BUFH",
             i_I = self.txoutclk,
@@ -799,3 +812,11 @@ class K7_2500BASEX(K7_1000BASEX):
     linerate    = 3.125e9
     rx_clk_freq = 312.5e6
     tx_clk_freq = 312.5e6
+
+    supported_refclk_freqs = (125e6,)
+
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=125e6,
+        with_csr=True, rx_polarity=0, tx_polarity=0):
+        super().__init__(refclk_or_clk_pads, data_pads, sys_clk_freq,
+            refclk_freq=refclk_freq, with_csr=with_csr,
+            rx_polarity=rx_polarity, tx_polarity=tx_polarity)
