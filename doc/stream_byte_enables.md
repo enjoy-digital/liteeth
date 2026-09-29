@@ -52,3 +52,13 @@ to omit the pins and generate full masks internally.
 Raw UDP ports expose `sink_be`/`source_be`, with the native mask encoding.
 Legacy pin names and the legacy raw-port option are no longer supported.
 Other raw-port pins are unchanged.
+
+## UDP Streamer TX Control
+
+Both buffered and unbuffered TX sample the destination when the first output
+beat becomes valid and hold it through the final transfer, including stalls.
+Clearing `enable` prevents the next packet from starting; it does not withdraw
+an already presented packet. In unbuffered mode each input word is a packet,
+and disabling TX backpressures the input. Buffered mode can continue accepting
+input until its FIFO fills while output is disabled. CSR changes and direct
+control signals follow the same rules.
