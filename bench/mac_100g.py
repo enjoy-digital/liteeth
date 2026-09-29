@@ -15,13 +15,14 @@ import subprocess
 from pathlib import Path
 
 from migen import ClockDomain
+
 from litex.gen import LiteXModule
 from litex.gen.fhdl import verilog
 
 from liteeth.core import LiteEthUDPIPCore
 from liteeth.mac.axis import LiteEthMACAXIStream
 
-# Independent Packet Oracle ------------------------------------------------------------------------
+# Packet Helpers ----------------------------------------------------------------------------------
 
 MAC_ADDRESS = 0x10e2d5000000
 IP_ADDRESS  = 0xc0a80132
@@ -68,7 +69,12 @@ class MAC100GCore(LiteXModule):
     def __init__(self, dw=512, sys_clk_freq=250e6, fifo_depth=256):
         self.phy = phy = LiteEthMACAXIStream(rx_fifo_depth=fifo_depth, tx_fifo_depth=fifo_depth)
         self.core = core = LiteEthUDPIPCore(phy, MAC_ADDRESS, IP_ADDRESS, sys_clk_freq,
-            dw=dw, eth_mtu=9022, with_icmp=False, tx_cdc_buffered=True, rx_cdc_buffered=True)
+            dw              = dw,
+            eth_mtu         = 9022,
+            with_icmp       = False,
+            tx_cdc_buffered = True,
+            rx_cdc_buffered = True,
+        )
         self.port = core.udp.crossbar.get_port(2000, dw=dw)
 
     def pins(self):
@@ -83,8 +89,11 @@ class MAC100GCore(LiteXModule):
                 (inputs if sending else outputs)[prefix + "_" + field] = getattr(endpoint, field)
             if prefix != "mac_rx":
                 (outputs if sending else inputs)[prefix + "_ready"] = endpoint.ready
-        outputs.update(rx_packets=self.phy.rx_packets, rx_drops=self.phy.rx_drops,
-            rx_bad_frames=self.phy.rx_bad_frames)
+        outputs.update(
+            rx_packets    = self.phy.rx_packets,
+            rx_drops      = self.phy.rx_drops,
+            rx_bad_frames = self.phy.rx_bad_frames,
+        )
         return inputs, outputs
 
 # Generation / Simulation -------------------------------------------------------------------------
@@ -100,7 +109,10 @@ def generate(path, lengths, dw=512, sys_clk_freq=250e6, rx_clk_freq=322.265625e6
     path.mkdir(parents=True, exist_ok=True)
     dut = MAC100GCore(dw, sys_clk_freq, fifo_depth)
     inputs, outputs = dut.pins()
-    ios, ports, declarations, clocks = set(), [], [], []
+    ios          = set()
+    ports        = []
+    declarations = []
+    clocks       = []
     for name, freq in [("sys", sys_clk_freq), ("eth_rx", rx_clk_freq), ("eth_tx", tx_clk_freq)]:
         cd = ClockDomain(name)
         setattr(dut.clock_domains, "cd_" + name, cd)
@@ -129,11 +141,23 @@ def generate(path, lengths, dw=512, sys_clk_freq=250e6, rx_clk_freq=322.265625e6
                        ("rx_schedule", schedule), ("lengths", lengths)]:
         (path/(name + ".hex")).write_text("\n".join(f"{value:x}" for value in data) + "\n")
     template = (Path(__file__).parent/"sim"/"mac_100g.sv").read_text()
-    config = dict(DW=dw, LANES=dw//8, PACKETS=len(lengths), RX_WORDS=len(incoming),
-        TX_WORDS=len(outgoing), APP_WORDS=len(application), STALL_CYCLES=stall_cycles,
-        ERROR_EVERY=error_every, RESET_TEST=int(with_reset), CLOCKS="\n".join(clocks),
-        DECLARATIONS="\n".join(declarations), PORTS=", ".join(ports),
-        DRAIN_CYCLES=max(2000, len(incoming)*8), SYS_FREQ=sys_clk_freq, RATE=rate)
+    config = dict(
+        DW           = dw,
+        LANES        = dw//8,
+        PACKETS      = len(lengths),
+        RX_WORDS     = len(incoming),
+        TX_WORDS     = len(outgoing),
+        APP_WORDS    = len(application),
+        STALL_CYCLES = stall_cycles,
+        ERROR_EVERY  = error_every,
+        RESET_TEST   = int(with_reset),
+        CLOCKS       = "\n".join(clocks),
+        DECLARATIONS = "\n".join(declarations),
+        PORTS        = ", ".join(ports),
+        DRAIN_CYCLES = max(2000, len(incoming)*8),
+        SYS_FREQ     = sys_clk_freq,
+        RATE         = rate,
+    )
     for key, value in config.items():
         template = template.replace("@" + key + "@", str(value))
     (path/"tb.sv").write_text(template)
@@ -142,7 +166,10 @@ def generate(path, lengths, dw=512, sys_clk_freq=250e6, rx_clk_freq=322.265625e6
 
 def simulate(path):
     path = Path(path).resolve()
-    command = ["verilator", "--binary", "--timing", "--top-module", "tb", "-Wno-fatal", "-j", "2", "dut.v", "tb.sv"]
+    command = [
+        "verilator", "--binary", "--timing", "--top-module", "tb",
+        "-Wno-fatal", "-j", "2", "dut.v", "tb.sv",
+    ]
     with (path/"build.log").open("w") as log:
         subprocess.run(command, cwd=path, stdout=log, stderr=subprocess.STDOUT, check=True, timeout=180)
     result = subprocess.run([str(path/"obj_dir"/"Vtb")], cwd=path, capture_output=True, text=True, timeout=60)
@@ -150,33 +177,54 @@ def simulate(path):
     if result.returncode:
         raise AssertionError(result.stdout + result.stderr)
     for line in result.stdout.splitlines():
-        if line.startswith('{'):
+        if line.startswith("{"):
             return json.loads(line)
     raise AssertionError("Simulation produced no measurements")
 
+# Main ---------------------------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", default="build/mac_100g")
-    parser.add_argument("--profile", choices=["minimum", "standard", "jumbo", "mixed"], default="mixed")
-    parser.add_argument("--packets", type=int, default=128)
-    parser.add_argument("--data-width", type=int, choices=[128, 256, 512], default=512)
-    parser.add_argument("--sys-clk-freq", type=float, default=250e6)
-    parser.add_argument("--rx-clk-freq", type=float, default=322.265625e6)
-    parser.add_argument("--tx-clk-freq", type=float, default=322.265625e6)
-    parser.add_argument("--rate", type=float, default=100e9)
-    parser.add_argument("--fifo-depth", type=int, default=256)
-    parser.add_argument("--stall-cycles", type=int, default=0)
-    parser.add_argument("--error-every", type=int, default=0)
-    parser.add_argument("--reset", action="store_true")
+    # Output.
+    parser.add_argument("--output-dir",    default="build/mac_100g")
     parser.add_argument("--generate-only", action="store_true")
+
+    # Traffic.
+    parser.add_argument("--profile",       choices=["minimum", "standard", "jumbo", "mixed"], default="mixed")
+    parser.add_argument("--packets",       type=int,   default=128)
+    parser.add_argument("--rate",          type=float, default=100e9)
+
+    # Data path.
+    parser.add_argument("--data-width",    type=int,   default=512, choices=[128, 256, 512])
+    parser.add_argument("--sys-clk-freq",  type=float, default=250e6)
+    parser.add_argument("--rx-clk-freq",   type=float, default=322.265625e6)
+    parser.add_argument("--tx-clk-freq",   type=float, default=322.265625e6)
+    parser.add_argument("--fifo-depth",    type=int,   default=256)
+
+    # Fault injection.
+    parser.add_argument("--stall-cycles",  type=int, default=0)
+    parser.add_argument("--error-every",   type=int, default=0)
+    parser.add_argument("--reset",         action="store_true")
     args = parser.parse_args()
-    sizes = {"minimum": [18], "standard": [1472], "jumbo": [8972], "mixed": [18, 65, 1472, 8972, 33]}
+    sizes = {
+        "minimum"  : [18],
+        "standard" : [1472],
+        "jumbo"    : [8972],
+        "mixed"    : [18, 65, 1472, 8972, 33],
+    }
     profile = sizes[args.profile]
     lengths = [profile[i % len(profile)] for i in range(args.packets)]
-    path = generate(args.output_dir, lengths, args.data_width, args.sys_clk_freq,
-        args.rx_clk_freq, args.tx_clk_freq, args.rate, args.fifo_depth, args.stall_cycles,
-        args.error_every, args.reset)
+    path = generate(args.output_dir, lengths,
+        dw           = args.data_width,
+        sys_clk_freq = args.sys_clk_freq,
+        rx_clk_freq  = args.rx_clk_freq,
+        tx_clk_freq  = args.tx_clk_freq,
+        rate         = args.rate,
+        fifo_depth   = args.fifo_depth,
+        stall_cycles = args.stall_cycles,
+        error_every  = args.error_every,
+        with_reset   = args.reset,
+    )
     if not args.generate_only:
         print(json.dumps(simulate(path), sort_keys=True))
 

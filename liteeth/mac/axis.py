@@ -21,7 +21,7 @@ class LiteEthMACAXIStream(LiteXModule):
     """Adapt a frame-oriented hardware MAC to LiteEth's PHY-facing stream.
 
     AXI frames start at destination MAC and omit FCS. The adapter pads TX frames; the hardware
-    MAC owns FCS, preamble and IFG. TX supports ready; RX has no backpressure. All TX signals belong to
+    MAC owns FCS, preamble and IFG. TX supports ready; RX has no backpressure. TX belongs to
     eth_tx and RX signals/counters to eth_rx. The parent owns clocks and resets.
     """
     with_preamble_crc       = False
@@ -43,31 +43,36 @@ class LiteEthMACAXIStream(LiteXModule):
             raise ValueError("RX queue depth must be a power of two, at least two words.")
         if param_depth < 2:
             raise ValueError("At least two frame descriptors are required.")
-        self.dw          = dw
-        self.tx_clk_freq = clk_freq
-        self.rx_clk_freq = clk_freq
-        self.sink        = stream.Endpoint(eth_phy_description(dw))
-        self.source      = stream.Endpoint(eth_phy_description(dw))
-        self.tx          = AXIStreamInterface(dw, user_width=1, clock_domain="eth_tx")
-        self.rx          = AXIStreamInterface(dw, user_width=1, clock_domain="eth_rx")
-        self.link_up     = Signal(reset=1)
-        self.rx_packets  = Signal(32)
-        self.rx_drops    = Signal(32)
+        self.dw            = dw
+        self.tx_clk_freq   = clk_freq
+        self.rx_clk_freq   = clk_freq
+        self.sink          = stream.Endpoint(eth_phy_description(dw))
+        self.source        = stream.Endpoint(eth_phy_description(dw))
+        self.tx            = AXIStreamInterface(dw, user_width=1, clock_domain="eth_tx")
+        self.rx            = AXIStreamInterface(dw, user_width=1, clock_domain="eth_rx")
+        self.link_up       = Signal(reset=1)
+        self.rx_packets    = Signal(32)
+        self.rx_drops      = Signal(32)
         self.rx_bad_frames = Signal(32)
 
         # # #
 
-        # TX: commit a complete frame before exposing it to an unpausable wire transmitter.
+        # TX --------------------------------------------------------------------------------------
+        # Commit a complete frame before exposing it to an unpausable wire transmitter.
         # The caller must finish frames within eth_mtu, as for MACCore's existing PacketFIFO.
         self.tx_padding = tx_padding = ClockDomainsRenamer("eth_tx")(
             LiteEthMACPaddingInserter(dw, eth_min_frame_length - eth_fcs_length))
         self.tx_fifo = tx_fifo = ClockDomainsRenamer("eth_tx")(PacketFIFO(
-            eth_phy_description(dw), payload_depth=tx_fifo_depth, param_depth=param_depth, buffered=True))
-        tx = tx_fifo.source
-        full = (1 << (dw//8)) - 1
-        tx_bad = Signal()
+            eth_phy_description(dw),
+            payload_depth = tx_fifo_depth,
+            param_depth   = param_depth,
+            buffered      = True,
+        ))
+        tx          = tx_fifo.source
+        full        = (1 << (dw//8)) - 1
+        tx_bad      = Signal()
         tx_bad_beat = Signal()
-        input_bad = Signal()
+        input_bad   = Signal()
         self.comb += [
             self.sink.connect(tx_padding.sink),
             # Preserve malformed input masks as an error even if padding fills their holes.
@@ -88,12 +93,16 @@ class LiteEthMACAXIStream(LiteXModule):
             tx_bad.eq(~tx.last & (tx_bad | tx_bad_beat)),
         )
 
-        # RX: an overflow or late error must discard the entire frame, never deliver its prefix.
+        # RX --------------------------------------------------------------------------------------
+        # An overflow or late error must discard the entire frame, never deliver its prefix.
         self.rx_fifo = rx_fifo = ClockDomainsRenamer("eth_rx")(PacketDropFIFO(
-            eth_phy_description(dw), payload_depth=rx_fifo_depth, param_depth=param_depth))
-        count = Signal(max=max_length + dw//8 + 1)
-        size  = Signal.like(count)
-        bad   = Signal()
+            eth_phy_description(dw),
+            payload_depth = rx_fifo_depth,
+            param_depth   = param_depth,
+        ))
+        count    = Signal(max=max_length + dw//8 + 1)
+        size     = Signal.like(count)
+        bad      = Signal()
         bad_beat = Signal()
         self.comb += [
             self.rx.ready.eq(1), # There is no corresponding port on CMAC.

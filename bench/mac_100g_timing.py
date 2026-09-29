@@ -12,11 +12,12 @@ from pathlib import Path
 
 from bench.mac_100g import generate
 
+# Main ---------------------------------------------------------------------------------------------
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", default="build/mac_100g_timing")
-    parser.add_argument("--part", default="xcvu3p-ffvc1517-2-e")
+    parser.add_argument("--output-dir",   default="build/mac_100g_timing")
+    parser.add_argument("--part",         default="xcvu3p-ffvc1517-2-e")
     parser.add_argument("--sys-clk-freq", type=float, default=250e6)
     args = parser.parse_args()
     path = generate(args.output_dir, [18, 1472], sys_clk_freq=args.sys_clk_freq)
