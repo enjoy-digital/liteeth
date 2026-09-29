@@ -40,13 +40,34 @@ class DUT(LiteXModule):
 def main_generator(dut):
     yield dut.ip_port.sink.valid.eq(1)
     yield dut.ip_port.sink.last.eq(1)
-    yield dut.ip_port.sink.ip_address.eq(0x12345678)
+    yield dut.ip_port.sink.be.eq(1)
+    yield dut.ip_port.sink.data.eq(0x5a)
+    yield dut.ip_port.sink.length.eq(1)
+    yield dut.ip_port.sink.ip_address.eq(ip_address)
     yield dut.ip_port.sink.protocol.eq(udp_protocol)
-
     yield dut.ip_port.source.ready.eq(1)
-    while not ((yield dut.ip_port.source.valid) and (yield dut.ip_port.source.last)):
+    sent = False
+    for _ in range(4096):
         yield
-    print("packet from IP 0x{:08x}".format((yield dut.ip_port.sink.ip_address)))
+        if not sent and (yield dut.ip_port.sink.ready):
+            sent = True
+            yield dut.ip_port.sink.valid.eq(0)
+        if (yield dut.ip_port.source.valid):
+            # IPv4 RX forwards Ethernet padding, but the declared payload is one byte.
+            tc = unittest.TestCase()
+            tc.assertTrue(sent)
+            tc.assertEqual((yield dut.ip_port.source.length), 1)
+            tc.assertEqual((yield dut.ip_port.source.ip_address), ip_address)
+            tc.assertEqual((yield dut.ip_port.source.protocol), udp_protocol)
+            tc.assertEqual((yield dut.ip_port.source.data), 0x5a)
+            break
+    else:
+        raise AssertionError("IPv4 loopback timed out")
+    for _ in range(128):
+        if (yield dut.ip_port.source.valid) and (yield dut.ip_port.source.last):
+            return
+        yield
+    raise AssertionError("IPv4 loopback did not terminate")
 
 
 # Test IP ------------------------------------------------------------------------------------------
@@ -66,4 +87,4 @@ class TestIP(unittest.TestCase):
                     "eth_rx" : 10,
                     "eth_tx" : 10,
                 }
-                run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+                run_simulation(dut, generators, clocks)
