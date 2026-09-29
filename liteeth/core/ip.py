@@ -48,12 +48,43 @@ class LiteEthIPV4Crossbar(LiteEthCrossbar):
 @ResetInserter()
 @CEInserter()
 class LiteEthIPV4Checksum(LiteXModule):
-    def __init__(self, words_per_clock_cycle=1, skip_checksum=False):
+    def __init__(self, words_per_clock_cycle=1, skip_checksum=False, with_parallel=False):
         self.header = Signal(ipv4_header.length*8)
         self.value  = Signal(16)
         self.done   = Signal()
 
         # # #
+
+        if with_parallel:
+            # Wide packet paths can receive an entire IP header in one beat. Sum it with a
+            # balanced tree, then register the carry fold instead of waiting ten cycles.
+            words = [self.header[i*16:(i + 1)*16] for i in range(ipv4_header.length//2)
+                if not (skip_checksum and i == ipv4_header.fields["checksum"].byte//2)]
+            while len(words) > 1:
+                level = []
+                for i in range(0, len(words), 2):
+                    if i + 1 == len(words):
+                        level.append(words[i])
+                    else:
+                        value = Signal(max(len(words[i]), len(words[i + 1])) + 1)
+                        self.comb += value.eq(words[i] + words[i + 1])
+                        level.append(value)
+                words = level
+            total  = Signal.like(words[0], reset_less=True)
+            folded = Signal(17, reset_less=True)
+            result = Signal(16)
+            count  = Signal(max=3)
+            self.sync += If(~self.done,
+                total.eq(words[0]),
+                folded.eq(total[:16] + total[16:]),
+                count.eq(count + 1),
+            )
+            self.comb += [
+                result.eq(folded[:16] + folded[16]),
+                self.value.eq(~Cat(result[8:16], result[:8])),
+                self.done.eq(count == 2),
+            ]
+            return
 
         s = Signal(17, reset_less=True)
         r = Signal(17, reset_less=True)
@@ -117,7 +148,7 @@ class LiteEthIPTX(LiteXModule):
             sink = buffer.source
 
         # Checksum.
-        self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
+        self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True, with_parallel=dw > 64)
         self.comb += checksum.ce.eq(sink.valid)
 
         # Packetizer.
@@ -150,6 +181,14 @@ class LiteEthIPTX(LiteXModule):
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
+        self.comb += [
+            packetizer.source.connect(source, omit={"valid", "ready", "ethernet_type", "target_mac", "sender_mac"}),
+            source.valid.eq(packetizer.source.valid & fsm.ongoing("SEND")),
+            packetizer.source.ready.eq(fsm.ongoing("DROP") | (fsm.ongoing("SEND") & source.ready)),
+            source.ethernet_type.eq(ethernet_type_ip),
+            source.target_mac.eq(target_mac),
+            source.sender_mac.eq(mac_address),
+        ]
         fsm.act("IDLE",
             If(packetizer.source.valid,
                 # Broadcast.
@@ -193,16 +232,11 @@ class LiteEthIPTX(LiteXModule):
             )
         )
         fsm.act("SEND",
-            packetizer.source.connect(source),
-            source.ethernet_type.eq(ethernet_type_ip),
-            source.target_mac.eq(target_mac),
-            source.sender_mac.eq(mac_address),
             If(source.valid & source.last & source.ready,
                 NextState("IDLE")
             )
         )
         fsm.act("DROP",
-            packetizer.source.ready.eq(1),
             If(packetizer.source.valid &
                packetizer.source.last &
                packetizer.source.ready,
@@ -239,7 +273,7 @@ class LiteEthIPRX(LiteXModule):
         self.comb += sink.connect(depacketizer.sink)
 
         # Checksum.
-        self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False)
+        self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=False, with_parallel=dw > 64)
         self.comb += [
             checksum.header.eq(depacketizer.header),
             checksum.reset.eq(~depacketizer.source.valid),

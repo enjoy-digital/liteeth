@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       # Checkout Repository
       - name: Checkout
@@ -13,7 +13,7 @@ jobs:
       # Install Tools
       - name: Install Tools
         run: |
-          sudo apt-get install wget build-essential iverilog
+          sudo apt-get install wget build-essential iverilog verilator
 
       - name: Set up Python 3.9
         uses: actions/setup-python@v4

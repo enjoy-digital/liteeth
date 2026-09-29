@@ -171,13 +171,24 @@ class LiteEthUDPTX(LiteXModule):
             packetizer.sink.checksum.eq(0), # UDP Checksum is not used, we only rely on MAC CRC.
         ]
 
-        # The packetizer owns framing. Its aligned header keeps the input parameters live until
-        # the final output beat is accepted, so a second IDLE/SEND FSM only adds a bubble.
+        # The packetizer owns framing. On wide streams its flush beat can outlive the input
+        # packet, so retain the parameters that are not encoded in the UDP header.
+        active     = Signal()
+        length     = Signal(16)
+        ip_address = Signal(32)
+        self.sync += If(source.valid,
+            If(~active,
+                length.eq(packetizer.sink.length),
+                ip_address.eq(sink.ip_address),
+                active.eq(1),
+            ),
+            If(source.ready & source.last, active.eq(0)),
+        )
         self.comb += [
             packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
-            source.length.eq(packetizer.sink.length),
+            source.length.eq(Mux(active, length, packetizer.sink.length)),
             source.protocol.eq(udp_protocol),
-            source.ip_address.eq(sink.ip_address),
+            source.ip_address.eq(Mux(active, ip_address, sink.ip_address)),
         ]
 
 # UDP RX -------------------------------------------------------------------------------------------
@@ -201,6 +212,21 @@ class LiteEthUDPRX(LiteXModule):
         # Depacketizer.
         self.depacketizer = depacketizer = LiteEthUDPDepacketizer(dw)
 
+        # A depacketizer can retain payload after accepting the last input beat. Capture the
+        # enclosing IP metadata with the first input transfer, before the next header replaces it.
+        active     = Signal()
+        length     = Signal(16)
+        protocol   = Signal(8)
+        ip_address = Signal(32)
+        self.sync += If(sink.valid & sink.ready,
+            If(~active,
+                length.eq(sink.length),
+                protocol.eq(sink.protocol),
+                ip_address.eq(sink.ip_address),
+            ),
+            active.eq(~sink.last),
+        )
+
         # Data-Path.
         self.comb += [
             sink.connect(depacketizer.sink),
@@ -209,7 +235,7 @@ class LiteEthUDPRX(LiteXModule):
                 "dst_port",
                 "data",
                 "error"}),
-            source.ip_address.eq(sink.ip_address),
+            source.ip_address.eq(ip_address),
             source.length.eq(depacketizer.source.length - udp_header.length),
         ]
 
@@ -227,9 +253,9 @@ class LiteEthUDPRX(LiteXModule):
             NextValue(count, dw//8),
             If(depacketizer.source.valid,
                 NextState("DROP"),
-                If((sink.protocol == udp_protocol) &
+                If((protocol == udp_protocol) &
                    (depacketizer.source.length > udp_header.length) &
-                   (depacketizer.source.length <= sink.length),
+                   (depacketizer.source.length <= length),
                     NextState("RECEIVE")
                 )
             )

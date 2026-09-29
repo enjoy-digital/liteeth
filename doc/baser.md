@@ -72,3 +72,6 @@ For each board/rate, build with its actual constraints, check timing, then exerc
 PRBS, minimum/standard/jumbo frames, cable removal/reconnection and channel resets.
 Test both channels of a shared PLL, including follower reset isolation. Record
 FPGA part/speed grade, reference clock, module, FEC setting, packet loss and errors.
+
+For wider application streams and a separate 25G generator example, see
+[High-speed packet datapaths](high_speed_datapaths.md).
