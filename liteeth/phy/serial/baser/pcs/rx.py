@@ -25,7 +25,7 @@ class PCSRXInterface(LiteXModule):
     """Receive side of the PCS/PMA boundary (IEEE 802.3ae Clause 49.2.9 - 49.2.12)."""
 
     def __init__(self, dw=64, hdr_width=2, prbs31_enable=False, bitslip_high_cycles=1,
-                 bitslip_low_cycles=8, count_125us=195):
+                 bitslip_low_cycles=8, count_125us=195, ber_threshold=16, ber_count=None):
         self.encoded_rx_data     = Signal(dw)
         self.encoded_rx_hdr      = Signal(hdr_width)
 
@@ -110,7 +110,8 @@ class PCSRXInterface(LiteXModule):
             bitslip_high_cycles = bitslip_high_cycles,
             bitslip_low_cycles  = bitslip_low_cycles,
         )
-        self.ber_mon = ber_mon = PCSRXBERMonitor(hdr_width=hdr_width, count_125us=count_125us)
+        self.ber_mon = ber_mon = PCSRXBERMonitor(
+            hdr_width=hdr_width, count_125us=count_125us, threshold=ber_threshold, count_window=ber_count)
         self.watchdog = watchdog = PCSRXWatchdog(hdr_width=hdr_width, count_125us=count_125us)
 
         test_mode = Signal()
@@ -251,7 +252,8 @@ class PCSRX(LiteXModule):
     64B/66B decoder, and implements the receive state machine of Figure 49-15 on top of them.
     """
     def __init__(self, dw=64, hdr_width=2, prbs31_enable=False, bitslip_high_cycles=1,
-                 bitslip_low_cycles=8, count_125us=195, with_pipelining=False):
+                 bitslip_low_cycles=8, count_125us=195, with_pipelining=False,
+                 ber_threshold=16, ber_count=None):
         self.xgmii_rxd           = Signal(dw)
         self.xgmii_rxc           = Signal(dw//8)
 
@@ -278,6 +280,8 @@ class PCSRX(LiteXModule):
             bitslip_high_cycles = bitslip_high_cycles,
             bitslip_low_cycles  = bitslip_low_cycles,
             count_125us         = count_125us,
+            ber_threshold       = ber_threshold,
+            ber_count           = ber_count,
         )
         self.decoder = decoder = XGMIIBaseRDecoder()
 
