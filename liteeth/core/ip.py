@@ -119,10 +119,12 @@ class LiteEthIPTX(LiteXModule):
         # Checksum.
         self.checksum = checksum = LiteEthIPV4Checksum(skip_checksum=True)
         self.comb += checksum.ce.eq(sink.valid)
-        self.comb += checksum.reset.eq(source.valid & source.last & source.ready)
 
         # Packetizer.
         self.packetizer = packetizer = LiteEthIPV4Packetizer(dw)
+        # Dropped packets also complete the checksum transaction (for example after ARP failure).
+        self.comb += checksum.reset.eq(
+            packetizer.source.valid & packetizer.source.last & packetizer.source.ready)
         self.comb += [
             sink.connect(packetizer.sink, keep={
                 "last",

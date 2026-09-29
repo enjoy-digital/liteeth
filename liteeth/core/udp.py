@@ -230,7 +230,9 @@ class LiteEthUDPRX(LiteXModule):
             NextValue(count, dw//8),
             If(depacketizer.source.valid,
                 NextState("DROP"),
-                If(sink.protocol == udp_protocol,
+                If((sink.protocol == udp_protocol) &
+                   (depacketizer.source.length > udp_header.length) &
+                   (depacketizer.source.length <= sink.length),
                     NextState("RECEIVE")
                 )
             )
@@ -238,13 +240,14 @@ class LiteEthUDPRX(LiteXModule):
         fsm.act("RECEIVE",
             depacketizer.source.connect(source, keep={"valid", "ready"}),
             source.last.eq(depacketizer.source.last | (count >= source.length)),
-            # The UDP length ends the packet when reached: Ethernet padding can share the last data
-            # word and the padded frame's be must then be ignored. Otherwise (truncated
-            # packet), use the frame's be.
-            If(count < source.length,
-               source.be.eq(depacketizer.source.be),
-            ).Else(
-                source.be.eq(eth_packet_last_mask(dw, source.length)),
+            # Trim Ethernet padding without enabling absent lanes on truncated packets.
+            source.be.eq(depacketizer.source.be),
+            If(count >= source.length,
+                source.be.eq(depacketizer.source.be & eth_packet_last_mask(dw, source.length)),
+            ),
+            If(depacketizer.source.last &
+               ((count - dw//8 + stream.byte_count(depacketizer.source.be)) < source.length),
+                source.error.eq(source.be),
             ),
             If(source.valid & source.ready,
                 NextValue(count, count + dw//8),

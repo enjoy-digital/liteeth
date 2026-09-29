@@ -219,12 +219,13 @@ class LiteEthUDP2StreamRX(LiteXModule):
             self.comb += If(sink.ip_address != self.ip_address, valid.eq(0))
 
         # Data-Path / Buffering (Optional).
-        keep = {"last", "data", "error"}
+        keep = {"last", "data"}
         if with_be:
             keep |= {"be"}
         if fifo_depth is None:
             self.comb += [
                 sink.connect(source, keep=keep),
+                source.error.eq((sink.error & sink.be) != 0),
                 source.valid.eq(sink.valid & valid),
                 sink.ready.eq(source.ready | ~valid)
             ]
@@ -239,6 +240,7 @@ class LiteEthUDP2StreamRX(LiteXModule):
             )
             self.comb += [
                 sink.connect(fifo.sink, keep=keep),
+                fifo.sink.error.eq((sink.error & sink.be) != 0),
                 fifo.sink.valid.eq(sink.valid & valid),
                 sink.ready.eq(fifo.sink.ready | ~valid),
                 fifo.source.connect(source)
