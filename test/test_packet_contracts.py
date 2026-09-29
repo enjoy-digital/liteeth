@@ -54,9 +54,9 @@ class TestPacketContracts(unittest.TestCase):
                     self.assertEqual(got, [dict(we=1, addr=64, data=0xdeadbeef, last=1)])
 
     def test_icmp_echo_rejects_bad_packets(self):
-        for dw in [8, 32, 64]:
+        for dw in [8, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
-                dut = LiteEthICMPEcho(dw, fifo_depth=16)
+                dut = LiteEthICMPEcho(dw, fifo_depth=max(16, dw//8))
                 beats = []
                 for actual, declared, error in [(3, 9, 0), (40, 8, 0), (4, 4, 1), (4, 4, 0)]:
                     beats += packet_beats(bytes(range(actual)), dw, length=declared, error=error)
@@ -66,7 +66,7 @@ class TestPacketContracts(unittest.TestCase):
                 self.assertTrue(all(b["length"] == 4 for b in got))
 
     def test_icmp_padding_and_truncation(self):
-        for dw in [8, 32, 64]:
+        for dw in [8, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 header = bytes.fromhex("0800123400010002")
                 beats = packet_beats(header + bytes(range(16)), dw, protocol=1, length=11)

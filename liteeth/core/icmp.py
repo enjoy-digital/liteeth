@@ -44,12 +44,24 @@ class LiteEthICMPTX(LiteXModule):
             "be"
         })
 
-        # The aligned packetizer owns framing and holds input parameters through completion.
+        # Keep enclosing IP metadata until the packetizer's final output transfer, including
+        # a wide stream's flush beat after its last input has already been accepted.
+        active     = Signal()
+        length     = Signal(16)
+        ip_address = Signal(32)
+        self.sync += If(source.valid,
+            If(~active,
+                length.eq(sink.length + icmp_header.length),
+                ip_address.eq(sink.ip_address),
+                active.eq(1),
+            ),
+            If(source.ready & source.last, active.eq(0)),
+        )
         self.comb += [
             packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
-            source.length.eq(sink.length + icmp_header.length),
+            source.length.eq(Mux(active, length, sink.length + icmp_header.length)),
             source.protocol.eq(icmp_protocol),
-            source.ip_address.eq(sink.ip_address),
+            source.ip_address.eq(Mux(active, ip_address, sink.ip_address)),
         ]
 
 # ICMP RX ------------------------------------------------------------------------------------------
@@ -73,6 +85,20 @@ class LiteEthICMPRX(LiteXModule):
         self.depacketizer = depacketizer = LiteEthICMPDepacketizer(dw)
         self.comb += sink.connect(depacketizer.sink)
 
+        # Capture metadata before the next IP header can replace a retained payload's values.
+        active     = Signal()
+        length     = Signal(16)
+        protocol   = Signal(8)
+        ip_address = Signal(32)
+        self.sync += If(sink.valid & sink.ready,
+            If(~active,
+                length.eq(sink.length),
+                protocol.eq(sink.protocol),
+                ip_address.eq(sink.ip_address),
+            ),
+            active.eq(~sink.last),
+        )
+
         # FSM.
         count = Signal(17)
         self.fsm = fsm = FSM(reset_state="IDLE")
@@ -87,7 +113,7 @@ class LiteEthICMPRX(LiteXModule):
             NextValue(count, dw//8),
             If(depacketizer.source.valid,
                 NextState("DROP"),
-                If((sink.protocol == icmp_protocol) & (sink.length > icmp_header.length),
+                If((protocol == icmp_protocol) & (length > icmp_header.length),
                     If((depacketizer.source.msgtype == icmp_type_ping_request) &
                        (depacketizer.source.code == 0),
                         NextState("RECEIVE")
@@ -106,8 +132,8 @@ class LiteEthICMPRX(LiteXModule):
                 "error",
                 "be"
             }),
-            source.ip_address.eq(sink.ip_address),
-            source.length.eq(sink.length - icmp_header.length),
+            source.ip_address.eq(ip_address),
+            source.length.eq(length - icmp_header.length),
         ]
         fsm.act("RECEIVE",
             source.last.eq(depacketizer.source.last | (count >= source.length)),

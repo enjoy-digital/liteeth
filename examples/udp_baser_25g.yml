@@ -1,0 +1,35 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2026 Enjoy-Digital <enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# Native 25GBASE-R with a 256-bit application datapath at 200 MHz.
+# Requires a matching GTY part, board reference clock and no-FEC link partner.
+
+# PHY ----------------------------------------------------------------------------------------------
+phy         : USP_GTY_25G_BASER
+vendor      : xilinx
+toolchain   : vivado
+refclk_freq : 161.1328125e6
+phy_fec     : none
+
+# Core ---------------------------------------------------------------------------------------------
+clk_freq        : 200e6
+core            : udp
+data_width      : 256
+tx_cdc_buffered : True
+rx_cdc_buffered : True
+eth_mtu         : 9022
+icmp_fifo_depth : 9000
+
+# UDP Ports ----------------------------------------------------------------------------------------
+udp_ports: {
+  "udp0": {
+    "data_width"           : 256,
+    "tx_fifo_depth"        : 512,  # Words; holds a complete jumbo packet.
+    "rx_fifo_depth"        : 512,
+    "tx_max_packet_length" : 8972, # Byte limit rounds down to a full word (8960).
+    # Use sink_keep/source_keep for partial final words and sink_last to close each packet.
+  },
+}

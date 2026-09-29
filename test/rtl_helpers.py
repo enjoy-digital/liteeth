@@ -17,6 +17,10 @@ rtl_available = bool(shutil.which("iverilog") and shutil.which("vvp"))
 
 
 def run_iverilog(dut, inputs, outputs, bench, cycles=1000):
+    run_rtl(dut, inputs, outputs, bench, cycles=cycles)
+
+
+def run_rtl(dut, inputs, outputs, bench, cycles=1000, simulator="iverilog"):
     """Run a bounded testbench against LiteX-generated Verilog, with an explicit pin mapping."""
     dut.clock_domains.cd_sys = ClockDomain("sys")
     ios = {dut.cd_sys.clk, dut.cd_sys.rst}
@@ -47,11 +51,18 @@ dut dut({', '.join(ports)});
         conversion = verilog.convert(dut, ios=ios, name="dut", comb_cycle_policy="error")
         conversion.write(str(path/"dut.v"))
         (path/"tb.v").write_text(header + bench + "\nendmodule\n")
-        result = subprocess.run(["iverilog", "-g2012", "-s", "tb", "-o", "sim", "dut.v", "tb.v"],
-            cwd=directory, capture_output=True, text=True, timeout=30)
+        if simulator == "verilator":
+            command = ["verilator", "--binary", "--timing", "--top-module", "tb", "-Wno-fatal",
+                "-j", "2", "dut.v", "tb.v"]
+            executable = [str(path/"obj_dir"/"Vtb")]
+        elif simulator == "iverilog":
+            command = ["iverilog", "-g2012", "-s", "tb", "-o", "sim", "dut.v", "tb.v"]
+            executable = ["vvp", "sim"]
+        else:
+            raise ValueError(f"Unknown simulator: {simulator}")
+        result = subprocess.run(command, cwd=directory, capture_output=True, text=True, timeout=120)
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
-        result = subprocess.run(["vvp", "sim"], cwd=directory,
-            capture_output=True, text=True, timeout=30)
+        result = subprocess.run(executable, cwd=directory, capture_output=True, text=True, timeout=30)
         if result.returncode:
             raise AssertionError(result.stdout + result.stderr)
