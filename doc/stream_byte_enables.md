@@ -42,6 +42,16 @@ Etherbone's memory-mapped endpoint now calls its Wishbone byte-selection paramet
 `byte_enable`. Its stream `be` qualifies the transported word. These have distinct
 meanings: a full Etherbone word can request only selected Wishbone byte lanes.
 
+## UDP Streamer TX Control
+
+Both buffered and unbuffered TX sample the destination when the first output
+beat becomes valid and hold it through the final transfer, including stalls.
+Clearing `enable` prevents the next packet from starting; it does not withdraw
+an already presented packet. In unbuffered mode each input word is a packet,
+and disabling TX backpressures the input. Buffered mode can continue accepting
+input until its FIFO fills while output is disabled. CSR changes and direct
+control signals follow the same rules.
+
 ## Standalone Generator
 
 UDP stream ports retain `sink_keep`/`source_keep` pins, now wired directly to
@@ -52,3 +62,6 @@ to omit the pins and generate full masks internally.
 Raw UDP ports expose `sink_be`/`source_be`, with the native mask encoding.
 Legacy pin names and the legacy raw-port option are no longer supported.
 Other raw-port pins are unchanged.
+
+For length semantics, error handling and buffer ownership, see
+[packet contracts](packet_contracts.md).

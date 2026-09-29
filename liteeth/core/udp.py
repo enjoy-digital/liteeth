@@ -171,24 +171,14 @@ class LiteEthUDPTX(LiteXModule):
             packetizer.sink.checksum.eq(0), # UDP Checksum is not used, we only rely on MAC CRC.
         ]
 
-        # Control-Path (FSM).
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            If(packetizer.source.valid,
-                NextState("SEND")
-            )
-        )
-        fsm.act("SEND",
-            packetizer.source.connect(source),
+        # The packetizer owns framing. Its aligned header keeps the input parameters live until
+        # the final output beat is accepted, so a second IDLE/SEND FSM only adds a bubble.
+        self.comb += [
+            packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
             source.length.eq(packetizer.sink.length),
             source.protocol.eq(udp_protocol),
             source.ip_address.eq(sink.ip_address),
-            If(source.valid & source.ready,
-                If(source.last,
-                    NextState("IDLE")
-                )
-            )
-        )
+        ]
 
 # UDP RX -------------------------------------------------------------------------------------------
 
@@ -224,8 +214,15 @@ class LiteEthUDPRX(LiteXModule):
         ]
 
         # Control-Path (FSM).
-        count = Signal(16)
+        count = Signal(17)
         self.fsm = fsm = FSM(reset_state="IDLE")
+        # Keep the ready/valid wiring outside the FSM's combinational block. This also avoids
+        # simulator delta-cycle feedback between adjacent depacketizer and receiver FSMs.
+        self.comb += [
+            source.valid.eq(depacketizer.source.valid & fsm.ongoing("RECEIVE")),
+            depacketizer.source.ready.eq(fsm.ongoing("DROP") |
+                (fsm.ongoing("RECEIVE") & source.ready)),
+        ]
         fsm.act("IDLE",
             NextValue(count, dw//8),
             If(depacketizer.source.valid,
@@ -238,7 +235,6 @@ class LiteEthUDPRX(LiteXModule):
             )
         )
         fsm.act("RECEIVE",
-            depacketizer.source.connect(source, keep={"valid", "ready"}),
             source.last.eq(depacketizer.source.last | (count >= source.length)),
             # Trim Ethernet padding without enabling absent lanes on truncated packets.
             source.be.eq(depacketizer.source.be),
@@ -260,7 +256,6 @@ class LiteEthUDPRX(LiteXModule):
         )
 
         fsm.act("DROP",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid &
                depacketizer.source.last &
                depacketizer.source.ready,
