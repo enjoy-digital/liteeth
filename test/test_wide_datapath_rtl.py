@@ -103,3 +103,26 @@ initial begin
     $finish;
 end
 ''', cycles=15000, simulator=simulator)
+
+    @unittest.skipUnless(rtl_available, "Icarus Verilog is required")
+    def test_icmp_metadata(self):
+        from liteeth.core.icmp import LiteEthICMPTX, LiteEthICMPRX
+        from test.test_packet_boundaries import packet_beats
+        from test.test_packet_contracts_rtl import TestPacketContractsRTL
+
+        for width in [128, 256, 512]:
+            for transmit in [False, True]:
+                with self.subTest(width=width, transmit=transmit):
+                    inputs, expected = [], []
+                    for n, length in enumerate([1, 65, 3, 129]):
+                        data = bytes((i + n) % 256 for i in range(length))
+                        address = 0xc0a80101 + n
+                        header = bytes.fromhex("0800123400010002")
+                        wire = packet_beats(header + data, width, protocol=1,
+                            length=length + 8, ip_address=address)
+                        payload = packet_beats(data, width, length=length, ip_address=address,
+                            msgtype=8, code=0, checksum=0x1234, quench=0x00010002)
+                        inputs += payload if transmit else wire
+                        expected += wire if transmit else payload
+                    dut = LiteEthICMPTX(0, width) if transmit else LiteEthICMPRX(0, width)
+                    TestPacketContractsRTL().check_rtl(dut, inputs, expected)

@@ -58,12 +58,12 @@ class TestProtocolWrappers(unittest.TestCase):
         self.assertEqual(packets, expected)
 
     def test_udp_back_to_back(self):
-        for dw in [8, 16, 32, 64]:
+        for dw in [8, 16, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 self.check_packets(LiteEthUDPTX(0, dw), dw, "udp")
 
     def test_icmp_back_to_back(self):
-        for dw in [8, 16, 32, 64]:
+        for dw in [8, 16, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 self.check_packets(LiteEthICMPTX(0, dw), dw, "icmp")
 

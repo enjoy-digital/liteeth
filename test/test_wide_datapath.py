@@ -84,3 +84,25 @@ class TestWideDatapath(unittest.TestCase):
                 self.assertIn("GTYE4_CHANNEL", rtl)
                 self.assertIn(f"[{width-1}:0]", rtl)
                 self.assertIn("udp0_sink_keep", rtl)
+
+    def test_icmp_receive_metadata(self):
+        from liteeth.core.icmp import LiteEthICMPRX
+        from test.test_packet_boundaries import packet_beats, exercise_stream
+
+        for width in [128, 256, 512]:
+            with self.subTest(width=width):
+                inputs, expected = [], []
+                for n, length in enumerate([1, 65, 3, 129]):
+                    data = bytes((i + n) % 256 for i in range(length))
+                    address = 0xc0a80101 + n
+                    header = bytes.fromhex("0800123400010002")
+                    inputs += packet_beats(header + data, width, protocol=1,
+                        length=length + 8, ip_address=address)
+                    expected += packet_beats(data, width, length=length, ip_address=address)
+                fields = ["data", "be", "last", "length", "ip_address"]
+                got = exercise_stream(LiteEthICMPRX(0, width), inputs, fields, cycles=1000)
+                self.assertEqual(len(got), len(expected))
+                for actual, reference in zip(got, expected):
+                    mask = (1 << (8*bin(reference["be"]).count("1"))) - 1
+                    actual["data"] &= mask
+                    self.assertEqual(actual, {name: reference[name] for name in fields})

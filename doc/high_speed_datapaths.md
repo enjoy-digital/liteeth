@@ -49,7 +49,8 @@ The serial checksum remains the default for existing narrower paths. The UDP
 packetizer directly controls framing; IP address and length remain latched
 until its final output transfer. The UDP receiver captures enclosing IP
 metadata on the first input transfer, so a retained payload cannot acquire the
-next packet's metadata under backpressure.
+next packet's metadata under backpressure. ICMP retains its enclosing IP
+metadata at the same boundaries, including wide echo request/reply paths.
 
 Measure the isolated UDP/IP/MAC-header loop with:
 
@@ -96,9 +97,9 @@ internal setup margins:
 
 | Width | WNS at 250 MHz |
 | --- | ---: |
-| 128 | +1.285 ns |
-| 256 | +1.444 ns |
-| 512 | +1.291 ns |
+| 128 | +1.468 ns |
+| 256 | +1.305 ns |
+| 512 | +0.985 ns |
 
 These builds have no input/output delay constraints. They establish internal
 register timing only, not board timing or complete 25G PHY timing closure.
