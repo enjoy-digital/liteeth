@@ -87,7 +87,7 @@ class LiteEthMACCore(LiteXModule):
         # See doc/packet_contracts.md for pipeline ownership and the maximum-frame contract.
         assert with_store_and_forward in [True, False, "auto"]
         if with_store_and_forward == "auto":
-            with_store_and_forward = eth_needs_store_and_forward(phy)
+            with_store_and_forward = getattr(phy, "with_store_and_forward", eth_needs_store_and_forward(phy))
         self.with_store_and_forward = with_store_and_forward
 
         # CSRs.
