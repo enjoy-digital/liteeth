@@ -161,6 +161,20 @@ _io = [
         Subsignal("link_up", Pins(1)),
     ),
 
+    # BASE-R PHY Pads (dedicated differential transceiver reference clock).
+    ("baser_refclk", 0,
+        Subsignal("p", Pins(1)),
+        Subsignal("n", Pins(1)),
+    ),
+    ("baser", 0,
+        Subsignal("rst",     Pins(1)),
+        Subsignal("txp",     Pins(1)),
+        Subsignal("txn",     Pins(1)),
+        Subsignal("rxp",     Pins(1)),
+        Subsignal("rxn",     Pins(1)),
+        Subsignal("link_up", Pins(1)),
+    ),
+
     # XGMII PHY Pads
     ("xgmii", 0,
         Subsignal("rx",      Pins(1)), # Clk.
@@ -394,6 +408,43 @@ class PHYCore(SoCMini):
                 ethphy.reset.eq(ethphy_pads.rst),
                 ethphy_pads.link_up.eq(ethphy.link_up),
             ]
+        # BASE-R.
+        elif phy in [
+            liteeth_phys.K7_GTX_5G_BASER, liteeth_phys.K7_GTX_10G_BASER,
+            liteeth_phys.USP_GTH_5G_BASER, liteeth_phys.USP_GTH_10G_BASER,
+            liteeth_phys.USP_GTY_5G_BASER, liteeth_phys.USP_GTY_10G_BASER,
+            liteeth_phys.USP_GTY_25G_BASER,
+        ]:
+            if core_config.get("refclk_from_fabric", False):
+                raise ValueError("The BASE-R generator requires a dedicated differential reference clock.")
+            if core_config.get("phy_fec", "none") != "none":
+                raise ValueError("The native BASE-R PHY supports phy_fec: none only.")
+            refclk_pads = platform.request("baser_refclk")
+            ethphy_pads = platform.request("baser")
+            refclk_freq = core_config.get("refclk_freq", 156.25e6)
+            phy_kwargs = dict(
+                data_pads    = ethphy_pads,
+                sys_clk_freq = self.clk_freq,
+                with_csr     = False,
+                tx_polarity  = core_config.get("phy_tx_polarity", 0),
+                rx_polarity  = core_config.get("phy_rx_polarity", 0),
+            )
+            if phy in [liteeth_phys.K7_GTX_5G_BASER, liteeth_phys.K7_GTX_10G_BASER]:
+                from liteiclink.serdes.gtx_7series import GTXQuadPLL
+                refclk = Signal()
+                self.specials += Instance("IBUFDS_GTE2",
+                    i_CEB=0, i_I=refclk_pads.p, i_IB=refclk_pads.n, o_O=refclk)
+                self.ethphy_qpll = GTXQuadPLL(refclk, refclk_freq, phy.linerate)
+                phy_kwargs["qpll"] = self.ethphy_qpll
+            else:
+                phy_kwargs.update(refclk_or_clk_pads=refclk_pads, refclk_freq=refclk_freq)
+            ethphy = phy(**phy_kwargs)
+            self.comb += [
+                ethphy.reset.eq(ethphy_pads.rst),
+            ]
+            from migen.genlib.cdc import MultiReg
+            self.specials += MultiReg(ethphy.link_up, ethphy_pads.link_up)
+            platform.add_period_constraint(refclk_pads.p, 1e9/refclk_freq)
         elif phy in [liteeth_phys.LiteEthPHYXGMII]:
             ethphy_pads = platform.request("xgmii")
             ethphy      = phy(

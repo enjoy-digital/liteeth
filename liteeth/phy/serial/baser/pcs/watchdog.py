@@ -24,7 +24,7 @@ class PCSRXWatchdog(LiteXModule):
     consecutive windows are bad, the transceiver is asked to reset, on the theory that the receiver
     has failed in a way bit-slipping cannot fix.
 
-    NOTE: This might benefit from some more parameterization to be useful for 25G.
+    The recovery window is independent of the rate-specific PCS BER measurement window.
     """
     def __init__(self, hdr_width=2, count_125us=195):
         self.serdes_rx_hdr       = Signal(hdr_width)
@@ -69,14 +69,6 @@ class PCSRXWatchdog(LiteXModule):
                 ),
             ),
 
-            # 49.2.14.1: PCS_status is only true while block_lock holds and hi_ber is clear. The
-            # reference omits the hi_ber term; including it also restarts qualification, matching
-            # how loss of block lock is handled.
-            If(~self.rx_block_lock | self.rx_high_ber,
-                status.eq(0),
-                status_count.eq(0),
-            ),
-
             If(time_count != 0,
                 time_count.eq(time_count - 1),
             ).Else(
@@ -100,5 +92,10 @@ class PCSRXWatchdog(LiteXModule):
                 ),
                 saw_ctrl_sh.eq(0),
                 block_error_count.eq(0),
+            ),
+            # Loss of lock or high BER wins even on the cycle a good window qualifies status.
+            If(~self.rx_block_lock | self.rx_high_ber,
+                status.eq(0),
+                status_count.eq(0),
             ),
         ]

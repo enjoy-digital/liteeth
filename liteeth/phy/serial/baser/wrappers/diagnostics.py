@@ -83,7 +83,7 @@ class LiteEthBASERPHY(LiteXModule):
             CSRField("block_lock", size=1, description=
                 "Block synchronisation acquired (49.2.9, Figure 49-12)"),
             CSRField("high_ber", size=1, description=
-                "Bit error ratio worse than 1e-4 (Figure 49-13)"),
+                "Invalid sync-header threshold exceeded in the rate-specific BER window"),
             CSRField("link_up", size=1, description=
                 "PCS_status: block lock held and no high BER (49.2.14.1)"),
             CSRField("error_count", size=7, description=

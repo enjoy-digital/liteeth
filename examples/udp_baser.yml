@@ -1,0 +1,43 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# Native 10GBASE-R UDP core with jumbo frames and a 64-bit UDP stream port.
+
+# PHY ----------------------------------------------------------------------------------------------
+phy       : USP_GTY_10G_BASER
+vendor    : xilinx
+toolchain : vivado
+refclk_freq : 156.25e6
+phy_fec     : none # The link partner must use the same no-FEC mode.
+
+# Core ---------------------------------------------------------------------------------------------
+clk_freq        : 156.25e6 # Sys Clk Input Freq.
+core            : udp      # Core type.
+data_width      : 64       # Datapath Width.
+tx_cdc_buffered : True     # Add Buffer on TX Datapath to improve timings.
+rx_cdc_buffered : True     # Add Buffer on RX Datapath to improve timings.
+
+# Jumbo Frames -------------------------------------------------------------------------------------
+eth_mtu         : 9022     # Maximum Ethernet frame length (or jumbo_frames: True). Default: 1530.
+icmp_fifo_depth : 9000     # ICMP echo buffer (bytes): pings with larger payloads are not answered.
+
+# Etherbone ----------------------------------------------------------------------------------------
+etherbone              : True  # Enable Etherbone.
+etherbone_port         : 1234  # Etherbone UDP port.
+etherbone_buffer_depth : 16    # Etherbone buffer depth.
+
+# UDP Ports ----------------------------------------------------------------------------------------
+udp_ports: {
+  "udp0": {
+    "data_width"    : 64,   # UDP Port Data-width.
+    "tx_fifo_depth" : 2048, # UDP Port TX FIFO Depth (in words), must hold a full jumbo packet.
+    "tx_max_packet_length" : 8972, # Packets not closed by last are split at this length (bytes,
+                                   # rounded down to words: 8968), the max UDP payload for MTU 9000.
+    "rx_fifo_depth" : 2048, # UDP Port RX FIFO Depth (in words).
+    # sink_keep/source_keep (AXI-Stream tkeep) pins are exposed by default for byte-granular packet
+    # lengths. Drive all ones for full words; "with_tkeep": False removes these pins.
+  },
+}

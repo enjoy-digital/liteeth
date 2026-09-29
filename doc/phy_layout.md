@@ -86,3 +86,6 @@ simulations, wrapper elaboration tests, generator tests, and full CI. Retain
 old module paths without a removal date; target builds and third-party
 designs often import them directly. Newly introduced modules can move to their
 canonical location without retaining transitional paths.
+
+Native BASE-R rates, link capabilities and standalone generation are described
+in [Native BASE-R PHYs](baser.md).

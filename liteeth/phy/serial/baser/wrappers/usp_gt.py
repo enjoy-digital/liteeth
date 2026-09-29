@@ -37,6 +37,8 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
     156.25e6 is verified, but other clocks may work.
     """
     dw          = 64
+    ber_threshold = 16
+    ber_period    = 125e-6
     linerate    = 10.3125e9
     rx_clk_freq = 156.25e6
     tx_clk_freq = 156.25e6
@@ -129,6 +131,8 @@ class USP_GTY_10G_BASER(LiteEthBASERPHY):
             count_125us     = int(125e-6*self.rx_clk_freq),
             prbs31_enable   = True,
             with_pipelining = pipelined,
+            ber_threshold   = self.ber_threshold,
+            ber_count       = int(self.ber_period*self.rx_clk_freq),
         )
 
         self.tx_prbs31_enable = Signal()
@@ -231,6 +235,9 @@ class USP_GTY_25G_BASER(USP_GTY_10G_BASER):
     preferable on jitter grounds. User clocks are 390.625 MHz, which the attached MAC datapath
     must also close timing at.
     """
+    # Clause 107 BER parameters; the recovery watchdog retains its 125 us cadence.
+    ber_threshold = 97
+    ber_period    = 2e-3
     linerate    = 25.78125e9
     rx_clk_freq = linerate/66   # one 66-bit block per user clock: 390.625 MHz
     tx_clk_freq = linerate/66
