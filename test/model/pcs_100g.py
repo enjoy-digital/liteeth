@@ -11,6 +11,13 @@ encoded. Scrambling precedes 20-lane distribution; alignment markers bypass scra
 See doc/100g_pcs.md for scope, sources and the deliberately conservative acquisition model.
 """
 
+import json
+import random
+import argparse
+from pathlib import Path
+
+# Alignment Markers --------------------------------------------------------------------------------
+
 LANES       = 20
 AM_INTERVAL = 16383 # Data blocks per lane between markers.
 MASK_58     = (1 << 58) - 1
@@ -56,7 +63,7 @@ def bip8(block):
 
 class Scrambler:
     def __init__(self, descramble=False, state=MASK_58):
-        self.state = state
+        self.state      = state
         self.descramble = descramble
 
     def block(self, block):
@@ -73,7 +80,7 @@ def distribute(blocks, interval=AM_INTERVAL):
     """Stripe pre-scrambled blocks and insert AM/BIP; no idle deletion or rate adaptation."""
     if interval < 1 or len(blocks) % LANES:
         raise ValueError("Provide complete 20-block groups and a positive marker interval")
-    lanes = [[] for _ in range(LANES)]
+    lanes  = [[] for _ in range(LANES)]
     parity = [0]*LANES
     for n, block in enumerate(blocks):
         if not 0 <= block < 1 << 66 or block & 3 not in [1, 2]:
@@ -135,10 +142,13 @@ def recover(lanes, interval=AM_INTERVAL, max_skew=32):
     for start in candidates:
         positions = []
         for lane in lanes:
-            matches = [(i, marker_lane(lane[i]))
-                for i in range(max(0, start - max_skew), min(len(lane) - period, start + max_skew + 1))
-                if marker_lane(lane[i]) is not None and
-                   marker_lane(lane[i]) == marker_lane(lane[i + period])]
+            matches = []
+            first = max(0, start - max_skew)
+            last  = min(len(lane) - period, start + max_skew + 1)
+            for position in range(first, last):
+                ident = marker_lane(lane[position])
+                if ident is not None and ident == marker_lane(lane[position + period]):
+                    matches.append((position, ident))
             if len(matches) != 1:
                 break
             positions.append(matches[0])
@@ -158,34 +168,35 @@ def recover(lanes, interval=AM_INTERVAL, max_skew=32):
             parity = 0
             for block in lane[position:position + period]:
                 parity ^= bip8(block)
-            received = (lane[position + period] >> 26) & 255
+            received   = (lane[position + period] >> 26) & 255
             complement = (lane[position + period] >> 58) & 255
-            syndrome = (parity ^ received) | ((parity ^ 255) ^ complement)
+            syndrome   = (parity ^ received) | ((parity ^ 255) ^ complement)
             errors += bin(syndrome).count("1")
         result.extend(block for row in zip(*ordered) for block in row)
     return result, errors
 
+# Vector Generation --------------------------------------------------------------------------------
 
 def main():
-    import argparse
-    import json
-    import random
-    from pathlib import Path
-
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", required=True)
+    parser.add_argument("--output",   required=True)
     parser.add_argument("--interval", type=int, default=AM_INTERVAL)
-    parser.add_argument("--periods", type=int, default=2)
+    parser.add_argument("--periods",  type=int, default=2)
     args = parser.parse_args()
     if args.periods < 2 or args.interval < 1:
         parser.error("Use at least two periods and a positive interval")
-    prng = random.Random(42)
+    prng      = random.Random(42)
     scrambler = Scrambler()
     blocks = [(prng.getrandbits(64) << 2) | 2 for _ in range(args.periods*args.interval*LANES)]
     lanes = distribute([scrambler.block(block) for block in blocks], args.interval)
-    Path(args.output).write_text(json.dumps(dict(mode="100gbase-r-no-fec", first_bit="lsb",
-        interval=args.interval, encoded_blocks=[f"{block:017x}" for block in blocks],
-        lanes=[[f"{block:017x}" for block in lane] for lane in lanes])) + "\n")
+    vectors = dict(
+        mode           = "100gbase-r-no-fec",
+        first_bit      = "lsb",
+        interval       = args.interval,
+        encoded_blocks = [f"{block:017x}" for block in blocks],
+        lanes          = [[f"{block:017x}" for block in lane] for lane in lanes],
+    )
+    Path(args.output).write_text(json.dumps(vectors) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

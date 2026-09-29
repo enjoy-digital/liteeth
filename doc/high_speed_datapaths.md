@@ -129,10 +129,7 @@ Existing width-converter, MAC, protocol and frontend tests remain necessary.
 
 ## Toward 100G
 
-This work supplies reusable wide packet processing, measurements and tests. It
-does not implement a 100G PHY. A subsequent 100G project must select its physical
-interface and account for lane distribution/alignment, required FEC, clocking,
-MAC framing at the chosen width and device-specific hard-IP integration where
-appropriate. Keep these responsibilities separate from the protocol core.
-Validate sustained small-packet rate as well as bulk bandwidth before describing
-an implementation as line-rate 100G.
+The [100G hardware-MAC path](100g.md) connects these wide cores to a CMAC through
+a buffered frame adapter. The [native PCS reference](100g_pcs.md) separately
+models lane distribution and alignment. Neither provides lossless 100G
+minimum-frame processing; measure sustained packet rate as well as bandwidth.

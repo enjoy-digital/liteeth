@@ -23,20 +23,20 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
         if any(len(getattr(data_pads, name)) != 4 for name in ["rxp", "rxn", "txp", "txn"]):
             raise ValueError("CAUI-4 requires four differential transceiver lanes.")
         LiteEthMACAXIStream.__init__(self, dw=512, **kwargs)
-        self.cd_eth_tx = ClockDomain("eth_tx")
-        self.cd_eth_rx = ClockDomain("eth_rx")
-        self.tx_reset = Signal()
-        self.rx_reset = Signal()
-        self.rx_aligned = Signal()
+        self.cd_eth_tx      = ClockDomain("eth_tx")
+        self.cd_eth_rx      = ClockDomain("eth_rx")
+        self.tx_reset       = Signal()
+        self.rx_reset       = Signal()
+        self.rx_aligned     = Signal()
         self.rx_local_fault = Signal()
-        self.tx_underflow = Signal()
-        self.tx_overflow = Signal()
-        self.link_up = Signal()
+        self.tx_underflow   = Signal()
+        self.tx_overflow    = Signal()
+        self.link_up        = Signal()
 
         # # #
 
-        tx_clk = Signal()
-        tx_ready = Signal()
+        tx_clk    = Signal()
+        tx_ready  = Signal()
         rx_status = Signal()
         self.comb += [
             self.cd_eth_tx.clk.eq(tx_clk),
@@ -49,13 +49,17 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
             AsyncResetSynchronizer(self.cd_eth_rx, reset | self.rx_reset),
             MultiReg(rx_status, self.link_up),
         ]
+
+        # CMAC ------------------------------------------------------------------------------------
         self.cmac_params = dict(
+            # Transceiver.
             i_gt_rxp_in                = data_pads.rxp,
             i_gt_rxn_in                = data_pads.rxn,
             o_gt_txp_out               = data_pads.txp,
             o_gt_txn_out               = data_pads.txn,
             i_gt_ref_clk_p             = refclk_pads.p,
             i_gt_ref_clk_n             = refclk_pads.n,
+            # Clocks and resets.
             i_init_clk                 = init_clk,
             i_sys_reset                = reset,
             i_gt_loopback_in           = 0,
@@ -67,6 +71,7 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
             i_core_rx_reset            = 0,
             o_usr_tx_reset             = self.tx_reset,
             o_usr_rx_reset             = self.rx_reset,
+            # Control and status.
             i_ctl_rx_enable            = 1,
             i_ctl_rx_force_resync      = 0,
             i_ctl_rx_test_pattern      = 0,
@@ -81,6 +86,7 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
             o_stat_rx_local_fault      = self.rx_local_fault,
             o_tx_unfout                = self.tx_underflow,
             o_tx_ovfout                = self.tx_overflow,
+            # Frame streams.
             o_tx_axis_tready           = tx_ready,
             i_tx_axis_tvalid           = self.tx.valid & self.rx_aligned,
             i_tx_axis_tdata            = self.tx.data,
@@ -92,6 +98,7 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
             o_rx_axis_tkeep            = self.rx.keep,
             o_rx_axis_tlast            = self.rx.last,
             o_rx_axis_tuser            = self.rx.user,
+            # Unused DRP interface.
             i_core_drp_reset           = reset,
             i_drp_clk                  = init_clk,
             i_drp_addr                 = 0,
