@@ -9,16 +9,21 @@ own pin placement, clock sources and timing constraints.
 
 | PHY | Serial rate | 64-bit PHY clock | PCS cadence |
 | --- | --- | --- | --- |
+| A7 GTP 5G | 5.15625 Gb/s | 161.1328125 MHz | 16 blocks per 33 clocks |
 | K7 GTX 10G | 10.3125 Gb/s | 161.1328125 MHz | Gearbox enables qualify blocks |
 | USP GTH/GTY 10G | 10.3125 Gb/s | 156.25 MHz | One block per clock |
 | USP GTY 25G | 25.78125 Gb/s | 390.625 MHz | One block per clock |
 
-The existing 5G variants retain their corresponding half-rate clocks. A 25G GTY
+The K7/USP 5G variants retain their corresponding half-rate clocks. A 25G GTY
 requires QPLL0 with the 25G tuning in its PMA. Both the existing 156.25 MHz
 fractional-N reference and 161.1328125 MHz integer-N reference are supported by
 construction tests. This does not establish signal integrity or timing closure
 on a new board. Shared QPLLs have exactly one reset owner; see
 [PHY portability](phy_portability.md).
+
+For Artix-7 clock selection, SFP setup and board examples, see
+[AC701/Acorn 5GBASE-R](a7_5g.md). These use a board-owned GTP PLL; A7 is not
+currently included in the standalone generator.
 
 ## Link capabilities
 
