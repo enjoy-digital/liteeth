@@ -52,22 +52,14 @@ class LiteEthEtherbonePacketTX(LiteXModule):
             packetizer.sink.port_size.eq(32//8),
             packetizer.sink.addr_size.eq(32//8),
         ]
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            If(packetizer.source.valid,
-                NextState("SEND")
-            )
-        )
-        fsm.act("SEND",
+        # The aligned packetizer owns framing and holds input parameters through completion.
+        self.comb += [
             packetizer.source.connect(source),
             source.src_port.eq(udp_port),
             source.dst_port.eq(sink.src_port),
             source.ip_address.eq(sink.ip_address),
             source.length.eq(sink.length + etherbone_packet_header.length),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
-            )
-        )
+        ]
 
 
 class LiteEthEtherbonePacketDepacketizer(Depacketizer):
