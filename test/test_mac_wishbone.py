@@ -35,8 +35,12 @@ class WishboneMaster:
         yield self.obj.we.eq(1)
         yield self.obj.sel.eq(0xf)
         yield self.obj.dat_w.eq(dat)
-        while not (yield self.obj.ack):
+        for _ in range(64):
             yield
+            if (yield self.obj.ack):
+                break
+        else:
+            raise AssertionError("Wishbone transaction timed out")
         yield self.obj.cyc.eq(0)
         yield self.obj.stb.eq(0)
         yield
@@ -48,8 +52,12 @@ class WishboneMaster:
         yield self.obj.we.eq(0)
         yield self.obj.sel.eq(0xf)
         yield self.obj.dat_w.eq(0)
-        while not (yield self.obj.ack):
+        for _ in range(64):
             yield
+            if (yield self.obj.ack):
+                break
+        else:
+            raise AssertionError("Wishbone transaction timed out")
         self.dat = (yield self.obj.dat_r)
         yield self.obj.cyc.eq(0)
         yield self.obj.stb.eq(0)
@@ -70,8 +78,11 @@ class SRAMReaderDriver:
         yield
 
     def wait_done(self):
-        while not (yield self.obj.ev.done.pending):
+        for _ in range(4096):
+            if (yield self.obj.ev.done.pending):
+                return
             yield
+        raise AssertionError("MAC transmit completion timed out")
 
     def clear_done(self):
         yield self.obj.ev.pending.wr_stb.eq(1)
@@ -88,8 +99,11 @@ class SRAMWriterDriver:
         self.obj = obj
 
     def wait_available(self):
-        while not (yield self.obj.ev.available.pending):
+        for _ in range(4096):
+            if (yield self.obj.ev.available.pending):
+                return
             yield
+        raise AssertionError("MAC receive completion timed out")
 
     def clear_available(self):
         yield self.obj.ev.pending.wr_stb.eq(1)
@@ -126,11 +140,10 @@ def main_generator(dut):
 
     tx_payload = [seed_to_data(i, True) % 0xff for i in range(length)] + [0, 0, 0, 0]
 
-    errors = 0
+    tc = unittest.TestCase()
 
     for i in range(2):
         for slot in range(2):
-            print("slot {}: ".format(slot), end="")
             # fill tx memory
             for i in range(length//4+1):
                 dat = int.from_bytes(tx_payload[4*i:4*(i+1)], "big")
@@ -143,18 +156,20 @@ def main_generator(dut):
 
             # wait rx
             yield from sram_writer_driver.wait_available()
-            yield from sram_writer_driver.clear_available()
+            rx_slot = (yield dut.ethmac.interface.sram.writer._slot.status)
+            rx_length = (yield dut.ethmac.interface.sram.writer._length.status)
+            tc.assertEqual(rx_slot, slot)
+            tc.assertEqual(rx_length, length)
 
             # get rx payload (loopback on PHY Model)
             rx_payload = []
             for i in range(length//4+1):
-                yield from wishbone_tx_master.read(sram_writer_slots_offset[slot]+i)
-                dat = wishbone_tx_master.dat
+                yield from wishbone_rx_master.read(sram_writer_slots_offset[rx_slot]+i)
+                dat = wishbone_rx_master.dat
                 rx_payload += list(dat.to_bytes(4, byteorder='big'))
 
-            # check results
-            s, l, e = check(tx_payload[:length], rx_payload[:min(length, len(rx_payload))])
-            print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+            tc.assertEqual(rx_payload[:length], tx_payload[:length])
+            yield from sram_writer_driver.clear_available()
 
 # Test MAC Wishbone --------------------------------------------------------------------------------
 
@@ -173,4 +188,4 @@ class TestMACWishbone(unittest.TestCase):
                     "eth_rx" : 8,
                     "eth_tx" : 8,
                 }
-                run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+                run_simulation(dut, generators, clocks)
