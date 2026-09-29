@@ -18,6 +18,7 @@ and introduces some limitations:
 from litex.gen import *
 
 from liteeth.common import *
+from liteeth.fifo import PacketDropFIFO
 
 from litex.soc.interconnect import wishbone
 from litex.soc.interconnect.packet import *
@@ -92,13 +93,17 @@ class LiteEthEtherbonePacketRX(LiteXModule):
         fsm.act("IDLE",
             If(depacketizer.source.valid,
                 NextState("DROP"),
-                If(depacketizer.source.magic == etherbone_magic,
+                If((depacketizer.source.magic == etherbone_magic) &
+                   (depacketizer.source.version == etherbone_version) &
+                   (depacketizer.source.addr_size == 4) &
+                   (depacketizer.source.port_size == 4) &
+                   (sink.length > etherbone_packet_header.length),
                     NextState("RECEIVE")
                 )
             )
         )
         self.comb += [
-            depacketizer.source.connect(source, keep={"last", "be", "pf", "pr", "nr", "data"}),
+            depacketizer.source.connect(source, keep={"last", "be", "pf", "pr", "nr", "data", "error"}),
             source.src_port.eq(sink.src_port),
             source.dst_port.eq(sink.dst_port),
             source.ip_address.eq(sink.ip_address),
@@ -199,13 +204,49 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
 
         # # #
 
-        assert buffer_depth <= 256
-        self.fifo = fifo = PacketFIFO(eth_etherbone_record_description(32),
-            payload_depth = buffer_depth,
+        assert 2 <= buffer_depth <= 256
+        # Validate the entire record before issuing any bus accesses. Oversized records are drained
+        # even when the storage is full, so a malformed count cannot deadlock reception.
+        self.fifo = fifo = PacketDropFIFO(eth_etherbone_record_description(32),
+            payload_depth = 2**log2_int(buffer_depth, need_pow2=False),
             param_depth   = 1,
-            buffered      = True
         )
-        self.comb += sink.connect(fifo.sink)
+        # Backpressure between records while executing the previous record. Within a record the
+        # FIFO always drains through last, including malformed and oversized records.
+        busy      = Signal()
+        receiving = Signal()
+        self.comb += [
+            sink.connect(fifo.sink, omit={"valid", "ready"}),
+            fifo.sink.valid.eq(sink.valid & (~busy | receiving)),
+            sink.ready.eq(~busy | receiving),
+        ]
+        self.sync += [
+            If(sink.valid & sink.ready,
+                busy.eq(1),
+                receiving.eq(~sink.last),
+            ),
+            If(fifo.drop | (fifo.source.valid & fifo.source.ready & fifo.source.last),
+                busy.eq(0),
+            ),
+        ]
+        expected = Signal(10)
+        received = Signal(10)
+        self.comb += [
+            expected.eq(sink.wcount + sink.rcount + (sink.wcount != 0) + (sink.rcount != 0)),
+            fifo.discard.eq(
+                (expected > buffer_depth) | (expected == 0) |
+                (sink.be != 0xf) | ((sink.error & sink.be) != 0) |
+                sink.bca | sink.rca | sink.rff | sink.cyc | sink.wca | sink.wff |
+                (received >= buffer_depth) |
+                (sink.last & (received + 1 != expected))),
+        ]
+        self.sync += If(sink.valid & sink.ready,
+            If(sink.last,
+                received.eq(0),
+            ).Elif(received < buffer_depth,
+                received.eq(received + 1),
+            )
+        )
 
         base_addr = Signal(32, reset_less=True)
         base_addr_update = Signal()
@@ -332,23 +373,29 @@ class LiteEthEtherboneRecord(LiteXModule):
 
         # # #
 
+        # Keep the reply destination with its request until execution/response completion.
+        first = Signal(reset=1)
+        busy  = Signal()
+
         # Receive record, decode it and generate mmap stream.
         self.depacketizer = depacketizer = LiteEthEtherboneRecordDepacketizer()
         self.receiver     = receiver     = LiteEthEtherboneRecordReceiver(buffer_depth)
         self.comb += [
-            sink.connect(depacketizer.sink),
+            sink.connect(depacketizer.sink, omit={"valid", "ready"}),
+            depacketizer.sink.valid.eq(sink.valid & (~first | ~busy)),
+            sink.ready.eq(depacketizer.sink.ready & (~first | ~busy)),
             depacketizer.source.connect(receiver.sink)
         ]
         if endianness == "big":
             self.comb += receiver.sink.data.eq(reverse_bytes(depacketizer.source.data))
 
         # Save last ip address/src port.
-        first = Signal(reset=1)
         last_ip_address = Signal(32, reset_less=True)
         last_src_port   = Signal(16, reset_less=True)
         self.sync += [
             If(sink.valid & sink.ready,
                 If(first,
+                    busy.eq(~sink.last),
                     last_ip_address.eq(sink.ip_address),
                     last_src_port.eq(sink.src_port),
                 ),
@@ -370,6 +417,12 @@ class LiteEthEtherboneRecord(LiteXModule):
         ]
         if endianness == "big":
             self.comb += packetizer.sink.data.eq(reverse_bytes(sender.source.data))
+        self.sync += If(receiver.fifo.drop |
+            (receiver.source.valid & receiver.source.ready & receiver.source.last &
+             receiver.source.we & (receiver.fifo.source.rcount == 0)) |
+            (source.valid & source.ready & source.last),
+            busy.eq(0),
+        )
 
 # Etherbone Wishbone Master ------------------------------------------------------------------------
 

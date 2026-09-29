@@ -9,6 +9,7 @@ from litex.gen import *
 from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
+from liteeth.fifo import PacketDropFIFO
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
 # ICMP TX ------------------------------------------------------------------------------------------
@@ -85,12 +86,22 @@ class LiteEthICMPRX(LiteXModule):
         self.comb += sink.connect(depacketizer.sink)
 
         # FSM.
+        count = Signal(17)
         self.fsm = fsm = FSM(reset_state="IDLE")
+        # Keep the ready/valid wiring outside the FSM's combinational block. This also avoids
+        # simulator delta-cycle feedback between adjacent depacketizer and receiver FSMs.
+        self.comb += [
+            source.valid.eq(depacketizer.source.valid & fsm.ongoing("RECEIVE")),
+            depacketizer.source.ready.eq(fsm.ongoing("DROP") |
+                (fsm.ongoing("RECEIVE") & source.ready)),
+        ]
         fsm.act("IDLE",
+            NextValue(count, dw//8),
             If(depacketizer.source.valid,
                 NextState("DROP"),
-                If(sink.protocol == icmp_protocol,
-                    If(depacketizer.source.msgtype == icmp_type_ping_request,
+                If((sink.protocol == icmp_protocol) & (sink.length > icmp_header.length),
+                    If((depacketizer.source.msgtype == icmp_type_ping_request) &
+                       (depacketizer.source.code == 0),
                         NextState("RECEIVE")
                     )
                 )
@@ -111,15 +122,24 @@ class LiteEthICMPRX(LiteXModule):
             source.length.eq(sink.length - icmp_header.length),
         ]
         fsm.act("RECEIVE",
-            depacketizer.source.connect(source, keep={"valid", "ready"}),
+            source.last.eq(depacketizer.source.last | (count >= source.length)),
+            If(count >= source.length,
+                source.be.eq(depacketizer.source.be & eth_packet_last_mask(dw, source.length)),
+            ),
+            If(depacketizer.source.last &
+               ((count - dw//8 + stream.byte_count(depacketizer.source.be)) < source.length),
+                source.error.eq(source.be),
+            ),
             If(source.valid & source.ready,
-                If(source.last,
+                NextValue(count, count + dw//8),
+                If(depacketizer.source.last,
                     NextState("IDLE")
+                ).Elif(source.last,
+                    NextState("DROP")
                 )
             )
         )
         fsm.act("DROP",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid &
                depacketizer.source.last &
                depacketizer.source.ready,
@@ -136,23 +156,46 @@ class LiteEthICMPEcho(LiteXModule):
 
         # # #
 
-        self.buffer = PacketFIFO(eth_icmp_user_description(dw),
-            payload_depth = fifo_depth//(dw//8),
+        assert fifo_depth >= dw//8
+        # Store the whole echo before replying. Validate actual byte count as well as the declared
+        # length, and discard errored or oversized packets without blocking the receive stream.
+        self.buffer = buffer = PacketDropFIFO(eth_icmp_user_description(dw),
+            payload_depth = 2**log2_int(max(2, (fifo_depth + dw//8 - 1)//(dw//8)), need_pow2=False),
             param_depth   = 1,
-            buffered      = True
         )
+        busy      = Signal()
+        receiving = Signal()
+        count = Signal(max=fifo_depth + dw//8 + 1)
+        size  = Signal.like(count)
         self.comb += [
-            # Connect to buffer when length <= buffer's depth.
-            If(sink.length <= fifo_depth,
-                sink.connect(self.buffer.sink)
-            # Else drop.
-            ).Else(
-                sink.ready.eq(1)
-            ),
-            self.buffer.source.connect(source, omit={"checksum"}),
-            self.source.msgtype.eq(icmp_type_ping_reply),
-            self.source.checksum.eq(self.buffer.source.checksum + 0x800 + (self.buffer.source.checksum >= 0xf800))
+            sink.connect(buffer.sink, omit={"valid", "ready"}),
+            buffer.sink.valid.eq(sink.valid & (~busy | receiving)),
+            sink.ready.eq(~busy | receiving),
+            size.eq(count + stream.byte_count(sink.be)),
+            buffer.discard.eq(
+                (sink.length == 0) | (sink.length > fifo_depth) |
+                (size > fifo_depth) | ((sink.error & sink.be) != 0) |
+                (sink.last & (size != sink.length))),
+            buffer.source.connect(source, omit={"checksum"}),
+            source.msgtype.eq(icmp_type_ping_reply),
+            source.checksum.eq(buffer.source.checksum + 0x800 + (buffer.source.checksum >= 0xf800)),
         ]
+        self.sync += [
+            If(sink.valid & sink.ready,
+                busy.eq(1),
+                receiving.eq(~sink.last),
+            ),
+            If(buffer.drop | (source.valid & source.ready & source.last),
+                busy.eq(0),
+            ),
+        ]
+        self.sync += If(sink.valid & sink.ready,
+            If(sink.last,
+                count.eq(0),
+            ).Elif(count <= fifo_depth,
+                count.eq(size),
+            )
+        )
 
 # ICMP ---------------------------------------------------------------------------------------------
 

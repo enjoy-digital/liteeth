@@ -224,8 +224,15 @@ class LiteEthUDPRX(LiteXModule):
         ]
 
         # Control-Path (FSM).
-        count = Signal(16)
+        count = Signal(17)
         self.fsm = fsm = FSM(reset_state="IDLE")
+        # Keep the ready/valid wiring outside the FSM's combinational block. This also avoids
+        # simulator delta-cycle feedback between adjacent depacketizer and receiver FSMs.
+        self.comb += [
+            source.valid.eq(depacketizer.source.valid & fsm.ongoing("RECEIVE")),
+            depacketizer.source.ready.eq(fsm.ongoing("DROP") |
+                (fsm.ongoing("RECEIVE") & source.ready)),
+        ]
         fsm.act("IDLE",
             NextValue(count, dw//8),
             If(depacketizer.source.valid,
@@ -238,7 +245,6 @@ class LiteEthUDPRX(LiteXModule):
             )
         )
         fsm.act("RECEIVE",
-            depacketizer.source.connect(source, keep={"valid", "ready"}),
             source.last.eq(depacketizer.source.last | (count >= source.length)),
             # Trim Ethernet padding without enabling absent lanes on truncated packets.
             source.be.eq(depacketizer.source.be),
@@ -260,7 +266,6 @@ class LiteEthUDPRX(LiteXModule):
         )
 
         fsm.act("DROP",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid &
                depacketizer.source.last &
                depacketizer.source.ready,
