@@ -72,26 +72,25 @@ class LiteEthStream2UDPTX(LiteXModule):
             sink_bytes.eq(stream.byte_count(sink_be)),
         ]
 
+        source_active = Signal()
+        _ip_address   = Signal(32)
+        _udp_port     = Signal(16)
+
         if fifo_depth is None:
             self.comb += [
-                sink.connect(source, keep={"valid", "ready", "data"}),
+                sink.connect(source, keep={"data"}),
+                source.valid.eq(sink.valid & (self.enable | source_active)),
+                sink.ready.eq(source.ready & (self.enable | source_active)),
                 source.last.eq(1),
                 source.be.eq(sink_be),
-                source.src_port.eq(self.udp_port),
-                source.dst_port.eq(self.udp_port),
-                source.ip_address.eq(self.ip_address),
                 source.length.eq(sink_bytes),
             ]
         else:
             counter = Signal(max=fifo_depth+1)
 
-            _ip_address = Signal(32)
-            _udp_port   = Signal(16)
-
             packet_last   = Signal()
             packet_full   = Signal()
             packet_length = Signal(16)
-            source_active = Signal()
 
             fifo_payload_layout = [("data", data_width)]
             if with_be:
@@ -131,9 +130,6 @@ class LiteEthStream2UDPTX(LiteXModule):
                 fifo.source.ready.eq(source.ready & (self.enable | source_active)),
                 source.data.eq(fifo.source.data),
                 source.last.eq(fifo.source.last),
-                source.src_port.eq(Mux(source_active, _udp_port, self.udp_port)),
-                source.dst_port.eq(Mux(source_active, _udp_port, self.udp_port)),
-                source.ip_address.eq(Mux(source_active, _ip_address, self.ip_address)),
                 source.length.eq(fifo.source.length),
             ]
             if with_be:
@@ -152,15 +148,25 @@ class LiteEthStream2UDPTX(LiteXModule):
                         counter.eq(counter + 1)
                     )
                 ),
-                If(fifo.source.valid & self.enable & ~source_active,
-                    source_active.eq(1),
-                    _ip_address.eq(self.ip_address),
-                    _udp_port.eq(self.udp_port),
-                ),
-                If(source.valid & source.ready & source.last,
-                    source_active.eq(0)
-                )
             ]
+
+        # Hold the destination from the first presented beat through the final transfer. Disabling
+        # TX prevents the next packet from starting, but must not withdraw an already valid packet.
+        self.comb += [
+            source.src_port.eq(Mux(source_active, _udp_port, self.udp_port)),
+            source.dst_port.eq(Mux(source_active, _udp_port, self.udp_port)),
+            source.ip_address.eq(Mux(source_active, _ip_address, self.ip_address)),
+        ]
+        self.sync += [
+            If(source.valid & ~source_active,
+                source_active.eq(1),
+                _ip_address.eq(self.ip_address),
+                _udp_port.eq(self.udp_port),
+            ),
+            If(source.valid & source.ready & source.last,
+                source_active.eq(0),
+            ),
+        ]
 
     def add_csr(self):
         self._enable     = CSRStorage(1, description="Enable Module", reset=1)

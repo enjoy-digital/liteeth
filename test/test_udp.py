@@ -43,7 +43,7 @@ class DUT(LiteXModule):
             udp_port.sink.ip_address.eq(0x12345678),
             udp_port.sink.src_port.eq(0x1234),
             udp_port.sink.dst_port.eq(0x5678),
-            udp_port.sink.length.eq(64//(dw//8)),
+            udp_port.sink.length.eq(64),
             Record.connect(udp_port.source, self.logger.sink)
         ]
 
@@ -88,11 +88,11 @@ class DUT64(LiteXModule):
 def main_generator(dut):
     packet = Packet([i for i in range(64//(dut.dw//8))])
     dut.streamer.send(packet)
-    yield from dut.logger.receive()
+    yield from dut.logger.receive(timeout=20000)
 
-    # check results
-    s, l, e = check(packet, dut.logger.packet)
-    print("shift " + str(s) + " / length " + str(l) + " / errors " + str(e))
+    tc = unittest.TestCase()
+    tc.assertTrue(dut.logger.packet.done, "UDP loopback timed out")
+    tc.assertEqual(list(dut.logger.packet), list(packet))
 
 # Test UDP -----------------------------------------------------------------------------------------
 
@@ -120,7 +120,7 @@ class TestUDP(unittest.TestCase):
                     "eth_rx" : 10,
                     "eth_tx" : 10,
                 }
-                run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+                run_simulation(dut, generators, clocks)
 
     def test_64bit_jumbo(self):
         # 64-bit datapath with jumbo MTU: byte-granular (be) and jumbo-sized UDP packets are
@@ -136,7 +136,8 @@ class TestUDP(unittest.TestCase):
 
                 def generator(dut):
                     dut.streamer.send(packet)
-                    yield from dut.logger.receive()
+                    yield from dut.logger.receive(timeout=20000)
+                    self.assertTrue(dut.logger.packet.done, "Jumbo UDP loopback timed out")
                     result["packet"]   = list(dut.logger.packet)
                     result["rx_error"] = (yield dut.rx_error)
 
