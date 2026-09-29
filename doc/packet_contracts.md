@@ -105,3 +105,8 @@ TX wrappers around LiteX `Packetizer` need no second framing FSM when headers
 are aligned and parameters remain valid through output completion. Avoid a
 shared protocol framework where a small local state machine explains the
 wire behavior more clearly.
+
+UDP, ICMP and Etherbone packet TX wrappers connect directly to their packetizers.
+This removes the former one-cycle IDLE-to-SEND startup delay. Packet contents,
+parameter lifetime and ready/valid behavior under backpressure are unchanged
+for the supported 8/16/32/64-bit UDP/ICMP and 32-bit Etherbone paths.

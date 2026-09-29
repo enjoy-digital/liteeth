@@ -44,25 +44,13 @@ class LiteEthICMPTX(LiteXModule):
             "be"
         })
 
-        # FSM.
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            If(packetizer.source.valid,
-                NextState("SEND")
-            )
-        )
+        # The aligned packetizer owns framing and holds input parameters through completion.
         self.comb += [
-            packetizer.source.connect(source, omit={"valid", "ready"}),
+            packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
             source.length.eq(sink.length + icmp_header.length),
             source.protocol.eq(icmp_protocol),
             source.ip_address.eq(sink.ip_address),
         ]
-        fsm.act("SEND",
-            packetizer.source.connect(source, keep={"valid", "ready"}),
-            If(source.valid & source.last & source.ready,
-                NextState("IDLE")
-            )
-        )
 
 # ICMP RX ------------------------------------------------------------------------------------------
 

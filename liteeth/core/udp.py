@@ -171,24 +171,14 @@ class LiteEthUDPTX(LiteXModule):
             packetizer.sink.checksum.eq(0), # UDP Checksum is not used, we only rely on MAC CRC.
         ]
 
-        # Control-Path (FSM).
-        self.fsm = fsm = FSM(reset_state="IDLE")
-        fsm.act("IDLE",
-            If(packetizer.source.valid,
-                NextState("SEND")
-            )
-        )
-        fsm.act("SEND",
-            packetizer.source.connect(source),
+        # The packetizer owns framing. Its aligned header keeps the input parameters live until
+        # the final output beat is accepted, so a second IDLE/SEND FSM only adds a bubble.
+        self.comb += [
+            packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
             source.length.eq(packetizer.sink.length),
             source.protocol.eq(udp_protocol),
             source.ip_address.eq(sink.ip_address),
-            If(source.valid & source.ready,
-                If(source.last,
-                    NextState("IDLE")
-                )
-            )
-        )
+        ]
 
 # UDP RX -------------------------------------------------------------------------------------------
 
