@@ -88,7 +88,7 @@ class TestPacketBoundaries(unittest.TestCase):
                     beats = packet_beats(header + bytes([0xaa])*3, dw,
                         length=8 + declared, protocol=17)
                     got = exercise_stream(LiteEthUDPRX(0, dw), beats, ["be", "last", "error"])
-                    self.assertEqual(sum(b["be"].bit_count() for b in got), 3)
+                    self.assertEqual(sum(bin(b["be"]).count("1") for b in got), 3)
                     self.assertEqual(got[-1]["last"], 1)
                     self.assertEqual(got[-1]["error"], got[-1]["be"])
 
