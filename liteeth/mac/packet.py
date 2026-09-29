@@ -50,10 +50,13 @@ class LiteEthMACPacketWriter(LiteXModule):
         length_inc = Signal(4)
         self.comb += length_inc.eq(stream.byte_count(packet_source.be))
 
-        next_length = Signal.like(self.length)
+        # Include the next beat without wrapping before the capacity comparison.
+        next_length = Signal(len(self.length) + 1)
+        oversized   = Signal()
         last_error  = Signal()
         self.comb += [
             next_length.eq(length + length_inc),
+            oversized.eq(next_length > min(eth_mtu, depth*dw//8)),
             last_error.eq((packet_source.error & packet_source.be) != 0),
             self.offset.eq(length),
             self.length.eq(Mux(self.done, pkt_len, next_length)),
@@ -62,14 +65,15 @@ class LiteEthMACPacketWriter(LiteXModule):
         def write_statements(idle=False):
             continue_statements = [NextState("WRITE")] if idle else []
             return [
-                source.valid.eq(packet_source.valid),
+                # Never present an out-of-range write, even on the beat that exceeds capacity.
+                source.valid.eq(packet_source.valid & ~oversized),
                 source.data.eq(packet_source.data),
                 source.last.eq(packet_source.last),
-                packet_source.ready.eq(source.ready),
-                If(packet_source.valid & source.ready,
+                packet_source.ready.eq(Mux(oversized, 1, source.ready)),
+                If(packet_source.valid & packet_source.ready,
                     NextValue(length, next_length),
                     NextValue(pkt_len, next_length),
-                    If(next_length > eth_mtu,
+                    If(oversized,
                         NextValue(error, 1),
                         If(packet_source.last,
                             NextState("DISCARD")
@@ -192,14 +196,20 @@ class LiteEthMACPacketReader(LiteXModule):
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
+        self.comb += [
+            self.idle.eq(fsm.ongoing("IDLE")),
+            direct_read.eq(fsm.ongoing("READ")),
+        ]
         fsm.act("IDLE",
-            self.idle.eq(1),
             If(self.enable,
-                NextState("READ")
+                If((self.length == 0) | (self.length > depth*dw//8),
+                    NextState("END")
+                ).Else(
+                    NextState("READ")
+                )
             )
         )
         fsm.act("READ",
-            direct_read.eq(1),
             If(sink.valid & sink.ready & sink.last,
                 NextState("END")
             )

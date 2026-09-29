@@ -28,7 +28,8 @@ class LiteEthMACSRAMWriter(LiteXModule):
         # Parameters Check / Compute.
         assert dw in [8, 16, 32, 64]
         self.eth_mtu = eth_mtu
-        slotbits   = max(int(math.log2(nslots)), 1)
+        assert nslots > 0
+        slotbits   = max(log2_int(nslots, need_pow2=False), 1)
         lengthbits = bits_for(depth * dw//8)
 
         # CSRs.
@@ -84,7 +85,13 @@ class LiteEthMACSRAMWriter(LiteXModule):
 
         self.sync += [
             If(packet.drop, errors.eq(errors + 1)),
-            If(packet.done & stat_fifo.sink.ready, slot.eq(slot + 1)),
+            If(packet.done & stat_fifo.sink.ready,
+                If(slot == nslots - 1,
+                    slot.eq(0),
+                ).Else(
+                    slot.eq(slot + 1),
+                )
+            ),
         ]
 
         # Memory.
@@ -121,13 +128,14 @@ class LiteEthMACSRAMReader(LiteXModule):
     def __init__(self, dw, depth, nslots=2, endianness="big", timestamp=None):
         # Parameters Check / Compute.
         assert dw in [8, 16, 32, 64]
-        slotbits   = max(int(math.log2(nslots)), 1)
+        assert nslots > 0
+        slotbits   = max(log2_int(nslots, need_pow2=False), 1)
         lengthbits = bits_for(depth * dw//8)
 
         # CSRs.
         self._start  = CSR()
         self._ready  = CSRStatus(description="Transmit command FIFO ready.")
-        self._level  = CSRStatus(int(math.log2(nslots)) + 1, description="Transmit command FIFO level.")
+        self._level  = CSRStatus(bits_for(nslots), description="Transmit command FIFO level.")
         self._slot   = CSRStorage(slotbits,   reset_less=True, description="Transmit slot.")
         self._length = CSRStorage(lengthbits, reset_less=True, description="Transmit packet length in bytes.")
 
@@ -172,7 +180,12 @@ class LiteEthMACSRAMReader(LiteXModule):
             self.comb += self._timestamp_slot.status.eq(stat_fifo.source.slot)
             self.comb += self._timestamp.status.eq(stat_fifo.source.timestamp)
 
-        self.comb += packet.length.eq(cmd_fifo.source.length)
+        valid_command = Signal()
+        self.comb += [
+            packet.length.eq(cmd_fifo.source.length),
+            valid_command.eq((cmd_fifo.source.slot < nslots) &
+                (cmd_fifo.source.length != 0) & (cmd_fifo.source.length <= depth*dw//8)),
+        ]
 
         # Memory.
         read      = Signal()
@@ -183,17 +196,26 @@ class LiteEthMACSRAMReader(LiteXModule):
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
+        # Keep inter-module handshake signals separate from the FSM's combinational block.
+        self.comb += [
+            packet.enable.eq(fsm.ongoing("IDLE") & cmd_fifo.source.valid & valid_command),
+            # Memory data is held until the packet reader advances it. The reader gates transfers.
+            packet.sink.valid.eq(1),
+            packet.sink.last.eq(rd_offset >= cmd_fifo.source.length),
+        ]
         fsm.act("IDLE",
-            If(cmd_fifo.source.valid & packet.idle,
-                packet.enable.eq(1),
-                read.eq(1),
-                NextValue(rd_offset, dw//8),
-                NextState("READ")
+            If(cmd_fifo.source.valid,
+                If(valid_command,
+                    read.eq(1),
+                    NextValue(rd_offset, dw//8),
+                    NextState("READ")
+                ).Else(
+                    # Retire invalid commands without touching memory or emitting a packet.
+                    NextState("TERMINATE")
+                )
             )
         )
         fsm.act("READ",
-            packet.sink.valid.eq(1),
-            packet.sink.last.eq(rd_offset >= cmd_fifo.source.length),
             If(packet.done,
                 NextState("TERMINATE")
             ).Elif(packet.sink.ready & ~packet.sink.last,
@@ -202,18 +224,22 @@ class LiteEthMACSRAMReader(LiteXModule):
             )
         )
         fsm.act("TERMINATE",
-            NextValue(rd_offset, 0),
-            self.ev.done.trigger.eq(1),
-            cmd_fifo.source.ready.eq(1),
-            NextState("IDLE")
+            # Timestamp completions must not be lost when software has not drained the status FIFO.
+            If(stat_fifo.sink.ready if timestamp is not None else 1,
+                NextValue(rd_offset, 0),
+                cmd_fifo.source.ready.eq(1),
+                NextState("IDLE")
+            )
         )
 
         if timestamp is not None:
             self.comb += stat_fifo.sink.valid.eq(fsm.ongoing("TERMINATE"))
-            self.comb += stat_fifo.sink.timestamp.eq(packet.timestamp)
+            self.comb += stat_fifo.sink.timestamp.eq(Mux(valid_command, packet.timestamp, 0))
             self.comb += stat_fifo.sink.slot.eq(cmd_fifo.source.slot)
-            # Trigger event when Status FIFO has contents (Override FSM assignment).
+            # A timestamp completion is visible only after its status has been stored.
             self.comb += self.ev.done.trigger.eq(stat_fifo.source.valid)
+        else:
+            self.comb += self.ev.done.trigger.eq(fsm.ongoing("TERMINATE"))
 
         # Create a Memory per Slot.
         mems    = [None]*nslots
