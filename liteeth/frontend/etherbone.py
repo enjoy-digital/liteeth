@@ -248,6 +248,7 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
             )
         )
         fsm.act("RECEIVE_BASE_RET_ADDR",
+            fifo.source.ready.eq(1),
             NextValue(count, 0),
             If(fifo.source.valid,
                 base_addr_update.eq(1),

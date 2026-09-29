@@ -197,12 +197,12 @@ class LiteEthMACCore(LiteXModule):
         # Cross into eth_tx late when the datapath is system-clocked.
         if with_sys_datapath:
             tx_datapath.add_domain_switch()
-        # Gap insertion has to occur in phy tx domain to ensure gap is correctly maintained.
-        if not getattr(phy, "integrated_ifg_inserter", False):
-            tx_datapath.add_gap()
-        # Packet FIFO must go last so that it can't be stalled.
+        # Buffer complete frames before they reach the PHY to prevent TX underruns.
         if with_store_and_forward:
             tx_datapath.add_packet_fifo()
+        # Insert the gap after buffering, in eth_tx: a FIFO would otherwise remove idle cycles.
+        if not getattr(phy, "integrated_ifg_inserter", False):
+            tx_datapath.add_gap()
         # End at the PHY sink endpoint.
         tx_datapath.pipeline.append(phy)
 
