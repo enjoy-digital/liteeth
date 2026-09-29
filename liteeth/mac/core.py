@@ -82,7 +82,9 @@ class LiteEthMACCore(LiteXModule):
         if hasattr(phy, "with_padding"):
             with_padding = phy.with_padding
 
-        # Store-and-forward packet FIFOs at the PHY interface.
+        # Store-and-forward packet FIFOs at the PHY interface. "auto" is a link-rate heuristic;
+        # a PHY that cannot pause mid-frame requires buffering or an uninterrupted upstream stream.
+        # See doc/packet_contracts.md for pipeline ownership and the maximum-frame contract.
         assert with_store_and_forward in [True, False, "auto"]
         if with_store_and_forward == "auto":
             with_store_and_forward = eth_needs_store_and_forward(phy)

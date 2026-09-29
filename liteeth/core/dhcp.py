@@ -333,6 +333,8 @@ class LiteEthDHCPRX(LiteXModule):
         count              = Signal(max=padding_len)
         option_word        = Signal(32)
         option_last        = Signal()
+        option_bytes       = Signal(3)
+        packet_ended       = Signal()
         option_byte_index  = Signal(2)
         option_byte        = Signal(8)
         option_code        = Signal(8)
@@ -356,7 +358,7 @@ class LiteEthDHCPRX(LiteXModule):
                 "OPTION-LENGTH" : "OPTIONS-WORD-LENGTH",
                 "OPTION-VALUE"  : "OPTIONS-WORD-VALUE",
             }[next_state]
-            return If(option_byte_index == 3,
+            return If(option_byte_index + 1 == option_bytes,
                 If(option_last,
                     *packet_end
                 ).Else(
@@ -394,7 +396,11 @@ class LiteEthDHCPRX(LiteXModule):
                     NextValue(self.lease_time, 0),
                     NextState("HEADER")
                 ).Else(
-                    NextState("DROP")
+                    If(udp_port.source.last,
+                        NextState("ERROR")
+                    ).Else(
+                        NextState("DROP")
+                    )
                 )
             )
         )
@@ -518,6 +524,7 @@ class LiteEthDHCPRX(LiteXModule):
             If(udp_port.source.valid,
                 NextValue(option_word, udp_port.source.data),
                 NextValue(option_last, udp_port.source.last),
+                NextValue(option_bytes, stream.byte_count(udp_port.source.be)),
                 NextValue(option_byte_index, 0),
                 NextState("OPTION-CODE")
             )
@@ -527,6 +534,7 @@ class LiteEthDHCPRX(LiteXModule):
             If(udp_port.source.valid,
                 NextValue(option_word, udp_port.source.data),
                 NextValue(option_last, udp_port.source.last),
+                NextValue(option_bytes, stream.byte_count(udp_port.source.be)),
                 NextValue(option_byte_index, 0),
                 NextState("OPTION-LENGTH")
             )
@@ -536,6 +544,7 @@ class LiteEthDHCPRX(LiteXModule):
             If(udp_port.source.valid,
                 NextValue(option_word, udp_port.source.data),
                 NextValue(option_last, udp_port.source.last),
+                NextValue(option_bytes, stream.byte_count(udp_port.source.be)),
                 NextValue(option_byte_index, 0),
                 NextState("OPTION-VALUE")
             )
@@ -615,7 +624,11 @@ class LiteEthDHCPRX(LiteXModule):
         )
         fsm.act("ERROR",
             NextValue(self.error, 1),
-            NextState("PRESENT")
+            If(packet_ended,
+                NextState("PRESENT")
+            ).Else(
+                NextState("DROP")
+            )
         )
         fsm.act("DROP",
             udp_port.source.ready.eq(1),
@@ -630,6 +643,35 @@ class LiteEthDHCPRX(LiteXModule):
                 NextState("IDLE")
             )
         )
+        self.sync += If(udp_port.source.valid & udp_port.source.ready,
+            packet_ended.eq(udp_port.source.last),
+        )
+
+        # Fixed fields must be full words and cannot terminate the packet. Apply these checks after
+        # each state's decoding so they take priority over ordinary parser transitions.
+        fixed_states = [
+            "HEADER", "TRANSACTION-ID", "SECONDS-FLAGS", "CLIENT-IP-ADDRESS", "YOUR-IP-ADDRESS",
+            "SERVER-IP-ADDRESS", "GATEWAY-IP-ADDRESS", "CLIENT-MAC-ADDRESS-MSB",
+            "CLIENT-MAC-ADDRESS-LSB", "PADDING", "MAGIC-COOKIE",
+        ]
+        for state in fixed_states:
+            fsm.act(state,
+                If(udp_port.source.valid & udp_port.source.ready,
+                    If(udp_port.source.last | (udp_port.source.be != 0xf) |
+                       ((udp_port.source.error & udp_port.source.be) != 0),
+                        NextState("ERROR")
+                    )
+                )
+            )
+        for state in ["OPTIONS-WORD", "OPTIONS-WORD-LENGTH", "OPTIONS-WORD-VALUE", "END"]:
+            fsm.act(state,
+                If(udp_port.source.valid & udp_port.source.ready,
+                    If((udp_port.source.be == 0) |
+                       ((udp_port.source.error & udp_port.source.be) != 0),
+                        NextState("ERROR")
+                    )
+                )
+            )
 
 # DHCP ---------------------------------------------------------------------------------------------
 
