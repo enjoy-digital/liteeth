@@ -189,8 +189,11 @@ class LiteEthIPTX(LiteXModule):
             source.target_mac.eq(target_mac),
             source.sender_mac.eq(mac_address),
         ]
+        # Resolve wide-path destinations while computing the checksum. SEND gates the
+        # packetizer's first transfer, keeping the input parameters stable during lookup.
+        start = sink.valid if dw > 64 else packetizer.source.valid
         fsm.act("IDLE",
-            If(packetizer.source.valid,
+            If(start,
                 # Broadcast.
                 If(sink.ip_address[0:8] == bcast_ip_mask,
                     NextValue(target_mac, bcast_mac_address),
@@ -282,27 +285,35 @@ class LiteEthIPRX(LiteXModule):
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
-        # Wire the depacketizer handshake separately from the receive-state transitions.
-        self.comb += [
-            source.valid.eq(depacketizer.source.valid & fsm.ongoing("RECEIVE")),
-            depacketizer.source.ready.eq(fsm.ongoing("DROP") |
-                (fsm.ongoing("RECEIVE") & source.ready)),
-        ]
-        fsm.act("IDLE",
-            If(depacketizer.source.valid & checksum.done,
-                NextState("DROP"),
-                If(((depacketizer.source.target_ip == ip_address) | with_broadcast) &
-                   (depacketizer.source.version == 0x4) &
-                   (depacketizer.source.ihl == 0x5) &
-                   # A native payload must contain at least one byte; reject before subtracting.
-                   (depacketizer.source.total_length > ipv4_header_length) &
-                   # Reassembly is not supported: drop fragments (MF set or non-zero offset).
-                   ((depacketizer.source.flags_offset & ipv4_mf_offset_mask) == 0) &
-                   (checksum.value == 0),
-                   NextState("RECEIVE")
-                )
+        accepted  = Signal()
+        receiving = Signal()
+        self.comb += accepted.eq(
+            ((depacketizer.source.target_ip == ip_address) | with_broadcast) &
+            (depacketizer.source.version == 0x4) &
+            (depacketizer.source.ihl == 0x5) &
+            # Reject empty payloads and fragments before forwarding any data.
+            (depacketizer.source.total_length > ipv4_header_length) &
+            ((depacketizer.source.flags_offset & ipv4_mf_offset_mask) == 0) &
+            (checksum.value == 0))
+        if dw > 64:
+            self.comb += receiving.eq(fsm.ongoing("RECEIVE") |
+                (fsm.ongoing("IDLE") & checksum.done & accepted))
+            fsm.act("IDLE",
+                If(depacketizer.source.valid & checksum.done & ~accepted, NextState("DROP")),
+                If(source.valid & source.ready & ~source.last, NextState("RECEIVE")),
             )
-        )
+        else:
+            self.comb += receiving.eq(fsm.ongoing("RECEIVE"))
+            fsm.act("IDLE",
+                If(depacketizer.source.valid & checksum.done,
+                    NextState("DROP"),
+                    If(accepted, NextState("RECEIVE")),
+                ),
+            )
+        self.comb += [
+            source.valid.eq(depacketizer.source.valid & receiving),
+            depacketizer.source.ready.eq(fsm.ongoing("DROP") | (receiving & source.ready)),
+        ]
         self.comb += [
             depacketizer.source.connect(source, keep={
                 "last",

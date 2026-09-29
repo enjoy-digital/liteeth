@@ -50,7 +50,7 @@ class TestUDPRX(unittest.TestCase):
         # UDP payloads < 18 bytes are received with padding. When the padding shares the last data
         # word, the IP length (not the padded frame's be) must end the packet (regression:
         # a 17-byte payload was received as 18 bytes on 16/32/64-bit data paths).
-        for dw in [8, 16, 32, 64]:
+        for dw in [8, 16, 32, 64, 128, 256, 512]:
             lengths = list(range(1, 25))
             pads    = [max(0, 26 - (udp_header.length + l)) for l in lengths]
             with self.subTest(dw=dw):
@@ -59,7 +59,7 @@ class TestUDPRX(unittest.TestCase):
     def test_extra_padding(self):
         # Trailing bytes beyond the IP length (padding added by other stacks) are dropped.
         prng = random.Random(3)
-        for dw in [32, 64]:
+        for dw in [32, 64, 128, 256, 512]:
             lengths = [prng.randrange(1, 64) for _ in range(24)]
             pads    = [prng.randrange(0, 20) for _ in range(24)]
             with self.subTest(dw=dw):

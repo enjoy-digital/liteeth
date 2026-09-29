@@ -42,7 +42,7 @@ class TestIPFragments(unittest.TestCase):
             (185,      False), # Last fragment.
             (0,        True),
         ]
-        for dw in [8, 32, 64]:
+        for dw in [8, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 prng    = random.Random(dw)
                 packets = []

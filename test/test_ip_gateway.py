@@ -21,13 +21,13 @@ class ARPTable:
         self.response = stream.Endpoint(arp_table_response_layout)
 
 class DUT(LiteXModule):
-    def __init__(self, gateway_ip=None, netmask=None):
+    def __init__(self, gateway_ip=None, netmask=None, dw=8):
         self.arp_table = ARPTable()
         self.tx        = LiteEthIPTX(
             mac_address = 0x10e2d5000000,
             ip_address  = convert_ip("192.168.1.50"),
             arp_table   = self.arp_table,
-            dw          = 8,
+            dw          = dw,
             gateway_ip  = gateway_ip,
             netmask     = netmask,
         )
@@ -79,3 +79,24 @@ class TestIPGateway(unittest.TestCase):
             destination_ip  = "10.0.0.1",
             expected_arp_ip = "192.168.1.1",
         )
+
+    def test_wide_gateway_routes(self):
+        for dw in [128, 256, 512]:
+            for destination, expected in [("192.168.1.100", "192.168.1.100"), ("10.0.0.1", "192.168.1.1")]:
+                with self.subTest(dw=dw, destination=destination):
+                    dut = DUT(gateway_ip="192.168.1.1", netmask="255.255.255.0", dw=dw)
+                    self.check_arp_request_ip(dut, destination, expected)
+
+    def test_wide_broadcast_and_multicast(self):
+        from test.test_packet_boundaries import packet_beats, exercise_stream
+
+        for dw in [128, 256, 512]:
+            with self.subTest(dw=dw):
+                table = ARPTable() # No ARP response: these destinations must bypass lookup.
+                dut = LiteEthIPTX(0x10e2d5000000, 0xc0a80132, table, dw=dw)
+                inputs = []
+                for address in [0xc0a801ff, 0xe0000181, 0xc0a801ff]:
+                    inputs += packet_beats(b"example", dw, length=7, protocol=17, ip_address=address)
+                got = exercise_stream(dut, inputs, ["last", "target_mac"], cycles=500)
+                self.assertEqual([beat["target_mac"] for beat in got if beat["last"]],
+                    [0xffffffffffff, 0x01005e000181, 0xffffffffffff])
