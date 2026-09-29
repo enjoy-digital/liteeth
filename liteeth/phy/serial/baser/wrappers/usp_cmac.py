@@ -36,8 +36,14 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
         # # #
 
         tx_clk = Signal()
+        tx_ready = Signal()
         rx_status = Signal()
-        self.comb += [self.cd_eth_tx.clk.eq(tx_clk), self.cd_eth_rx.clk.eq(tx_clk)]
+        self.comb += [
+            self.cd_eth_tx.clk.eq(tx_clk),
+            self.cd_eth_rx.clk.eq(tx_clk),
+            # Do not drain committed frames while the transmitter sends remote fault.
+            self.tx.ready.eq(tx_ready & self.rx_aligned),
+        ]
         self.specials += [
             AsyncResetSynchronizer(self.cd_eth_tx, reset | self.tx_reset),
             AsyncResetSynchronizer(self.cd_eth_rx, reset | self.rx_reset),
@@ -75,8 +81,8 @@ class USP_CMAC_100G(LiteEthMACAXIStream):
             o_stat_rx_local_fault      = self.rx_local_fault,
             o_tx_unfout                = self.tx_underflow,
             o_tx_ovfout                = self.tx_overflow,
-            o_tx_axis_tready           = self.tx.ready,
-            i_tx_axis_tvalid           = self.tx.valid,
+            o_tx_axis_tready           = tx_ready,
+            i_tx_axis_tvalid           = self.tx.valid & self.rx_aligned,
             i_tx_axis_tdata            = self.tx.data,
             i_tx_axis_tkeep            = self.tx.keep,
             i_tx_axis_tlast            = self.tx.last,
