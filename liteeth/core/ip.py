@@ -222,6 +222,12 @@ class LiteEthIPV4Depacketizer(Depacketizer):
 
 
 class LiteEthIPRX(LiteXModule):
+    """Receive nonempty IPv4 payloads without options or fragment reassembly.
+
+    ``with_broadcast=False`` accepts only the configured destination IP. For compatibility, the
+    default ``True`` bypasses destination-IP filtering entirely, including multicast and DHCP
+    replies addressed to an offered IP. It is not a broadcast-only address filter.
+    """
     def __init__(self, mac_address, ip_address, with_broadcast=True, dw=8):
         self.sink   = sink   = stream.Endpoint(eth_mac_description(dw))
         self.source = source = stream.Endpoint(eth_ipv4_user_description(dw))
@@ -248,6 +254,8 @@ class LiteEthIPRX(LiteXModule):
                 If(((depacketizer.source.target_ip == ip_address) | with_broadcast) &
                    (depacketizer.source.version == 0x4) &
                    (depacketizer.source.ihl == 0x5) &
+                   # A native payload must contain at least one byte; reject before subtracting.
+                   (depacketizer.source.total_length > ipv4_header_length) &
                    # Reassembly is not supported: drop fragments (MF set or non-zero offset).
                    ((depacketizer.source.flags_offset & ipv4_mf_offset_mask) == 0) &
                    (checksum.value == 0),
