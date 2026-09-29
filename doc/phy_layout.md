@@ -11,6 +11,7 @@ Established public imports remain available when implementation files move.
 | Simulation model | `liteeth/phy/simulation/model.py` | `liteeth.phy.model` |
 | 1000/2500BASE-X | `serial/basex/` with `pcs.py`, `pma/`, and `wrappers/` | Original module names and the classes in `liteeth.phy` |
 | 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, and `wrappers/` | Canonical `liteeth.phy.serial.baser.*` imports |
+| Hardware 100G CMAC | `serial/baser/wrappers/usp_cmac.py` | Direct wrapper import; target owns generated IP |
 | Shared 7-series GTP initialization | `serial/gtp_7series.py` | `liteeth.phy.a7_gtp` |
 | MDIO and hardware-reset helpers | `liteeth/phy/common.py` | `liteeth.phy.common` |
 
@@ -42,6 +43,9 @@ helper is shared by BASE-X and BASE-R, so it sits above both under `serial/`.
 Only the shared MDIO and hardware-reset helpers remain in the top-level
 `common.py`. Keep device-specific primitive parameters visible; sharing a PLL
 or reset helper does not imply that two line codes share a PMA.
+
+The CMAC wrapper exposes the same frame boundary while the generated hardware IP
+owns MAC/PCS/PMA. See [100G preparation](100g.md) for configuration and validation limits.
 
 ## Adding or Changing a PHY
 

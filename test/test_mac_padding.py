@@ -37,7 +37,7 @@ class TestMACPaddingInserter(unittest.TestCase):
             self.assertEqual(got.data[len(sent.data):], [0]*max(0, self.padding - len(sent.data)), msg)
 
     def test_lengths(self):
-        for dw in [8, 16, 32, 64]:
+        for dw in [8, 16, 32, 64, 128, 256, 512]:
             for length in [1, 7, 42, 55, 56, 57, 58, 59, 60, 61, 64, 65, 100]:
                 with self.subTest(dw=dw, length=length):
                     self.run_inserter(dw, [length])
@@ -46,7 +46,7 @@ class TestMACPaddingInserter(unittest.TestCase):
         # A frame of 57..59 bytes ends in the last padding word with a smaller be: the next
         # short frame must still be padded (regression: counter not reset, next frame sent as a
         # runt).
-        for dw in [16, 32, 64]:
+        for dw in [16, 32, 64, 128, 256, 512]:
             for length in [57, 58, 59]:
                 for following in [1, 42, 46, 59]:
                     with self.subTest(dw=dw, length=length, following=following):

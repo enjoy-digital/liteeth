@@ -62,6 +62,8 @@ always @(negedge eth_tx_clk) begin
     tx_cycle = tx_cycle + 1;
 end
 always @(posedge eth_tx_clk) if (!rst && started) begin
+    if (tx_offset != 0 && !mac_tx_valid)
+        $fatal(1, "TX underrun inside a committed frame");
     if (tx_stalled && (!mac_tx_valid || tx_item !== tx_held))
         $fatal(1, "TX changed while stalled");
     tx_stalled = mac_tx_valid && !mac_tx_ready;
@@ -182,8 +184,11 @@ initial begin
     repeat (@DRAIN_CYCLES@) @(posedge sys_clk);
     if (rx_offset != 0 || rx_received + rx_drops != PACKETS || rx_packets != PACKETS)
         $fatal(1, "RX accounting mismatch: received %d dropped %d sent %d", rx_received, rx_drops, rx_packets);
-    $display("{\"packets\":%0d,\"rx_received\":%0d,\"rx_dropped\":%0d,\"rx_bad\":%0d,\"tx_wire_gbps\":%.6f,\"rx_payload_gbps\":%.6f,\"max_rx_latency_ns\":%.3f,\"sys_clk_freq\":@SYS_FREQ@,\"offered_rate\":@RATE@}",
-        PACKETS, rx_received, rx_drops, rx_bad_frames, tx_bits*1000.0/(tx_last-tx_first),
+    $display("{\"packets\":%0d,\"rx_received\":%0d,\"rx_dropped\":%0d,\"rx_bad\":%0d,\"rx_loss_fraction\":%.6f,\"tx_mpps\":%.6f,\"rx_mpps\":%.6f,\"tx_wire_gbps\":%.6f,\"rx_payload_gbps\":%.6f,\"max_rx_latency_ns\":%.3f,\"sys_clk_freq\":@SYS_FREQ@,\"offered_rate\":@RATE@}",
+        PACKETS, rx_received, rx_drops, rx_bad_frames, rx_drops*1.0/PACKETS,
+        (PACKETS-1)*1e6/(tx_last-tx_first),
+        rx_received > 1 ? (rx_received-1)*1e6/(rx_last-rx_first) : 0.0,
+        tx_bits*1000.0/(tx_last-tx_first),
         rx_received > 1 ? (rx_bytes-rx_first_bytes)*8000.0/(rx_last-rx_first) : 0.0, max_latency/1000.0);
     $finish;
 end

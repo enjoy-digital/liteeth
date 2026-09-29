@@ -49,7 +49,7 @@ class TestMACAXIStream(unittest.TestCase):
             LiteEthMACAXIStream(512, eth_mtu=256, tx_fifo_depth=8, rx_fifo_depth=8))
         dut.source = dut.tx
         inputs = []
-        for n, length in enumerate([60, 65, 192]):
+        for n, length in enumerate([1, 42, 59, 60, 65, 192]):
             inputs += packet_beats(bytes([n])*length, 512, error=0)
         got = exercise_stream(dut, inputs, ["data", "keep", "last", "user"], cycles=500)
         lengths, count = [], 0
@@ -59,7 +59,19 @@ class TestMACAXIStream(unittest.TestCase):
             if word["last"]:
                 lengths.append(count)
                 count = 0
-        self.assertEqual(lengths, [60, 65, 192])
+        self.assertEqual(lengths, [60, 60, 60, 60, 65, 192])
+
+    def test_tx_errors_survive_padding(self):
+        for width in [64, 128, 256, 512]:
+            with self.subTest(width=width):
+                dut = ClockDomainsRenamer({"eth_tx": "sys", "eth_rx": "sys"})(
+                    LiteEthMACAXIStream(width, eth_mtu=128, tx_fifo_depth=32, rx_fifo_depth=32))
+                dut.source = dut.tx
+                inputs = [dict(data=0x123456, be=mask, last=1, error=error)
+                    for mask, error in [(7, 0), (7, 1), (5, 0), (0, 0), (7, 0)]]
+                got = exercise_stream(dut, inputs, ["keep", "last", "user"], cycles=1000)
+                self.assertEqual([word["user"] for word in got if word["last"]], [0, 1, 1, 1, 0])
+                self.assertTrue(all(word["user"] == 0 for word in got if not word["last"]))
 
     def test_rx_overflow_and_recovery(self):
         dut = ClockDomainsRenamer({"eth_tx": "sys", "eth_rx": "sys"})(

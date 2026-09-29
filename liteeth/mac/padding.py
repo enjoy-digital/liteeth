@@ -16,7 +16,7 @@ from liteeth.common import *
 
 class LiteEthMACPaddingInserter(Module):
     def __init__(self, dw, padding):
-        assert dw in [8, 16, 32, 64]
+        assert dw in [8, 16, 32, 64, 128, 256, 512]
         self.sink   = sink   = stream.Endpoint(eth_phy_description(dw))
         self.source = source = stream.Endpoint(eth_phy_description(dw))
 

@@ -13,17 +13,18 @@ from litex.soc.interconnect.packet import PacketFIFO
 
 from liteeth.common import *
 from liteeth.fifo import PacketDropFIFO
+from liteeth.mac.padding import LiteEthMACPaddingInserter
 
 # Hardware MAC Stream Adapter ----------------------------------------------------------------------
 
 class LiteEthMACAXIStream(LiteXModule):
     """Adapt a frame-oriented hardware MAC to LiteEth's PHY-facing stream.
 
-    AXI frames start at destination MAC and omit FCS. The hardware MAC owns padding, FCS,
-    preamble and IFG. TX supports ready; RX has no backpressure. All TX signals belong to
+    AXI frames start at destination MAC and omit FCS. The adapter pads TX frames; the hardware
+    MAC owns FCS, preamble and IFG. TX supports ready; RX has no backpressure. All TX signals belong to
     eth_tx and RX signals/counters to eth_rx. The parent owns clocks and resets.
     """
-    with_preamble_crc      = False
+    with_preamble_crc       = False
     with_padding           = False
     integrated_ifg_inserter = True
     with_store_and_forward = False # These queues replace MACCore's PHY-side queues.
@@ -58,14 +59,22 @@ class LiteEthMACAXIStream(LiteXModule):
 
         # TX: commit a complete frame before exposing it to an unpausable wire transmitter.
         # The caller must finish frames within eth_mtu, as for MACCore's existing PacketFIFO.
+        self.tx_padding = tx_padding = ClockDomainsRenamer("eth_tx")(
+            LiteEthMACPaddingInserter(dw, eth_min_frame_length - eth_fcs_length))
         self.tx_fifo = tx_fifo = ClockDomainsRenamer("eth_tx")(PacketFIFO(
             eth_phy_description(dw), payload_depth=tx_fifo_depth, param_depth=param_depth, buffered=True))
         tx = tx_fifo.source
         full = (1 << (dw//8)) - 1
         tx_bad = Signal()
         tx_bad_beat = Signal()
+        input_bad = Signal()
         self.comb += [
-            self.sink.connect(tx_fifo.sink),
+            self.sink.connect(tx_padding.sink),
+            # Preserve malformed input masks as an error even if padding fills their holes.
+            input_bad.eq((self.sink.be == 0) | ((self.sink.be & (self.sink.be + 1)) != 0) |
+                (~self.sink.last & (self.sink.be != full))),
+            tx_padding.sink.error.eq(self.sink.error | Replicate(input_bad, dw//8)),
+            tx_padding.source.connect(tx_fifo.sink),
             tx_bad_beat.eq((tx.be == 0) | ((tx.be & (tx.be + 1)) != 0) |
                 (~tx.last & (tx.be != full)) | ((tx.error & tx.be) != 0)),
             self.tx.valid.eq(tx.valid),
