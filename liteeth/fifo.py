@@ -13,10 +13,15 @@ from litex.soc.interconnect import stream
 # Packet Drop FIFO ---------------------------------------------------------------------------------
 
 class PacketDropFIFO(LiteXModule):
-    """Store-and-forward packet FIFO that drop whole packets instead of applying backpressure."""
+    """Store complete packets, dropping overflowed or explicitly discarded packets.
+
+    Assert ``discard`` with any valid input beat to reject its whole packet. The input remains ready
+    through ``last``; no part of a rejected packet is exposed at the output.
+    """
     def __init__(self, layout, payload_depth, param_depth=4):
         self.sink   = sink   = stream.Endpoint(layout)
         self.source = source = stream.Endpoint(layout)
+        self.discard = Signal() # Reject the current packet.
         self.drop   = Signal() # For diagnostics, pulsed per packet dropped.
 
         # # #
@@ -43,6 +48,7 @@ class PacketDropFIFO(LiteXModule):
         used       = Signal(addr_bits + 1)
         full       = Signal()
         overflow   = Signal()              # This packet has already lost a word.
+        invalid    = Signal()              # This packet has been explicitly discarded.
         commit     = Signal()
         fetch      = Signal()
 
@@ -59,7 +65,8 @@ class PacketDropFIFO(LiteXModule):
             wr_port.dat_w.eq(Cat(sink.payload.raw_bits(), sink.first, sink.last)),
             wr_port.we.eq(sink.valid & ~overflow & ~full),
             # Keep the packet only if every word of it was stored with parameters.
-            commit.eq(sink.valid & sink.last & ~overflow & ~full & param_fifo.sink.ready),
+            commit.eq(sink.valid & sink.last & ~overflow & ~full &
+                ~invalid & ~self.discard & param_fifo.sink.ready),
             sink.connect(param_fifo.sink, keep=set([e[0] for e in param_layout])),
             param_fifo.sink.valid.eq(commit),
             param_fifo.sink.last.eq(1),
@@ -67,6 +74,7 @@ class PacketDropFIFO(LiteXModule):
         ]
         self.sync += [
             If(sink.valid,
+                invalid.eq(invalid | self.discard),
                 If(~overflow & ~full,
                     wr_ptr.eq(wr_ptr + 1),
                 ).Else(
@@ -74,6 +82,7 @@ class PacketDropFIFO(LiteXModule):
                 ),
                 If(sink.last,
                     overflow.eq(0),
+                    invalid.eq(0),
                     If(commit,
                         commit_ptr.eq(wr_ptr + 1),
                     ).Else(

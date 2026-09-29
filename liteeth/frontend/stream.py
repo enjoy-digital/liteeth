@@ -224,6 +224,22 @@ class LiteEthUDP2StreamRX(LiteXModule):
         if not with_broadcast:
             self.comb += If(sink.ip_address != self.ip_address, valid.eq(0))
 
+        # Sample the filter decision when the first beat is presented. Keep it stable under
+        # backpressure and until last, even if software changes the configuration mid-packet.
+        first    = Signal(reset=1)
+        selected = Signal()
+        accept   = Signal()
+        self.comb += accept.eq(Mux(first, valid, selected))
+        self.sync += If(sink.valid,
+            If(first,
+                selected.eq(valid),
+                first.eq(0),
+            ),
+            If(sink.ready & sink.last,
+                first.eq(1),
+            ),
+        )
+
         # Data-Path / Buffering (Optional).
         keep = {"last", "data"}
         if with_be:
@@ -232,8 +248,8 @@ class LiteEthUDP2StreamRX(LiteXModule):
             self.comb += [
                 sink.connect(source, keep=keep),
                 source.error.eq((sink.error & sink.be) != 0),
-                source.valid.eq(sink.valid & valid),
-                sink.ready.eq(source.ready | ~valid)
+                source.valid.eq(sink.valid & accept),
+                sink.ready.eq(source.ready | ~accept)
             ]
         else:
             fifo_layout = [("data", data_width), ("error", 1)]
@@ -247,8 +263,8 @@ class LiteEthUDP2StreamRX(LiteXModule):
             self.comb += [
                 sink.connect(fifo.sink, keep=keep),
                 fifo.sink.error.eq((sink.error & sink.be) != 0),
-                fifo.sink.valid.eq(sink.valid & valid),
-                sink.ready.eq(fifo.sink.ready | ~valid),
+                fifo.sink.valid.eq(sink.valid & accept),
+                sink.ready.eq(fifo.sink.ready | ~accept),
                 fifo.source.connect(source)
             ]
 

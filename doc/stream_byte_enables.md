@@ -62,3 +62,6 @@ to omit the pins and generate full masks internally.
 Raw UDP ports expose `sink_be`/`source_be`, with the native mask encoding.
 Legacy pin names and the legacy raw-port option are no longer supported.
 Other raw-port pins are unchanged.
+
+For length semantics, error handling and buffer ownership, see
+[packet contracts](packet_contracts.md).
