@@ -174,7 +174,7 @@ class LiteEthUDPTX(LiteXModule):
         # The packetizer owns framing. Its aligned header keeps the input parameters live until
         # the final output beat is accepted, so a second IDLE/SEND FSM only adds a bubble.
         self.comb += [
-            packetizer.source.connect(source),
+            packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
             source.length.eq(packetizer.sink.length),
             source.protocol.eq(udp_protocol),
             source.ip_address.eq(sink.ip_address),

@@ -54,7 +54,7 @@ class LiteEthEtherbonePacketTX(LiteXModule):
         ]
         # The aligned packetizer owns framing and holds input parameters through completion.
         self.comb += [
-            packetizer.source.connect(source),
+            packetizer.source.connect(source, omit={"src_port", "dst_port", "ip_address", "length"}),
             source.src_port.eq(udp_port),
             source.dst_port.eq(sink.src_port),
             source.ip_address.eq(sink.ip_address),

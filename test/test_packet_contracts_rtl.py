@@ -52,7 +52,9 @@ class TestPacketContractsRTL(unittest.TestCase):
         checks = []
         for index, beat in enumerate(expected):
             conditions = " || ".join(f"source_{field} !== {value}" for field, value in beat.items())
-            checks.append(f'{index}: if ({conditions}) $fatal(1, "Output mismatch at beat {index}");')
+            values = ", ".join(f"source_{field}" for field in beat)
+            labels = " ".join(f"{field}=%h" for field in beat)
+            checks.append(f'{index}: if ({conditions}) $fatal(1, "Output mismatch at beat {index}: {labels}", {values});')
         tb = '\n'.join(declarations) + f'''
 reg sys_clk = 0;
 reg sys_rst = 1;

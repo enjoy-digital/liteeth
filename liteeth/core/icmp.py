@@ -46,7 +46,7 @@ class LiteEthICMPTX(LiteXModule):
 
         # The aligned packetizer owns framing and holds input parameters through completion.
         self.comb += [
-            packetizer.source.connect(source),
+            packetizer.source.connect(source, omit={"length", "protocol", "ip_address"}),
             source.length.eq(sink.length + icmp_header.length),
             source.protocol.eq(icmp_protocol),
             source.ip_address.eq(sink.ip_address),

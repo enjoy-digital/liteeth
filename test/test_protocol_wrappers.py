@@ -82,5 +82,26 @@ class TestProtocolWrappersRTL(unittest.TestCase):
             beats += packet_beats(bytes([n]), 32, length=1, ip_address=0xc0a80101 + n,
                 src_port=1234, dst_port=2345)
             wire = bytes.fromhex("04d2092900090000") + bytes([n])
-            expected += packet_beats(wire, 32, length=9, ip_address=0xc0a80101 + n)
+            expected += packet_beats(wire, 32, length=9, ip_address=0xc0a80101 + n, protocol=17)
         self.check_rtl(LiteEthUDPTX(0, 32), beats, expected)
+
+    def test_icmp_tx_packets(self):
+        beats = []
+        expected = []
+        for n in range(3):
+            beats += packet_beats(bytes([n]), 64, length=1, ip_address=0xc0a80101 + n,
+                msgtype=0, code=0, checksum=0x1234, quench=n)
+            wire = bytes.fromhex("00001234") + n.to_bytes(4, "big") + bytes([n])
+            expected += packet_beats(wire, 64, length=9, ip_address=0xc0a80101 + n, protocol=1)
+        self.check_rtl(LiteEthICMPTX(0, 64), beats, expected)
+
+    def test_etherbone_tx_packets(self):
+        beats = []
+        expected = []
+        for n in range(3):
+            beats += packet_beats(bytes([n]), 32, length=1, ip_address=0xc0a80101 + n,
+                src_port=2345 + n, pf=0, pr=0, nr=0)
+            wire = bytes.fromhex("4e6f104400000000") + bytes([n])
+            expected += packet_beats(wire, 32, length=9, ip_address=0xc0a80101 + n,
+                src_port=1234, dst_port=2345 + n)
+        self.check_rtl(LiteEthEtherbonePacketTX(1234), beats, expected)
