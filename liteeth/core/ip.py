@@ -248,6 +248,12 @@ class LiteEthIPRX(LiteXModule):
 
         # FSM.
         self.fsm = fsm = FSM(reset_state="IDLE")
+        # Wire the depacketizer handshake separately from the receive-state transitions.
+        self.comb += [
+            source.valid.eq(depacketizer.source.valid & fsm.ongoing("RECEIVE")),
+            depacketizer.source.ready.eq(fsm.ongoing("DROP") |
+                (fsm.ongoing("RECEIVE") & source.ready)),
+        ]
         fsm.act("IDLE",
             If(depacketizer.source.valid & checksum.done,
                 NextState("DROP"),
@@ -274,7 +280,6 @@ class LiteEthIPRX(LiteXModule):
             source.ip_address.eq(depacketizer.source.sender_ip),
         ]
         fsm.act("RECEIVE",
-            depacketizer.source.connect(source, keep={"valid", "ready"}),
             If(source.valid & source.ready,
                 If(source.last,
                     NextState("IDLE")
@@ -282,7 +287,6 @@ class LiteEthIPRX(LiteXModule):
             )
         )
         fsm.act("DROP",
-            depacketizer.source.ready.eq(1),
             If(depacketizer.source.valid &
                depacketizer.source.last &
                depacketizer.source.ready,
