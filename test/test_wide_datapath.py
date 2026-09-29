@@ -64,7 +64,7 @@ class TestWideDatapath(unittest.TestCase):
     def test_packet_rate(self):
         # Unicast packets include a resolved ARP lookup, all Ethernet/IP/UDP header operations,
         # and both checksum directions. Guard the measured improvement without claiming wire rate.
-        for width, maximum in [(128, 12), (256, 11), (512, 10)]:
+        for width, maximum in [(128, 6), (256, 5), (512, 4)]:
             with self.subTest(width=width):
                 result = measure(width, 18, packets=8)
                 self.assertLessEqual(result["cycles_per_packet"], maximum)

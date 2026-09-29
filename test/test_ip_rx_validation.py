@@ -24,7 +24,7 @@ def wire_packet(length, target=0xc0a80132, payload=b"test", version_ihl=0x45, co
 
 class TestIPRXValidation(unittest.TestCase):
     def test_invalid_length_and_recovery(self):
-        for dw in [8, 32, 64]:
+        for dw in [8, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 beats = []
                 for length in [0, 1, 19, 20, 24]:
@@ -41,7 +41,7 @@ class TestIPRXValidation(unittest.TestCase):
     def test_destination_policy(self):
         addresses = [0xc0a80132, 0xc0a80199, 0xffffffff, 0xe0000181, 0xc0a801ff]
         for permissive in [False, True]:
-            for dw in [8, 32, 64]:
+            for dw in [8, 32, 64, 128, 256, 512]:
                 with self.subTest(dw=dw, with_broadcast=permissive):
                     beats = []
                     for address in addresses:
@@ -51,7 +51,7 @@ class TestIPRXValidation(unittest.TestCase):
                     self.assertEqual(sum(b["last"] for b in got), len(addresses) if permissive else 1)
 
     def test_invalid_header_and_recovery(self):
-        for dw in [8, 32, 64]:
+        for dw in [8, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 packets = [wire_packet(24, version_ihl=0x65), wire_packet(24, version_ihl=0x46),
                     wire_packet(24, corrupt=True), wire_packet(24)[:12], wire_packet(24)]

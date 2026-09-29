@@ -69,7 +69,7 @@ class TestPacketBoundaries(unittest.TestCase):
             self.assertEqual((read["we"], read["addr"], read["base_addr"]), (0, 0x100, 0x800))
 
     def test_udp_lengths_and_recovery(self):
-        for dw in [8, 16, 32, 64]:
+        for dw in [8, 16, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
                 beats = []
                 for length, ip_length in [(7, 16), (8, 16), (17, 16), (9, 9)]:
@@ -81,7 +81,7 @@ class TestPacketBoundaries(unittest.TestCase):
                 self.assertEqual((got[0]["be"], got[0]["last"], got[0]["length"]), (1, 1, 1))
 
     def test_udp_truncated_final_word(self):
-        for dw in [8, 16, 32, 64]:
+        for dw in [8, 16, 32, 64, 128, 256, 512]:
             for declared in [5, 11]:
                 with self.subTest(dw=dw, declared=declared):
                     header = bytes.fromhex("12345678") + (8 + declared).to_bytes(2, "big") + bytes(2)
@@ -109,7 +109,7 @@ class TestPacketBoundaries(unittest.TestCase):
                     self.assertEqual([b["error"] for b in got], expected)
 
     def test_ip_checksum_after_arp_failure(self):
-        for dw in [8, 32, 64]:
+        for dw in [8, 32, 64, 128, 256, 512]:
             for with_buffer in [False, True]:
                 with self.subTest(dw=dw, with_buffer=with_buffer):
                     class ARP:

@@ -81,6 +81,20 @@ packet-processing measurements, not Ethernet wire throughput. Minimum-size
 packets still have a substantial per-packet cost; widening alone is not enough
 for 100G minimum-frame line rate.
 
+### Packet-start overlap
+
+Wide IP TX resolves the destination while its checksum is calculated. Wide IP RX
+forwards the first payload beat as soon as validation completes; UDP RX likewise
+validates and forwards together. Header metadata remains owned by the existing
+depacketizers, and valid/data stay stable under backpressure. Narrow paths retain
+their packet-start state transitions.
+
+With the same resolved-ARP benchmark, 18-byte payload completion intervals improve
+from 8/7/6 to 6/5/4 cycles at 128/256/512 bits. This reduces per-packet overhead;
+it does not promise 100G minimum-frame throughput. Regression coverage includes
+failed ARP followed by successful packets, malformed/truncated headers, fragments,
+padding, changing destinations and lengths, and downstream stalls.
+
 ## Timing and regression checks
 
 Generate the same benchmark for out-of-context timing analysis:

@@ -242,51 +242,64 @@ class LiteEthUDPRX(LiteXModule):
         # Control-Path (FSM).
         count = Signal(17)
         self.fsm = fsm = FSM(reset_state="IDLE")
-        # Keep the ready/valid wiring outside the FSM's combinational block. This also avoids
-        # simulator delta-cycle feedback between adjacent depacketizer and receiver FSMs.
+        accepted  = Signal()
+        receiving = Signal()
+        end_count = Signal.like(count)
+        self.comb += accepted.eq((protocol == udp_protocol) &
+            (depacketizer.source.length > udp_header.length) &
+            (depacketizer.source.length <= length))
+        if dw > 64:
+            # The wide depacketizer retains the header before presenting payload. Validate
+            # and forward its first beat together, avoiding a packet-start bubble.
+            self.comb += [
+                receiving.eq(fsm.ongoing("RECEIVE") | (fsm.ongoing("IDLE") & accepted)),
+                end_count.eq(Mux(fsm.ongoing("IDLE"), dw//8, count)),
+            ]
+        else:
+            self.comb += [receiving.eq(fsm.ongoing("RECEIVE")), end_count.eq(count)]
         self.comb += [
-            source.valid.eq(depacketizer.source.valid & fsm.ongoing("RECEIVE")),
-            depacketizer.source.ready.eq(fsm.ongoing("DROP") |
-                (fsm.ongoing("RECEIVE") & source.ready)),
-        ]
-        fsm.act("IDLE",
-            NextValue(count, dw//8),
-            If(depacketizer.source.valid,
-                NextState("DROP"),
-                If((protocol == udp_protocol) &
-                   (depacketizer.source.length > udp_header.length) &
-                   (depacketizer.source.length <= length),
-                    NextState("RECEIVE")
-                )
-            )
-        )
-        fsm.act("RECEIVE",
-            source.last.eq(depacketizer.source.last | (count >= source.length)),
-            # Trim Ethernet padding without enabling absent lanes on truncated packets.
+            source.valid.eq(depacketizer.source.valid & receiving),
+            depacketizer.source.ready.eq(fsm.ongoing("DROP") | (receiving & source.ready)),
+            source.last.eq(depacketizer.source.last | (end_count >= source.length)),
             source.be.eq(depacketizer.source.be),
-            If(count >= source.length,
+            # Trim padding without enabling absent lanes on truncated packets.
+            If(end_count >= source.length,
                 source.be.eq(depacketizer.source.be & eth_packet_last_mask(dw, source.length)),
             ),
             If(depacketizer.source.last &
-               ((count - dw//8 + stream.byte_count(depacketizer.source.be)) < source.length),
+               ((end_count - dw//8 + stream.byte_count(depacketizer.source.be)) < source.length),
                 source.error.eq(source.be),
             ),
+        ]
+        receive = [
             If(source.valid & source.ready,
-                NextValue(count, count + dw//8),
+                NextValue(count, end_count + dw//8),
+                NextState("RECEIVE"),
                 If(depacketizer.source.last,
-                    NextState("IDLE")
+                    NextState("IDLE"),
                 ).Elif(source.last,
-                    NextState("DROP")
-                )
+                    NextState("DROP"),
+                ),
+            ),
+        ]
+        if dw > 64:
+            fsm.act("IDLE",
+                If(depacketizer.source.valid & ~accepted, NextState("DROP")),
+                *receive,
             )
-        )
-
+        else:
+            fsm.act("IDLE",
+                NextValue(count, dw//8),
+                If(depacketizer.source.valid,
+                    NextState("DROP"),
+                    If(accepted, NextState("RECEIVE")),
+                ),
+            )
+        fsm.act("RECEIVE", *receive)
         fsm.act("DROP",
-            If(depacketizer.source.valid &
-               depacketizer.source.last &
-               depacketizer.source.ready,
-                NextState("IDLE")
-            )
+            If(depacketizer.source.valid & depacketizer.source.last & depacketizer.source.ready,
+                NextState("IDLE"),
+            ),
         )
 
 # UDP ----------------------------------------------------------------------------------------------
