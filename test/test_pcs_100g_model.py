@@ -111,3 +111,12 @@ class TestPCS100GModel(unittest.TestCase):
         recovered, errors = recover(lanes, interval=31, max_skew=1)
         self.assertEqual(recovered, blocks[2*31*LANES:])
         self.assertEqual(errors, 0)
+
+    def test_marker_parity_copies(self):
+        blocks = self.blocks(2*31*LANES)
+        for bit in [26, 58]:
+            lanes = distribute(blocks, interval=31)
+            lanes[0][-1] ^= 1 << bit
+            recovered, errors = recover(lanes, interval=31, max_skew=0)
+            self.assertEqual(recovered, blocks[31*LANES:])
+            self.assertEqual(errors, 1)

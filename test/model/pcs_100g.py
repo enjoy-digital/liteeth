@@ -121,7 +121,8 @@ def recover(lanes, interval=AM_INTERVAL, max_skew=32):
     This batch oracle drops incomplete/acquisition intervals and reacquires after bad markers.
     Skew is in 66-bit blocks; None samples represent initial lane delay. Bit/block-lock state
     machines and the standard's marker-error hysteresis are outside this model.
-    Returns recovered scrambled blocks and the number of erroneous BIP bits.
+    Returns recovered scrambled blocks and the number of erroneous BIP bit positions
+    (each position counts once if either redundant copy disagrees with expected parity).
     """
     if len(lanes) != LANES or interval < 1 or not 0 <= 2*max_skew < interval + 1:
         raise ValueError("Invalid lane count, interval or skew bound")
@@ -159,8 +160,8 @@ def recover(lanes, interval=AM_INTERVAL, max_skew=32):
                 parity ^= bip8(block)
             received = (lane[position + period] >> 26) & 255
             complement = (lane[position + period] >> 58) & 255
-            errors += bin(parity ^ received).count("1")
-            errors += bin((received ^ 255) ^ complement).count("1")
+            syndrome = (parity ^ received) | ((parity ^ 255) ^ complement)
+            errors += bin(syndrome).count("1")
         result.extend(block for row in zip(*ordered) for block in row)
     return result, errors
 
