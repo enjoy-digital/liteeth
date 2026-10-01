@@ -165,6 +165,8 @@ class TestEtherbone(unittest.TestCase):
         yield from self.do_writes(dut, [0x0a000000 | i for i in range(4)])
         yield from self.do_reads(dut, [0x87654321])
         yield from self.do_reads(dut, [0x0b000000 | i for i in range(4)])
+        yield from self.do_writes(dut, [0x0c000000 | i for i in range(8)])
+        yield from self.do_reads(dut, [0x0d000000 | i for i in range(8)])
 
     def test_probe_write_read(self):
         dut = DUT()
