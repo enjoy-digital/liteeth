@@ -263,6 +263,7 @@ class LiteEthARPCache(LiteXModule):
            )
         )
         fsm.act("RESPONSE",
+           mem_rd_port.adr.eq(search_count), # Keep matching entry selected for MAC Address.
            self.request.ready.eq(1),
            self.response.valid.eq(1),
            self.response.error.eq(error),
