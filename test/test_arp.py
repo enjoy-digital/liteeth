@@ -13,7 +13,7 @@ from test.stream_helpers import *
 
 from liteeth.common import *
 from liteeth.mac import LiteEthMAC
-from liteeth.core.arp import LiteEthARP
+from liteeth.core.arp import LiteEthARP, LiteEthARPCache
 
 from test.model import phy, mac, arp
 
@@ -64,3 +64,47 @@ class TestARP(unittest.TestCase):
                     "eth_tx" : 10,
                 }
                 run_simulation(dut, generators, clocks, vcd_name="sim.vcd")
+
+# Test ARP Cache -----------------------------------------------------------------------------------
+
+class TestARPCache(unittest.TestCase):
+    def cache_test(self, entries, updates, requests):
+        dut     = LiteEthARPCache(entries=entries, clk_freq=100e6)
+        results = []
+
+        def generator():
+            yield dut.clear_enable.eq(0)
+            yield dut.response.ready.eq(1)
+            for _ in range(2*entries):
+                yield
+            for ip, mac in updates:
+                yield dut.update.valid.eq(1)
+                yield dut.update.ip_address.eq(ip)
+                yield dut.update.mac_address.eq(mac)
+                yield
+                while (yield dut.update.ready) != 1:
+                    yield
+                yield dut.update.valid.eq(0)
+                yield
+            for ip in requests:
+                yield dut.request.valid.eq(1)
+                yield dut.request.ip_address.eq(ip)
+                yield
+                while (yield dut.response.valid) != 1:
+                    yield
+                results.append(((yield dut.response.error), (yield dut.response.mac_address)))
+                yield dut.request.valid.eq(0)
+                yield
+
+        run_simulation(dut, generator())
+        return results
+
+    def test_cache_hits_return_matching_mac(self):
+        for entries in [2, 4]:
+            updates  = [(0xc0a80101 + i, 0x020000000001 + i) for i in range(entries)]
+            for order in ["direct", "reversed"]:
+                with self.subTest(entries=entries, order=order):
+                    _updates = updates if order == "direct" else updates[::-1]
+                    requests = [ip for ip, _ in updates] + [0xc0a801ff]
+                    results  = self.cache_test(entries, _updates, requests)
+                    self.assertEqual(results, [(0, mac) for _, mac in updates] + [(1, results[-1][1])])
