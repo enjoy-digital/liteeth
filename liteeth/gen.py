@@ -308,6 +308,7 @@ class PHYCore(SoCMini):
         elif phy in [
             liteeth_phys.LiteEthS7PHYRGMII,
             liteeth_phys.LiteEthECP5PHYRGMII,
+            liteeth_phys.LiteEthUSPHYRGMII,
         ]:
             phy_kwargs = dict(
                 clock_pads         = platform.request("rgmii_clocks"),
@@ -320,6 +321,13 @@ class PHYCore(SoCMini):
                 phy_kwargs.update(
                     with_dynamic_link = core_config.get("phy_dynamic_link", False),
                 )
+
+            elif phy in [liteeth_phys.LiteEthUSPHYRGMII]:
+                phy_kwargs.update(
+                    iodelay_clk_freq = core_config.get("iodelay_clk_freq", 300e6),
+                    usp              = core_config.get("usp", False),
+                )
+
             ethphy = phy(**phy_kwargs)
         # SGMII.
         elif phy in [
@@ -770,7 +778,7 @@ def main():
                 core_config[k] = replaces[r]
         if k == "phy":
             core_config[k] = getattr(liteeth_phys, core_config[k])
-        if k in ["refclk_freq", "clk_freq", "eth_mtu", "icmp_fifo_depth"]:
+        if k in ["refclk_freq", "clk_freq", "iodelay_clk_freq", "eth_mtu", "icmp_fifo_depth"]:
             core_config[k] = int(float(core_config[k]))
         if k in ["phy_tx_delay", "phy_rx_delay"]:
             core_config[k] = float(core_config[k])
