@@ -70,7 +70,7 @@ class PCSTXInterface(LiteXModule):
 
 class PCSTX(LiteXModule):
     """Complete PCS transmit path (IEEE 802.3ae Clause 49.2.4 - 49.2.8)."""
-    def __init__(self, dw=64, hdr_width=2, prbs31_enable=False):
+    def __init__(self, dw=64, hdr_width=2, prbs31_enable=False, with_pipelining=False):
         self.xgmii_txd  = Signal(dw)
         self.xgmii_txc  = Signal(dw//8)
 
@@ -83,7 +83,7 @@ class PCSTX(LiteXModule):
         # Configuration input
         self.cfg_tx_prbs31_enable = Signal()
 
-        self.encoder = encoder = XGMIIBaseREncoder()
+        self.encoder = encoder = XGMIIBaseREncoder(with_pipelining=with_pipelining)
         self.interface = interface = PCSTXInterface(
             dw            = dw,
             hdr_width     = hdr_width,
