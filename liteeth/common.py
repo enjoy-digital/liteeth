@@ -28,14 +28,23 @@ def eth_needs_pipelining(phy):
     return getattr(phy, "rx_clk_freq", 0) > eth_pipelining_clk_freq
 
 
-def eth_needs_store_and_forward(phy):
+def eth_needs_store_and_forward(phy, dw=None, sys_clk_freq=None):
     """True if a PHY's datapath is fast enough to need store-and-forward packet FIFOs behind it.
 
     PHYs can't be paused mid-frame in either direction, so at higher line rates with slower
     internals, the PHY can neither be fed fast enough on transmit nor keep up on receive. This
     heuristic is a rough guess based on typical data path throughputs.
+
+    When the core data width (dw) and sys_clk_freq are given, they are also checked against the
+    PHY: a sys datapath slower than a Gigabit (or faster) PHY can't feed it without gaps either.
+    Slower PHYs are not checked: their width x clock overstates their rate (ex MII/RMII).
     """
-    return getattr(phy, "dw", 0)*getattr(phy, "tx_clk_freq", 0) >= 2.5e9
+    phy_rate = getattr(phy, "dw", 0)*getattr(phy, "tx_clk_freq", 0)
+    if phy_rate >= 2.5e9:
+        return True
+    if (dw is not None) and (sys_clk_freq is not None) and (phy_rate >= 1e9):
+        return dw*sys_clk_freq < phy_rate
+    return False
 
 
 eth_mtu_default      = 1530

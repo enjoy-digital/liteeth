@@ -75,6 +75,7 @@ class LiteEthMAC(LiteXModule):
         rx_fifo_depth          = 0,
         tx_fifo_depth          = 0,
         with_store_and_forward = "auto",
+        sys_clk_freq           = None,
     ):
         assert dw%8 == 0
         assert interface  in ["crossbar", "wishbone", "hybrid"]
@@ -93,6 +94,7 @@ class LiteEthMAC(LiteXModule):
             rx_cdc_buffered        = rx_cdc_buffered,
             eth_mtu                = eth_mtu,
             with_store_and_forward = with_store_and_forward,
+            sys_clk_freq           = sys_clk_freq,
         )
         self.csrs = []
 
