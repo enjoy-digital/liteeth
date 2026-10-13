@@ -19,8 +19,16 @@ class XGMIIBaseREncoder(LiteXModule):
     sync header plus 64 bits of payload. Data-only transfers become a data block (sync header
     0b10); anything containing a control character becomes one of the control block formats of
     Figure 49-7, selected by which lanes hold control characters.
+
+    With with_pipelining, the per-lane control codes, the staged transfer and the decoded
+    block-format selects are registered in a first stage and the block is assembled from those
+    registers in a second, adding one cycle of latency. Without it, the whole lane-encode +
+    format-priority cone feeds the output register combinationally - 12 LUT levels, which does
+    not close timing at the 161.13 MHz eth_tx_clk of a congested Artix-7 5GBASE-R design. The
+    option mirrors the receive side's classification stage and is selected through the same
+    PCS with_pipelining parameter.
     """
-    def __init__(self):
+    def __init__(self, with_pipelining=False):
         self.xgmii_txd       = Signal(64)
         self.xgmii_txc       = Signal(8)
 
@@ -55,6 +63,49 @@ class XGMIIBaseREncoder(LiteXModule):
                 encode_err[i].eq(1),
             )
 
+        # Block-format selection -------------------------------------------------------------------
+        # One select per Figure 49-7 format, decoded from the raw transfer; the If/Elif priority
+        # of the block-encoding chain below resolves overlapping matches. With with_pipelining the
+        # selects, the staged transfer and the lane codes are registered here, so the block
+        # assembly muxes 64-bit fields with registered 1-bit selects only.
+        sel = {}
+        for name, cond in [
+            ("data",     txc == 0x00),
+            ("os_4",     (txc == 0x1f) & (txd[32:40] == XGMII_SEQ_OS)),
+            ("start_4",  (txc == 0x1f) & (txd[32:40] == XGMII_START)),
+            ("os_start", (txc == 0x11) & (txd[0:8] == XGMII_SEQ_OS) & (txd[32:40] == XGMII_START)),
+            ("os_04",    (txc == 0x11) & (txd[0:8] == XGMII_SEQ_OS) & (txd[32:40] == XGMII_SEQ_OS)),
+            ("start_0",  (txc == 0x01) & (txd[0:8] == XGMII_START)),
+            ("os_0",     (txc == 0xf1) & (txd[0:8] == XGMII_SEQ_OS)),
+            ("term_0",   (txc == 0xff) & (txd[0:8]   == XGMII_TERM)),
+            ("term_1",   (txc == 0xfe) & (txd[8:16]  == XGMII_TERM)),
+            ("term_2",   (txc == 0xfc) & (txd[16:24] == XGMII_TERM)),
+            ("term_3",   (txc == 0xf8) & (txd[24:32] == XGMII_TERM)),
+            ("term_4",   (txc == 0xf0) & (txd[32:40] == XGMII_TERM)),
+            ("term_5",   (txc == 0xe0) & (txd[40:48] == XGMII_TERM)),
+            ("term_6",   (txc == 0xc0) & (txd[48:56] == XGMII_TERM)),
+            ("term_7",   (txc == 0x80) & (txd[56:64] == XGMII_TERM)),
+            ("ctrl",     txc == 0xff),
+        ]:
+            sel[name] = Signal(name=f"sel_{name}", reset_less=True)
+            if with_pipelining:
+                self.sync += sel[name].eq(cond)
+            else:
+                self.comb += sel[name].eq(cond)
+
+        if with_pipelining:
+            txd_r          = Signal(64, reset_less=True)
+            encoded_ctrl_r = Signal(56, reset_less=True)
+            encode_err_r   = Signal(8,  reset_less=True)
+            self.sync += [
+                txd_r.eq(txd),
+                encoded_ctrl_r.eq(encoded_ctrl),
+                encode_err_r.eq(encode_err),
+            ]
+            txd          = txd_r
+            encoded_ctrl = encoded_ctrl_r
+            encode_err   = encode_err_r
+
         # Block encoding (Figure 49-7) -------------------------------------------------------------
         # Concatenations are little-endian (Cat puts its first argument in the low bits), so each
         # block is built block-type-field first. The zero fields are the unused bits the figure
@@ -63,70 +114,70 @@ class XGMIIBaseREncoder(LiteXModule):
         hdr  = Signal(2)
         bad  = Signal()
 
-        self.comb += If(txc == 0x00,
+        self.comb += If(sel["data"],
             # Data block: all eight lanes carry data characters.
             data.eq(txd),
             hdr.eq(SYNC_DATA),
             bad.eq(0),
         ).Else(
             hdr.eq(SYNC_CTRL),
-            If((txc == 0x1f) & (txd[32:40] == XGMII_SEQ_OS),
+            If(sel["os_4"],
                 # Ordered set in lane 4.
                 data.eq(Cat(C(BLOCK_TYPE_OS_4, 8), encoded_ctrl[0:28], C(O_SEQ_OS, 4), txd[40:64])),
                 bad.eq(encode_err[0:4] != 0),
-            ).Elif((txc == 0x1f) & (txd[32:40] == XGMII_START),
+            ).Elif(sel["start_4"],
                 # Start in lane 4.
                 data.eq(Cat(C(BLOCK_TYPE_START_4, 8), encoded_ctrl[0:28], C(0, 4), txd[40:64])),
                 bad.eq(encode_err[0:4] != 0),
-            ).Elif((txc == 0x11) & (txd[0:8] == XGMII_SEQ_OS) & (txd[32:40] == XGMII_START),
+            ).Elif(sel["os_start"],
                 # Ordered set in lane 0, start in lane 4.
                 data.eq(Cat(C(BLOCK_TYPE_OS_START, 8), txd[8:32], C(O_SEQ_OS, 4), C(0, 4), txd[40:64])),
                 bad.eq(0),
-            ).Elif((txc == 0x11) & (txd[0:8] == XGMII_SEQ_OS) & (txd[32:40] == XGMII_SEQ_OS),
+            ).Elif(sel["os_04"],
                 # Ordered set in lane 0 and lane 4.
                 data.eq(Cat(C(BLOCK_TYPE_OS_04, 8), txd[8:32], C(O_SEQ_OS, 4), C(O_SEQ_OS, 4), txd[40:64])),
                 bad.eq(0),
-            ).Elif((txc == 0x01) & (txd[0:8] == XGMII_START),
+            ).Elif(sel["start_0"],
                 # Start in lane 0.
                 data.eq(Cat(C(BLOCK_TYPE_START_0, 8), txd[8:64])),
                 bad.eq(0),
-            ).Elif((txc == 0xf1) & (txd[0:8] == XGMII_SEQ_OS),
+            ).Elif(sel["os_0"],
                 # Ordered set in lane 0.
                 data.eq(Cat(C(BLOCK_TYPE_OS_0, 8), txd[8:32], C(O_SEQ_OS, 4), encoded_ctrl[28:56])),
                 bad.eq(encode_err[4:8] != 0),
-            ).Elif((txc == 0xff) & (txd[0:8] == XGMII_TERM),
+            ).Elif(sel["term_0"],
                 # Terminate in lane 0.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_0, 8), C(0, 7), encoded_ctrl[7:56])),
                 bad.eq(encode_err[1:8] != 0),
-            ).Elif((txc == 0xfe) & (txd[8:16] == XGMII_TERM),
+            ).Elif(sel["term_1"],
                 # Terminate in lane 1.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_1, 8), txd[0:8], C(0, 6), encoded_ctrl[14:56])),
                 bad.eq(encode_err[2:8] != 0),
-            ).Elif((txc == 0xfc) & (txd[16:24] == XGMII_TERM),
+            ).Elif(sel["term_2"],
                 # Terminate in lane 2.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_2, 8), txd[0:16], C(0, 5), encoded_ctrl[21:56])),
                 bad.eq(encode_err[3:8] != 0),
-            ).Elif((txc == 0xf8) & (txd[24:32] == XGMII_TERM),
+            ).Elif(sel["term_3"],
                 # Terminate in lane 3.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_3, 8), txd[0:24], C(0, 4), encoded_ctrl[28:56])),
                 bad.eq(encode_err[4:8] != 0),
-            ).Elif((txc == 0xf0) & (txd[32:40] == XGMII_TERM),
+            ).Elif(sel["term_4"],
                 # Terminate in lane 4.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_4, 8), txd[0:32], C(0, 3), encoded_ctrl[35:56])),
                 bad.eq(encode_err[5:8] != 0),
-            ).Elif((txc == 0xe0) & (txd[40:48] == XGMII_TERM),
+            ).Elif(sel["term_5"],
                 # Terminate in lane 5.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_5, 8), txd[0:40], C(0, 2), encoded_ctrl[42:56])),
                 bad.eq(encode_err[6:8] != 0),
-            ).Elif((txc == 0xc0) & (txd[48:56] == XGMII_TERM),
+            ).Elif(sel["term_6"],
                 # Terminate in lane 6.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_6, 8), txd[0:48], C(0, 1), encoded_ctrl[49:56])),
                 bad.eq(encode_err[7] != 0),
-            ).Elif((txc == 0x80) & (txd[56:64] == XGMII_TERM),
+            ).Elif(sel["term_7"],
                 # Terminate in lane 7.
                 data.eq(Cat(C(BLOCK_TYPE_TERM_7, 8), txd[0:56])),
                 bad.eq(0),
-            ).Elif(txc == 0xff,
+            ).Elif(sel["ctrl"],
                 # Control block: all eight lanes carry control characters.
                 data.eq(Cat(C(BLOCK_TYPE_CTRL, 8), encoded_ctrl)),
                 bad.eq(encode_err != 0),

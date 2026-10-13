@@ -60,9 +60,10 @@ class PCS(LiteXModule):
         # Transmit path, XGMII -> PMA
 
         self.tx = tx = ClockDomainsRenamer("eth_tx")(PCSTX(
-            dw            = dw,
-            hdr_width     = hdr_width,
-            prbs31_enable = prbs31_enable,
+            dw              = dw,
+            hdr_width       = hdr_width,
+            prbs31_enable   = prbs31_enable,
+            with_pipelining = with_pipelining,
         ))
 
         self.comb += [
