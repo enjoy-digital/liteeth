@@ -193,21 +193,32 @@ def expected_block(block_type, lanes):
 # Encoder ------------------------------------------------------------------------------------------
 
 def run_encoder(vectors):
-    """Drive one XGMII transfer per cycle and collect (hdr, data, bad) for each."""
-    dut     = XGMIIBaseREncoder()
-    samples = run_cycles(dut,
-        inputs  = {
-            dut.xgmii_txd : [txd for txd, _ in vectors],
-            dut.xgmii_txc : [txc for _, txc in vectors],
-        },
-        outputs = {
-            "hdr"  : dut.encoded_tx_hdr,
-            "data" : dut.encoded_tx_data,
-            "bad"  : dut.tx_bad_block,
-        },
-    )
-    # The encoder registers its output, so the block for transfer n is readable one cycle later.
-    return [(s["hdr"], s["data"], s["bad"]) for s in samples[1:]]
+    """Drive one XGMII transfer per cycle and collect (hdr, data, bad) for each.
+
+    Runs the encoder both without and with pipelining and checks that, latency aside, they
+    produce the same blocks, so every vector also exercises the pipelined classification.
+    """
+    def run(with_pipelining):
+        dut     = XGMIIBaseREncoder(with_pipelining=with_pipelining)
+        latency = 2 if with_pipelining else 1
+        # Hold the last transfer so the pipelined encoder flushes its block.
+        samples = run_cycles(dut,
+            inputs  = {
+                dut.xgmii_txd : [txd for txd, _ in vectors] + [vectors[-1][0]]*(latency - 1),
+                dut.xgmii_txc : [txc for _, txc in vectors] + [vectors[-1][1]]*(latency - 1),
+            },
+            outputs = {
+                "hdr"  : dut.encoded_tx_hdr,
+                "data" : dut.encoded_tx_data,
+                "bad"  : dut.tx_bad_block,
+            },
+        )
+        # The block for transfer n is readable `latency` cycles after it is driven.
+        return [(s["hdr"], s["data"], s["bad"]) for s in samples[latency:]]
+
+    plain, pipelined = run(False), run(True)
+    assert plain == pipelined, "the pipelined encoder diverged from the single-stage encoder"
+    return plain
 
 # XGMII lane patterns, one per Figure 49-7 control block format, plus the data block.
 D = [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88]
@@ -758,7 +769,7 @@ class PCSLoopbackDUT(LiteXModule):
         )
 
 PCS_LATENCY     = 4   # encoder, transmit interface, descrambler, decoder.
-PCS_LATENCY_PIPELINED = PCS_LATENCY + 1 # the extra block classification stage.
+PCS_LATENCY_PIPELINED = PCS_LATENCY + 2 # the extra TX and RX block classification stages.
 LOOPBACK_CYCLES = 400 # Enough for an aligned receiver to reach PCS_status.
 SLIP_CYCLES     = 500 # Enough for a misaligned one to walk to the block boundary first.
 
