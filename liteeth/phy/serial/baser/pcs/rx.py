@@ -172,32 +172,44 @@ LBLOCK_R_CTRL = 0x11
 EBLOCK_R_DATA = int.from_bytes(bytes([XGMII_ERROR]*8), "little")
 EBLOCK_R_CTRL = 0xff
 
-def _r_type(module, data, hdr):
-    """Classify a 66-bit block as C, S, T, D or E (49.2.13.2.3, R_BLOCK_TYPE).
+def _r_type_flags(data, hdr):
+    """Per-lane checks used by the R_BLOCK_TYPE classification, as {name: expression}."""
+    def ctrl_ok(lane):
+        field = data[7*lane + 8:7*lane + 15]
+        return reduce(or_, [field == code for code in XGMII_CHARS.keys()])
+
+    return {
+        "block_type"  : data[0:8],
+        "ctrl_ok"     : Cat(*[ctrl_ok(lane) for lane in range(8)]),
+        "ctrl_not_err": Cat(*[data[7*lane + 8:7*lane + 15] != CTRL_ERROR for lane in range(8)]),
+        "o0_valid"    : (data[32:36] == O_SEQ_OS) | (data[32:36] == O_SIG_OS),
+        "o4_valid"    : (data[36:40] == O_SEQ_OS) | (data[36:40] == O_SIG_OS),
+        "is_ctrl"     : hdr == SYNC_CTRL,
+        "is_data"     : hdr == SYNC_DATA,
+    }
+
+def _r_type_from_flags(module, flags):
+    """Classify a 66-bit block as C, S, T, D or E (49.2.13.2.3, R_BLOCK_TYPE) from its flags.
 
     A valid control character is one holding a 10GBASE-R control code from Table 49-1; a valid O
     code is one holding an O code from Table 49-1. Note that only the all-control block excludes
     /E/ from what counts as valid -- the standard says "eight valid control characters other than
     /E/" for block type 0x1e and simply "valid control characters" elsewhere.
     """
-    block_type = data[0:8]
+    block_type = flags["block_type"]
+    o0_valid   = flags["o0_valid"]
+    o4_valid   = flags["o4_valid"]
+    is_ctrl    = flags["is_ctrl"]
+    is_data    = flags["is_data"]
 
     def ctrl_ok(lane):
-        field = data[7*lane + 8:7*lane + 15]
-        return reduce(or_, [field == code for code in XGMII_CHARS.keys()])
+        return flags["ctrl_ok"][lane]
 
     def ctrl_ok_not_error(lane):
-        field = data[7*lane + 8:7*lane + 15]
-        return ctrl_ok(lane) & (field != CTRL_ERROR)
+        return ctrl_ok(lane) & flags["ctrl_not_err"][lane]
 
     def ctrl_range_ok(lanes):
         return reduce(and_, [ctrl_ok(lane) for lane in lanes])
-
-    o0_valid = (data[32:36] == O_SEQ_OS) | (data[32:36] == O_SIG_OS)
-    o4_valid = (data[36:40] == O_SEQ_OS) | (data[36:40] == O_SIG_OS)
-
-    is_ctrl = hdr == SYNC_CTRL
-    is_data = hdr == SYNC_DATA
 
     # Which lanes a terminate block carries as control characters.
     term_types = {
@@ -243,6 +255,10 @@ def _r_type(module, data, hdr):
     )
     return r_type
 
+def _r_type(module, data, hdr):
+    """Classify a 66-bit block as C, S, T, D or E (49.2.13.2.3, R_BLOCK_TYPE)."""
+    return _r_type_from_flags(module, _r_type_flags(data, hdr))
+
 # PCS RX -------------------------------------------------------------------------------------------
 
 class PCSRX(LiteXModule):
@@ -283,7 +299,8 @@ class PCSRX(LiteXModule):
             ber_threshold       = ber_threshold,
             ber_count           = ber_count,
         )
-        self.decoder = decoder = XGMIIBaseRDecoder()
+        # with_pipelining=2 adds a pipeline stage to the classification and to the decoder.
+        self.decoder = decoder = XGMIIBaseRDecoder(with_pipelining=(with_pipelining == 2))
 
         # Classification pipeline stage -------------------------------------------------------------
         # Classification (49.2.13.2.3) gets its own cycle, with the decoder's data delayed to
@@ -294,15 +311,27 @@ class PCSRX(LiteXModule):
         encoded_hdr_d  = Signal(hdr_width, reset_less=True)
         r_type_p       = Signal(max=R_TYPE_E + 1, reset_less=True)
 
-        classify = [
-            encoded_data_d.eq(interface.encoded_rx_data),
-            encoded_hdr_d.eq(interface.encoded_rx_hdr),
-            r_type_p.eq(_r_type(self, interface.encoded_rx_data, interface.encoded_rx_hdr)),
-        ]
-        if with_pipelining:
-            self.sync += classify
+        if with_pipelining == 2:
+            # The per-lane checks get a cycle before the classification, and the decoder its own
+            # pre-decoding stage, so both stay in step one cycle later.
+            flags   = _r_type_flags(interface.encoded_rx_data, interface.encoded_rx_hdr)
+            flags_r = {k: Signal(len(v), reset_less=True, name=f"r_flags_{k}") for k, v in flags.items()}
+            self.sync += [flags_r[k].eq(v) for k, v in flags.items()]
+            self.sync += [
+                encoded_data_d.eq(interface.encoded_rx_data),
+                encoded_hdr_d.eq(interface.encoded_rx_hdr),
+                r_type_p.eq(_r_type_from_flags(self, flags_r)),
+            ]
         else:
-            self.comb += classify
+            classify = [
+                encoded_data_d.eq(interface.encoded_rx_data),
+                encoded_hdr_d.eq(interface.encoded_rx_hdr),
+                r_type_p.eq(_r_type(self, interface.encoded_rx_data, interface.encoded_rx_hdr)),
+            ]
+            if with_pipelining:
+                self.sync += classify
+            else:
+                self.comb += classify
 
         self.comb += [
             interface.serdes_rx_data.eq(self.serdes_rx_data),

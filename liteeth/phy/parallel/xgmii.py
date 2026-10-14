@@ -508,7 +508,7 @@ class LiteEthPHYXGMIIRXAligner(LiteXModule):
 # LiteEth PHY XGMII RX -----------------------------------------------------------------------------
 
 class LiteEthPHYXGMIIRX(LiteXModule):
-    def __init__(self, pads, dw):
+    def __init__(self, pads, dw, with_pipelining=False):
         # Enforce 64-bit data path
         assert dw == 64
 
@@ -532,11 +532,20 @@ class LiteEthPHYXGMIIRX(LiteXModule):
         # determine whether we are processing the last bus word in some
         # cases. This means delaying the incoming data by one cycle.
         xgmii_bus_layout = [ ("ctl", 8), ("data", 64) ]
+        # With pipelining, the aligned bus word is registered before the lookahead, separating the
+        # aligner from the end detection and receive FSM (adds a cycle of latency).
         xgmii_bus_next = Record(xgmii_bus_layout)
         self.comb += [
             xgmii_bus_next.ctl.eq(self.aligner.aligned_ctl),
             xgmii_bus_next.data.eq(self.aligner.aligned_data),
         ]
+        if with_pipelining:
+            xgmii_bus_aligned = xgmii_bus_next
+            xgmii_bus_next    = Record(xgmii_bus_layout)
+            self.sync += [
+                xgmii_bus_next.ctl.eq(xgmii_bus_aligned.ctl),
+                xgmii_bus_next.data.eq(xgmii_bus_aligned.data),
+            ]
         xgmii_bus = Record(xgmii_bus_layout)
         self.sync += [
             xgmii_bus.ctl.eq(xgmii_bus_next.ctl),

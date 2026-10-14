@@ -862,6 +862,16 @@ class TestPCSLoopback(unittest.TestCase):
         self.assertTrue(samples[-1]["status"], "the pipelined PCS never reached PCS_status")
         self.assertEqual(self.find_latency(transfers, samples), PCS_LATENCY_PIPELINED)
 
+    def test_loopback_pipelined_2(self):
+        """The extra flag and pre-decoding stages must be transparent apart from latency."""
+        transfers, samples = run_pcs_loopback(LOOPBACK_CYCLES, with_pipelining=2)
+        up = next(n for n, s in enumerate(samples) if s["status"])
+
+        self.assertTrue(samples[-1]["status"], "the pipelined PCS never reached PCS_status")
+        self.assertEqual(self.find_latency(transfers, samples), PCS_LATENCY_PIPELINED + 1)
+        self.assertNotIn(1, [s["bad"] for s in samples[up:]],
+            "a bad block was reported on a clean loopback")
+
     def test_bitslip_alignment(self):
         """A receiver started off the block boundary must slip its way onto it.
 
