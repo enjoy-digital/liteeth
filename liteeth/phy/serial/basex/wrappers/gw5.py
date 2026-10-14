@@ -85,14 +85,14 @@ class GW5_1000BASEX(LiteXModule):
         ]
 
         # Raw SerDes -------------------------------------------------------------------------------
-        self.serdes = serdes = GW5SerDes(platform, lane=lane)
+        self.serdes = serdes = GW5SerDes(platform, lane=lane,
+            tx_clk = self.cd_eth_tx.clk,
+            rx_clk = self.cd_eth_rx.clk)
         self.comb += [
             serdes.reset.eq(reset),
             serdes.tx_data.eq(tx_data),
             rx_data.eq(serdes.rx_data),
             rx_valid.eq(serdes.rx_valid),
-            self.cd_eth_tx.clk.eq(serdes.tx_clk),
-            self.cd_eth_rx.clk.eq(serdes.rx_clk),
             self.pll_lock.eq(serdes.pll_lock),
             self.cdr_lock.eq(serdes.cdr_lock),
             self.aligned.eq(serdes.aligned),

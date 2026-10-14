@@ -22,13 +22,16 @@ class GW5SerDes(LiteXModule):
     rx_fifo_level/tx_fifo_level expose the interface FIFO occupancies for
     latency diagnostics; they are in the RX and TX clock domains.
     """
-    def __init__(self, platform, lane=0):
+    def __init__(self, platform, lane=0, tx_clk=None, rx_clk=None):
         gw5_check_lane(platform, lane, "GW5SerDes")
         self.reset    = Signal()
-        # GowinSynthesis otherwise merges equivalent registers driven by the
-        # independent TX and recovered RX clock outputs of the GTR primitive.
-        self.tx_clk   = Signal(attr={("syn_keep", 1)})
-        self.rx_clk   = Signal(attr={("syn_keep", 1)})
+        # The caller can provide the clock signals (e.g. its clock domain clocks) to keep their
+        # names for the timing constraints. GowinSynthesis otherwise merges equivalent registers
+        # driven by the independent TX and recovered RX clock outputs of the GTR primitive.
+        self.tx_clk   = Signal() if tx_clk is None else tx_clk
+        self.rx_clk   = Signal() if rx_clk is None else rx_clk
+        self.tx_clk.attr.add(("syn_keep", 1))
+        self.rx_clk.attr.add(("syn_keep", 1))
         self.tx_data  = Signal(10)
         self.rx_data  = Signal(88)
         self.rx_valid = Signal()

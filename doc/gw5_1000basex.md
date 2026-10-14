@@ -31,7 +31,9 @@ output, but only its low ten bits carry symbols in this configuration.
 `rx_valid` qualifies received symbols; `rx_empty` is the RX FIFO status.
 `reset` is active high. `pll_lock`, `cdr_lock` and `aligned` expose the raw
 status signals. The caller supplies clock domains, synchronized resets,
-status crossings and timing constraints.
+status crossings and timing constraints. `tx_clk`/`rx_clk` can be passed to
+the constructor (e.g. clock domain clocks) so the constrained clock nets keep
+their names through GowinSynthesis.
 
 This interface retains the hardware comma aligner and RX FIFO. It does not
 provide deterministic latency, a bitslide measurement, clock tuning or a
