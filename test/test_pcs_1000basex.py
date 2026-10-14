@@ -462,6 +462,102 @@ class TestPCSNoAutoneg(unittest.TestCase):
         self.assertIn("UP", dut.csr_fsm.actions)
 
 
+# Test PCS Link Partner Reboot ---------------------------------------------------------------------
+
+class PCSRebootDUT(LiteXModule):
+    """Two 1000BASE-X PCS with independent clock domains; A can be rebooted on its own."""
+    def __init__(self):
+        def make_pcs():
+            # Keep the timers ordered as in hardware: more_ack_time must leave the link partner
+            # time to see a consistent acknowledge (8+1 configuration words).
+            return PCS(lsb_first=True, check_period=1024/125e6, breaklink_time=16/125e6,
+                more_ack_time=128/125e6, sgmii_ack_time=128/125e6)
+        self.cd_a_tx = ClockDomain()
+        self.cd_a_rx = ClockDomain()
+        self.cd_b_tx = ClockDomain()
+        self.cd_b_rx = ClockDomain()
+        self.pcs_a = ClockDomainsRenamer({"eth_tx": "a_tx", "eth_rx": "a_rx"})(make_pcs())
+        self.pcs_b = ClockDomainsRenamer({"eth_tx": "b_tx", "eth_rx": "b_rx"})(make_pcs())
+        self.a_reboot = Signal()
+
+        # Model the PMA: a PCS restart resets the receiver for a few cycles.
+        b_rx_reset = Signal(4)
+        self.sync.b_tx += If(self.pcs_b.restart, b_rx_reset.eq(10)).Elif(b_rx_reset != 0, b_rx_reset.eq(b_rx_reset - 1))
+        self.comb += [
+            self.cd_a_tx.rst.eq(self.a_reboot),
+            self.cd_a_rx.rst.eq(self.a_reboot),
+            self.cd_b_rx.rst.eq(b_rx_reset != 0),
+            # Nothing on the line from A while it reboots.
+            self.pcs_b.tbi_rx.eq(Mux(self.a_reboot, 0, self.pcs_a.tbi_tx)),
+            self.pcs_b.tbi_rx_ce.eq(~self.a_reboot & (b_rx_reset == 0)),
+            self.pcs_a.tbi_rx.eq(self.pcs_b.tbi_tx),
+            self.pcs_a.tbi_rx_ce.eq(1),
+        ]
+
+
+class TestPCSPartnerReboot(unittest.TestCase):
+    def test_link_and_traffic_recover_after_partner_reboot(self):
+        # Regression: B could accept A's empty breaklink configuration as an ability and wait for
+        # an acknowledge while A, seeing B's acknowledge bit set, never matched B's ability.
+        dut      = PCSRebootDUT()
+        frame    = [0x55]*7 + [0xd5] + list(range(32))
+        received = {"a": [], "b": []}
+
+        def wait_link():
+            for _ in range(1000):
+                if (yield dut.pcs_a.link_up) and (yield dut.pcs_b.link_up):
+                    return
+                yield
+            self.fail("1000BASE-X PCS pair did not (re)establish the link")
+
+        def send(pcs):
+            for i, data in enumerate(frame):
+                yield pcs.sink.valid.eq(1)
+                yield pcs.sink.data.eq(data)
+                yield pcs.sink.last.eq(i == len(frame) - 1)
+                yield
+                while not (yield pcs.sink.ready):
+                    yield
+            yield pcs.sink.valid.eq(0)
+
+        def receiver(pcs, name):
+            yield "passive"
+            yield pcs.source.ready.eq(1)
+            current = []
+            while True:
+                if (yield pcs.source.valid):
+                    self.assertEqual((yield pcs.source.error), 0)
+                    current.append((yield pcs.source.data))
+                    if (yield pcs.source.last):
+                        received[name].append(current)
+                        current = []
+                yield
+
+        def generator():
+            for trial in range(2):
+                if trial:
+                    # Reboot A for much longer than the checker period.
+                    yield dut.a_reboot.eq(1)
+                    for _ in range(2000):
+                        yield
+                    yield dut.a_reboot.eq(0)
+                yield from wait_link()
+                for _ in range(64):
+                    yield
+                yield from send(dut.pcs_a)
+                yield from send(dut.pcs_b)
+                for _ in range(200):
+                    yield
+                self.assertEqual(received["a"], [frame]*(trial + 1))
+                self.assertEqual(received["b"], [frame]*(trial + 1))
+
+        run_simulation(dut, {
+                "a_tx": [generator()],
+                "a_rx": [receiver(dut.pcs_a, "a")],
+                "b_rx": [receiver(dut.pcs_b, "b")],
+            }, clocks={"a_tx": 8, "a_rx": 8, "b_tx": 8, "b_rx": 8})
+
+
 # Test PCS TX --------------------------------------------------------------------------------------
 
 class TestPCSTX(unittest.TestCase):

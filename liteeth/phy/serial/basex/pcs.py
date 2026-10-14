@@ -314,9 +314,10 @@ class PCS(LiteXModule):
 
         # Pulse Synchronizers.
         # --------------------
-        self.seen_valid_ci     = seen_valid_ci     = PulseSynchronizer("eth_rx", "eth_tx")
-        self.rx_config_reg_abi = rx_config_reg_abi = PulseSynchronizer("eth_rx", "eth_tx")
-        self.rx_config_reg_ack = rx_config_reg_ack = PulseSynchronizer("eth_rx", "eth_tx")
+        self.seen_valid_ci      = seen_valid_ci      = PulseSynchronizer("eth_rx", "eth_tx")
+        self.rx_config_reg_abi  = rx_config_reg_abi  = PulseSynchronizer("eth_rx", "eth_tx")
+        self.rx_config_reg_ack  = rx_config_reg_ack  = PulseSynchronizer("eth_rx", "eth_tx")
+        self.rx_config_reg_zero = rx_config_reg_zero = PulseSynchronizer("eth_rx", "eth_tx")
         self.comb += seen_valid_ci.i.eq(self.rx.seen_valid_ci)
 
         # Timers.
@@ -422,6 +423,10 @@ class PCS(LiteXModule):
                 If(rx_config_reg_ack.o,
                     NextState("AUTONEG-SEND-MORE-ACK")
                 ),
+                # Link partner restarted Auto-Negotiation: restart too.
+                If(rx_config_reg_zero.o,
+                    NextState("AUTONEG-BREAKLINK")
+                ),
                 If(checker_tick & checker_error,
                     self.restart.eq(1),
                     NextState("AUTONEG-BREAKLINK")
@@ -436,6 +441,10 @@ class PCS(LiteXModule):
                 If((is_sgmii & sgmii_ack_timer.done) |
                     (~is_sgmii & more_ack_timer.done),
                     NextState("RUNNING")
+                ),
+                # Link partner restarted Auto-Negotiation: restart too.
+                If(rx_config_reg_zero.o,
+                    NextState("AUTONEG-BREAKLINK")
                 ),
                 If(checker_tick & checker_error,
                     self.restart.eq(1),
@@ -456,6 +465,10 @@ class PCS(LiteXModule):
             rx_config_reg_count  = Signal(4)
             rx_config_reg_last   = Signal(16)
             self.sync.eth_rx += [
+                # Single-cycle pulses (to the PulseSynchronizers).
+                rx_config_reg_abi.i.eq(0),
+                rx_config_reg_ack.i.eq(0),
+                rx_config_reg_zero.i.eq(0),
                 If(self.rx.seen_config_reg,
                     # Consistency Count/Check.
                     rx_config_reg_last.eq(self.rx.config_reg),
@@ -465,13 +478,16 @@ class PCS(LiteXModule):
                         If(rx_config_reg_count != 0,
                             rx_config_reg_count.eq(rx_config_reg_count - 1),
                         ).Else(
-                            # When RX Config is consistent.
-                            # Acknowledgement.
-                            If(self.rx.config_reg[14],
-                                rx_config_reg_ack.i.eq(1),
-                            # Ability match.
+                            # When RX Config is consistent (Clause 37).
+                            If(self.rx.config_reg == 0,
+                                # Link partner restarting Auto-Negotiation (AN_ENABLE/breaklink).
+                                rx_config_reg_zero.i.eq(1),
                             ).Else(
+                                # Ability match, regardless of the Acknowledge bit: the link
+                                # partner can already be acknowledging.
                                 rx_config_reg_abi.i.eq(1),
+                                # Acknowledge match.
+                                rx_config_reg_ack.i.eq(self.rx.config_reg[14]),
                             )
                         )
                     ),
