@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 from migen import *
 
+from litex.gen import LiteXContext
+
 from litex.soc.interconnect import stream
 
 from liteeth.common import eth_mtu_default, eth_needs_store_and_forward, eth_packet_fifo_depth
@@ -169,6 +171,14 @@ class TestPacketFIFODepth(unittest.TestCase):
 # Test Store-and-Forward Selection -----------------------------------------------------------------
 
 class TestStoreAndForwardAuto(unittest.TestCase):
+    def setUp(self):
+        # "auto" falls back to LiteXContext.top's sys_clk_freq; a SoC built by an earlier test
+        # stays there, so clear it for these tests to be independent of test ordering.
+        self._top, LiteXContext.top = LiteXContext.top, None
+
+    def tearDown(self):
+        LiteXContext.top = self._top
+
     def test_throughput_from_width_and_clock(self):
         # XGMII sets its 64-bit width per instance; its class attribute says 8.
         self.assertTrue(eth_needs_store_and_forward(SimpleNamespace(dw=64, tx_clk_freq=156.25e6)))
