@@ -28,6 +28,10 @@ class PCS(LiteXModule):
     """10GBASE-R PCS
 
     XGMII (SDR) to transceiver 64b+2b data+header, wrapping both Tx and Rx directions.
+
+    with_pipelining adds pipeline stages for timing: True registers the TX encoder and the RX block
+    classification; 2 also registers the RX per-lane classification and decoding (one more cycle
+    of receive latency).
     """
     def __init__(self, dw=64, hdr_width=2, prbs31_enable=False, bitslip_high_cycles=1,
                  bitslip_low_cycles=8, count_125us=195, with_pipelining=False,

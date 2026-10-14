@@ -22,7 +22,7 @@ class XGMIIBaseRDecoder(LiteXModule):
     sync header selects one of the Figure 49-7 block formats from the block type field, which
     determines how the 64 payload bits map back onto XGMII characters and control bits.
     """
-    def __init__(self):
+    def __init__(self, with_pipelining=False):
         self.encoded_rx_data   = Signal(64)
         self.encoded_rx_hdr    = Signal(2)
 
@@ -81,6 +81,20 @@ class XGMIIBaseRDecoder(LiteXModule):
 
         o0_char, o0_valid = decode_o_code(data[32:36]) # O code for XGMII lane 0.
         o4_char, o4_valid = decode_o_code(data[36:40]) # O code for XGMII lane 4.
+
+        # Sync header / block type validity (49.2.4.4).
+        block_ok = Signal()
+        self.comb += block_ok.eq((hdr == SYNC_DATA) | ((hdr == SYNC_CTRL) &
+            reduce(or_, [data[0:8] == bt for bt in BLOCK_TYPES])))
+
+        # Pipelining -------------------------------------------------------------------------------
+        # With pipelining, the per-lane decoding above is registered before the block decoding
+        # below (adds a cycle of latency).
+        if with_pipelining:
+            stage = [data, hdr, decoded_ctrl, decode_err, o0_char, o0_valid, o4_char, o4_valid, block_ok]
+            stage_r = [Signal.like(x, reset_less=True) for x in stage]
+            self.sync += [r.eq(x) for r, x in zip(stage_r, stage)]
+            data, hdr, decoded_ctrl, decode_err, o0_char, o0_valid, o4_char, o4_valid, block_ok = stage_r
 
         # Block decoding (Figure 49-7) -------------------------------------------------------------
         frame      = Signal()
@@ -255,8 +269,7 @@ class XGMIIBaseRDecoder(LiteXModule):
                 })
             ),
 
-            If(~((hdr == SYNC_DATA) | ((hdr == SYNC_CTRL) &
-                 reduce(or_, [data[0:8] == bt for bt in BLOCK_TYPES]))),
+            If(~block_ok,
                 rxd_next.eq(Replicate(C(XGMII_ERROR, 8), 8)),
                 rxc_next.eq(0xff),
                 bad_next.eq(1),
