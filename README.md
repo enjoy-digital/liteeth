@@ -34,6 +34,7 @@ PHY:
   - SGMII / 2500BaseX 3.125Gbps PHYs.
   - SGMII / 1000BaseX over LVDS SelectIO 1Gbps PHYs (Titanium, UltraScale/UltraScale+).
   - 5/10/25GBASE-R PHYs on selected Xilinx 7-Series and UltraScale+ transceivers.
+  - 1000BaseX / 10GBASE-R PHYs on Gowin GW5AST-138 transceivers.
 
 Transceiver PHY architecture and porting guidance: [doc/phy_portability.md](doc/phy_portability.md).
 PHY layout and import compatibility: [doc/phy_layout.md](doc/phy_layout.md).

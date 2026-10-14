@@ -13,6 +13,7 @@ Established public imports remain available when implementation files move.
 | 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, and `wrappers/` | Canonical `liteeth.phy.serial.baser.*` imports |
 | Hardware 100G CMAC | `serial/baser/wrappers/usp_cmac.py` | Direct wrapper import; target owns generated IP |
 | Shared 7-series GTP initialization | `serial/gtp_7series.py` | `liteeth.phy.a7_gtp` |
+| Shared GW5 GTR12 helpers | `serial/gw5_serdes.py` | Used by the GW5 BASE-X and BASE-R PMAs |
 | MDIO and hardware-reset helpers | `liteeth/phy/common.py` | `liteeth.phy.common` |
 
 The standalone generator selects a PHY by looking up its YAML `phy` value in
@@ -28,7 +29,7 @@ in `wrappers/`, with device primitives and raw serialization helpers in `pma/`.
 BASE-X keeps its Ethernet PCS in one module; BASE-R uses a multi-module PCS
 for its 64b/66b interface. PMA filenames describe the transceiver family;
 wrapper filenames describe the FPGA-facing PHY. GW5's generated register/TOML
-data lives beside its adapter in `pma/gw5_config.py`.
+data lives beside each adapter in `pma/gw5_config.py`.
 The established BASE-X module names are
 registered as aliases in `liteeth.phy.__init__`, so code that patches a
 module-level PCS helper still affects the class implementation.

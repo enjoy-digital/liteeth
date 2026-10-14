@@ -55,6 +55,7 @@ from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_2500BASEX
 from liteeth.phy.serial.basex.wrappers.us_lvds import US_LVDS_1000BASEX
 
 from liteeth.phy.serial.baser.wrappers.k7_gtx import K7_GTX_5G_BASER, K7_GTX_10G_BASER
+from liteeth.phy.serial.baser.wrappers.gw5    import GW5_10G_BASER
 from liteeth.phy.serial.baser.wrappers.usp_gt import (
     USP_GTH_5G_BASER, USP_GTH_10G_BASER,
     USP_GTY_5G_BASER, USP_GTY_10G_BASER, USP_GTY_25G_BASER,
