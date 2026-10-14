@@ -388,6 +388,12 @@ class XGMII64bCSVReader:
 
 class TestXGMIIPHY(unittest.TestCase):
     def test_xgmii_rx(self):
+        self._test_xgmii_rx(with_pipelining=False)
+
+    def test_xgmii_rx_pipelined(self):
+        self._test_xgmii_rx(with_pipelining=True)
+
+    def _test_xgmii_rx(self, with_pipelining):
         # Read XGMII data from the CSV file.
         csv_file = Path(__file__).parent / "assets" / "xgmii_bus_capture.csv"
         xgmii_injector = XGMII64bCSVReader(
@@ -415,6 +421,7 @@ class TestXGMIIPHY(unittest.TestCase):
         dut = LiteEthPHYXGMIIRX(
             xgmii_interface,
             64,
+            with_pipelining = with_pipelining,
         )
 
         recvd_packets = []
