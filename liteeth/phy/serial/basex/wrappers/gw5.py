@@ -14,6 +14,7 @@ from litex.soc.interconnect.csr import CSRStorage, CSRStatus, CSRField
 from liteeth.common import *
 from liteeth.phy.serial.basex.pcs import PCS
 
+from liteeth.phy.serial.gw5_serdes import gw5_check_lane
 from liteeth.phy.serial.basex.pma.gw5_config import _serdes_csr, _serdes_toml
 from liteeth.phy.serial.basex.pma.gw5 import GW5SerDes
 
@@ -34,10 +35,7 @@ class GW5_1000BASEX(LiteXModule):
     rx_clk_freq = 125e6
 
     def __init__(self, platform, with_csr=True, pcs_kwargs=None, lane=0):
-        if platform.devicename != "GW5AST-138B":
-            raise ValueError("GW5_1000BASEX currently supports GW5AST-138B.")
-        if lane not in (0, 1):
-            raise ValueError("GW5_1000BASEX supports Q1 lanes 0 and 1.")
+        gw5_check_lane(platform, lane, "GW5_1000BASEX")
 
         self.reset     = Signal()
         self.pll_lock  = Signal()
