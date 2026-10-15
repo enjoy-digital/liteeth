@@ -30,16 +30,16 @@ from litex.build.io import DifferentialInput
 from liteeth.common import *
 from liteeth.phy.common import *
 
-# 10BASE-T Constants -------------------------------------------------------------------------------
+# LiteEth PHY 10BASE-T Constants -------------------------------------------------------------------
 
 baset_bit_time       = 100e-9 # 10Mb/s.
 baset_tp_idl_time    = 300e-9 # Start of TP_IDL: high for at least 250ns after the last bit.
 baset_ifg_time       = 9.6e-6 # 96 bit times between frames, TP_IDL included.
 baset_nlp_time       = 100e-9 # Normal Link Pulse width.
 baset_nlp_period     = 16e-3  # Normal Link Pulse period when idle (16ms +/- 8ms).
-baset_link_loss_time = 150e-3 # Link fails without a frame/link pulse received in this time (50-150ms).
+baset_link_loss_time = 150e-3 # Link fails without frames/link pulses received (50-150ms).
 
-# 10BASE-T TX --------------------------------------------------------------------------------------
+# LiteEth PHY 10BASE-T TX --------------------------------------------------------------------------
 
 class LiteEthPHY10BASETTX(LiteXModule):
     """Manchester encoder, TP_IDL, inter-frame gap and Normal Link Pulses.
@@ -63,7 +63,8 @@ class LiteEthPHY10BASETTX(LiteXModule):
         nlp_ticks       = round(baset_nlp_time/(baset_bit_time/2))
         nlp_period      = round(nlp_period/(baset_bit_time/2))
 
-        # Half-bit tick.
+        # Half-bit Tick.
+        # --------------
         tick    = Signal()
         tick_cd = Signal(max=half_bit_cycles)
         self.sync += [
@@ -73,6 +74,7 @@ class LiteEthPHY10BASETTX(LiteXModule):
         self.comb += tick.eq(tick_cd == 0)
 
         # Signals.
+        # --------
         data     = Signal(8)
         last     = Signal()
         bit      = Signal(3)
@@ -81,6 +83,7 @@ class LiteEthPHY10BASETTX(LiteXModule):
         count    = Signal(max=max(ifg_ticks, nlp_period) + 1)
 
         # FSM.
+        # ----
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
             If(tick,
@@ -156,15 +159,15 @@ class LiteEthPHY10BASETTX(LiteXModule):
             )
         )
 
-# 10BASE-T RX --------------------------------------------------------------------------------------
+# LiteEth PHY 10BASE-T RX --------------------------------------------------------------------------
 
 class LiteEthPHY10BASETRX(LiteXModule):
     """Manchester decoder.
 
-    Each bit has a transition in its middle (rising for a 1, falling for a 0) and may have one at its
-    boundary. Transitions closer than 3/4 bit time to the previous mid-bit transition are boundary
-    ones and are ignored, so the decoder follows the partner's clock. No mid-bit transition for 1.5
-    bit time ends the burst (frame: TP_IDL, link pulse: return to idle).
+    Each bit has a transition in its middle (rising for a 1, falling for a 0) and may have one at
+    its boundary. Transitions closer than 3/4 bit time to the previous mid-bit transition are
+    boundary ones and are ignored, so the decoder follows the partner's clock. No mid-bit transition
+    for 1.5 bit time ends the burst (frame: TP_IDL, link pulse: return to idle).
 
     The pair polarity is detected on the SFD and corrected. The SFD is the first byte sent to the
     MAC, as expected by its preamble checker.
@@ -180,14 +183,15 @@ class LiteEthPHY10BASETRX(LiteXModule):
 
         # With +/-1 cycle of sampling uncertainty on each transition, boundary (1/2 bit) and mid-bit
         # (1 bit) transitions can only be told apart from 6 cycles per bit.
-        bit_cycles = clk_freq*baset_bit_time
+        bit_cycles     = clk_freq*baset_bit_time
         assert bit_cycles >= 6, "10BASE-T RX clock must be >= 60MHz."
         blank_cycles   = ceil(0.75*bit_cycles)
         timeout_cycles = ceil(1.5*bit_cycles)
 
         self.comb += source.be.eq(1)
 
-        # Transition detection / bit recovery.
+        # Transition Detection / Bit Recovery.
+        # ------------------------------------
         i_d     = Signal()
         since   = Signal(max=timeout_cycles) # Cycles since the last mid-bit transition, minus 1.
         active  = Signal()
@@ -212,7 +216,8 @@ class LiteEthPHY10BASETRX(LiteXModule):
             ),
         ]
 
-        # Burst/frame decoding.
+        # Burst/Frame Decoding.
+        # ---------------------
         sr          = Signal(8)
         sr_next     = Signal(8)
         bits        = Signal(3)
@@ -269,7 +274,7 @@ class LiteEthPHY10BASETRX(LiteXModule):
             )
         )
 
-# 10BASE-T Link Monitor ----------------------------------------------------------------------------
+# LiteEth PHY 10BASE-T Link Monitor ----------------------------------------------------------------
 
 class LiteEthPHY10BASETLinkMonitor(LiteXModule):
     """Link up while frames or link pulses are received, down after link_loss_time without."""
@@ -293,7 +298,7 @@ class LiteEthPHY10BASETLinkMonitor(LiteXModule):
             )
         ]
 
-# 10BASE-T CRG -------------------------------------------------------------------------------------
+# LiteEth PHY 10BASE-T CRG -------------------------------------------------------------------------
 
 class LiteEthPHY10BASETCRG(LiteXModule):
     def __init__(self, refclk_cd, with_hw_init_reset=True):
@@ -323,14 +328,15 @@ class LiteEthPHY10BASETCRG(LiteXModule):
             AsyncResetSynchronizer(self.cd_eth_rx, reset),
         ]
 
-# 10BASE-T PHY -------------------------------------------------------------------------------------
+# LiteEth PHY 10BASE-T -----------------------------------------------------------------------------
 
 class LiteEthPHY10BASET(LiteXModule):
     """10BASE-T PHY on FPGA IOs.
 
     Parameters:
-    - pads: transmit with ``td_p``/``td_n`` (tristated when idle) or ``tx``/``tx_en`` (to an external
-      driver); receive with ``rd_p``/``rd_n`` (differential input) or ``rx`` (external comparator).
+    - pads: transmit with ``td_p``/``td_n`` (tristated when idle) or ``tx``/``tx_en`` (to an
+      external driver); receive with ``rd_p``/``rd_n`` (differential input) or ``rx`` (external
+      comparator).
     - refclk_cd: clock domain the PHY runs from (also used for the MAC's eth_rx/eth_tx domains).
     - clk_freq: refclk_cd frequency, a multiple of 20MHz, >= 60MHz (higher gives more RX margin).
     """

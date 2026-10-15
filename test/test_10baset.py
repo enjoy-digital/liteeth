@@ -215,7 +215,8 @@ class TestBASETRX(unittest.TestCase):
         events += [("nlp",), ("idle", 2000)]
         segments = line_waveform(events)
         for phase in phases:
-            with self.subTest(clk_freq=clk_freq, ppm=ppm, jitter=jitter, inverted=inverted, phase=phase):
+            with self.subTest(clk_freq=clk_freq, ppm=ppm, jitter=jitter, inverted=inverted,
+                phase=phase):
                 samples = sample_waveform(segments, 1e9/clk_freq, phase=phase*1e9/clk_freq,
                     ppm=ppm, jitter=jitter, inverted=inverted, seed=int(phase*100))
                 frames, stats = self.run_rx(samples, clk_freq, len(payloads))

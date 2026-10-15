@@ -79,7 +79,8 @@ _baset_io = [
 # Bench SoC ----------------------------------------------------------------------------------------
 
 class BenchSoC(SoCCore):
-    def __init__(self, sys_clk_freq=int(100e6), baset_clk_freq=int(100e6), ip_address="192.168.1.50"):
+    def __init__(self, sys_clk_freq=int(100e6), baset_clk_freq=int(100e6),
+        ip_address = "192.168.1.50"):
         platform = digilent_arty.Platform()
         platform.add_extension(_baset_io)
 
