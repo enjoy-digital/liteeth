@@ -9,6 +9,7 @@ Established public imports remain available when implementation files move.
 | MII, RMII, GMII, XGMII | `liteeth/phy/parallel/` | Original module names and the classes in `liteeth.phy` |
 | Vendor RGMII | `liteeth/phy/parallel/rgmii/` | Original vendor module names and the classes in `liteeth.phy` |
 | Simulation model | `liteeth/phy/simulation/model.py` | `liteeth.phy.model` |
+| 10BASE-T on FPGA IOs | `serial/baset.py` | `LiteEthPHY10BASET` in `liteeth.phy` |
 | 1000/2500BASE-X | `serial/basex/` with `pcs.py`, `pma/`, and `wrappers/` | Original module names and the classes in `liteeth.phy` |
 | 5/10/25GBASE-R | `serial/baser/` with `pcs/`, `pma/`, and `wrappers/` | Canonical `liteeth.phy.serial.baser.*` imports |
 | Hardware 100G CMAC | `serial/baser/wrappers/usp_cmac.py` | Direct wrapper import; target owns generated IP |

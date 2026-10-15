@@ -29,6 +29,7 @@ design flow by generating the verilog rtl that you will use as a standard core.
 [> Features
 -----------
 PHY:
+  - 10BASE-T PHY directly on FPGA IOs (experimental, see bench/arty_10baset.py).
   - MII, RMII 100Mbps PHYs.
   - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
   - SGMII / 2500BaseX 3.125Gbps PHYs.

@@ -85,6 +85,10 @@ class TestExamples(unittest.TestCase):
         errors = build_config("udp_xgmii_jumbo")
         self.assertEqual(errors, 0)
 
+    def test_udp_10baset(self):
+        errors = build_config("udp_10baset")
+        self.assertEqual(errors, 0)
+
 # Test Generated Core ------------------------------------------------------------------------------
 
 class TestGeneratedCore(unittest.TestCase):

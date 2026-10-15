@@ -1,0 +1,31 @@
+#
+# This file is part of LiteEth.
+#
+# Copyright (c) 2026 Florent Kermarrec <florent@enjoy-digital.fr>
+# SPDX-License-Identifier: BSD-2-Clause
+
+# PHY --------------------------------------------------------------------------
+# 10BASE-T on FPGA IOs: the core exposes baset_tx/baset_tx_en/baset_rx. The user drives the transmit
+# pair (td_p = tx, td_n = ~tx, both tristated when tx_en is low) and provides the receive pair's
+# differential input on rx.
+phy       : LiteEthPHY10BASET
+vendor    : xilinx
+toolchain : vivado
+
+# Core -------------------------------------------------------------------------
+clk_freq    : 100e6 # PHY runs from the core clock: multiple of 20MHz, >= 60MHz.
+core        : udp
+mac_address : 0x10e2d5000000
+ip_address  : 192.168.1.50
+data_width  : 8
+
+# UDP Ports --------------------------------------------------------------------
+udp_ports : {
+  "udp0" : {
+    "udp_port"      : 2000,
+    "ip_address"    : "192.168.1.100",
+    "data_width"    : 8,
+    "tx_fifo_depth" : 64,
+    "rx_fifo_depth" : 64,
+  },
+}
