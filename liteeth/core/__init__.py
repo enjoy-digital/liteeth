@@ -55,6 +55,7 @@ class LiteEthIPCore(LiteXModule):
             rx_cdc_buffered        = rx_cdc_buffered,
             eth_mtu                = eth_mtu,
             with_store_and_forward = with_store_and_forward,
+            sys_clk_freq           = clk_freq,
         )
 
         # ARP.

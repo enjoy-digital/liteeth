@@ -8,7 +8,7 @@
 # Copyright (c) 2023 LumiGuide Fietsdetectie B.V. <goemansrowan@gmail.com>
 # SPDX-License-Identifier: BSD-2-Clause
 
-from migen.genlib.cdc import PulseSynchronizer
+from migen.genlib.cdc import MultiReg, PulseSynchronizer
 
 from litex.gen import *
 
@@ -19,6 +19,47 @@ from liteeth.common import *
 from liteeth.fifo import PacketDropFIFO
 from liteeth.mac import crc, gap, padding, preamble
 from liteeth.mac.common import *
+
+# MAC CDC ------------------------------------------------------------------------------------------
+
+class LiteEthMACCDC(LiteXModule):
+    """Stream clock-domain crossing with a reset common to both clock domains.
+
+    sys and the PHY clock domains are reset independently (SoC reboot, PHY init/restart, ex
+    1000BASE-X autoneg). A one-sided AsyncFIFO reset desynchronizes its pointers, replaying stale
+    words or stalling the datapath, so either reset also resets the other side: the read side reset
+    follows the write side one and is released last. Domain resets are expected to last at least a
+    few cycles of the other domain.
+    """
+    def __init__(self, layout, cd_from, cd_to, depth, buffered):
+        self.sink       = stream.Endpoint(layout)
+        self.source     = stream.Endpoint(layout)
+        self.ext_rst_to = Signal() # Write side reset, synchronized to cd_to (resets the read side).
+
+        # # #
+
+        # Common Reset.
+        write_ext_rst = Signal() # cd_to reset, synchronized to cd_from.
+        write_rst     = Signal() # Write side reset (cd_from).
+        self.specials += [
+            MultiReg(ResetSignal(cd_to, allow_reset_less=True), write_ext_rst, odomain=cd_from),
+            MultiReg(write_rst, self.ext_rst_to, odomain=cd_to),
+        ]
+        self.comb += write_rst.eq(ResetSignal(cd_from, allow_reset_less=True) | write_ext_rst)
+
+        # AsyncFIFO.
+        cdc = stream.AsyncFIFO(layout, depth, buffered=buffered)
+        cdc = ResetInserter(["write", "read"])(cdc)
+        cdc = ClockDomainsRenamer({"write": cd_from, "read": cd_to})(cdc)
+        self.submodules += cdc
+        self.comb += [
+            cdc.reset_write.eq(write_ext_rst),
+            cdc.reset_read.eq(self.ext_rst_to),
+            self.sink.connect(cdc.sink),
+            cdc.source.connect(self.source, omit={"valid"}),
+            # Mask the read side while either side is in reset.
+            self.source.valid.eq(cdc.source.valid & ~self.ext_rst_to & ~ResetSignal(cd_to, allow_reset_less=True)),
+        ]
 
 # MAC Core -----------------------------------------------------------------------------------------
 
@@ -41,6 +82,8 @@ class LiteEthMACCore(LiteXModule):
     - rx_cdc_buffered       : Use a buffered RX CDC FIFO.
     - eth_mtu               : Maximum Ethernet frame size used by padding checks.
     - with_store_and_forward: Store-and-forward packet FIFOs at the PHY: True, False or "auto".
+    - sys_clk_freq          : System clock frequency, used by "auto" store-and-forward (defaults to the
+                              SoC one when available).
     """
     def __init__(self, phy, dw,
         with_sys_datapath      = False,
@@ -52,6 +95,7 @@ class LiteEthMACCore(LiteXModule):
         rx_cdc_buffered        = False,
         eth_mtu                = eth_mtu_default,
         with_store_and_forward = "auto",
+        sys_clk_freq           = None,
         ):
 
         # Endpoints.
@@ -87,7 +131,10 @@ class LiteEthMACCore(LiteXModule):
         # See doc/packet_contracts.md for pipeline ownership and the maximum-frame contract.
         assert with_store_and_forward in [True, False, "auto"]
         if with_store_and_forward == "auto":
-            with_store_and_forward = getattr(phy, "with_store_and_forward", eth_needs_store_and_forward(phy))
+            if sys_clk_freq is None:
+                sys_clk_freq = getattr(LiteXContext.top, "sys_clk_freq", None)
+            with_store_and_forward = getattr(phy, "with_store_and_forward",
+                eth_needs_store_and_forward(phy, dw=dw, sys_clk_freq=sys_clk_freq))
         self.with_store_and_forward = with_store_and_forward
 
         # CSRs.
@@ -103,15 +150,26 @@ class LiteEthMACCore(LiteXModule):
             def __init__(self):
                 # Pipeline stages are appended in packet-processing order.
                 self.pipeline = []
+                # sys reset, synchronized to eth_tx by the CDC.
+                self.cdc_rst  = Signal()
+
+            def to_cd(self, module, cd):
+                """Move a stage to its clock domain; eth_tx stages are also reset with sys, so no
+                partial frame is left behind (ex in the packet FIFO) on a SoC reset."""
+                if cd == "eth_tx":
+                    module = ResetInserter()(module)
+                    self.comb += module.reset.eq(self.cdc_rst)
+                return ClockDomainsRenamer(cd)(module)
 
             def add_cdc(self, dw):
                 """Add a sys -> eth_tx clock-domain crossing stage."""
-                tx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+                tx_cdc = LiteEthMACCDC(eth_phy_description(dw),
                     cd_from  = "sys",
                     cd_to    = "eth_tx",
                     depth    = tx_cdc_depth,
                     buffered = tx_cdc_buffered,
                 )
+                self.comb += self.cdc_rst.eq(tx_cdc.ext_rst_to)
                 self.submodules += tx_cdc
                 self.pipeline.append(tx_cdc)
 
@@ -120,14 +178,14 @@ class LiteEthMACCore(LiteXModule):
                 tx_converter = stream.StrideConverter(
                     description_from = eth_phy_description(core_dw),
                     description_to   = eth_phy_description(phy_dw))
-                tx_converter = ClockDomainsRenamer(cd)(tx_converter)
+                tx_converter = self.to_cd(tx_converter, cd)
                 self.submodules += tx_converter
                 self.pipeline.append(tx_converter)
 
             def add_padding(self):
                 """Add minimum-frame padding insertion."""
                 tx_padding = padding.LiteEthMACPaddingInserter(datapath_dw, (eth_min_frame_length - eth_fcs_length))
-                tx_padding = ClockDomainsRenamer(cd_tx)(tx_padding)
+                tx_padding = self.to_cd(tx_padding, cd_tx)
                 self.submodules += tx_padding
                 self.pipeline.append(tx_padding)
 
@@ -135,21 +193,21 @@ class LiteEthMACCore(LiteXModule):
                 """Add FCS insertion."""
                 tx_crc = crc.LiteEthMACCRC32Inserter(eth_phy_description(datapath_dw))
                 tx_crc = BufferizeEndpoints({"sink": DIR_SINK})(tx_crc) # FIXME: Still required?
-                tx_crc = ClockDomainsRenamer(cd_tx)(tx_crc)
+                tx_crc = self.to_cd(tx_crc, cd_tx)
                 self.submodules += tx_crc
                 self.pipeline.append(tx_crc)
 
             def add_preamble(self):
                 """Add Ethernet preamble insertion."""
                 tx_preamble = preamble.LiteEthMACPreambleInserter(datapath_dw)
-                tx_preamble = ClockDomainsRenamer(cd_tx)(tx_preamble)
+                tx_preamble = self.to_cd(tx_preamble, cd_tx)
                 self.submodules += tx_preamble
                 self.pipeline.append(tx_preamble)
 
             def add_gap(self):
                 """Add inter-frame gap insertion in the PHY TX domain."""
                 tx_gap = gap.LiteEthMACGap(phy_dw, cycles=getattr(phy, "tx_gap_cycles", None))
-                tx_gap = ClockDomainsRenamer("eth_tx")(tx_gap)
+                tx_gap = self.to_cd(tx_gap, "eth_tx")
                 self.submodules += tx_gap
                 self.pipeline.append(tx_gap)
 
@@ -157,7 +215,7 @@ class LiteEthMACCore(LiteXModule):
                 """Hold each frame whole before starting it, so the PHY can be fed at line rate."""
                 if eth_needs_pipelining(phy):
                     tx_buffer = stream.Buffer(eth_phy_description(phy_dw), pipe_valid=True, pipe_ready=True)
-                    tx_buffer = ClockDomainsRenamer("eth_tx")(tx_buffer)
+                    tx_buffer = self.to_cd(tx_buffer, "eth_tx")
                     self.submodules += tx_buffer
                     self.pipeline.append(tx_buffer)
 
@@ -166,7 +224,7 @@ class LiteEthMACCore(LiteXModule):
                     param_depth   = 4,
                     buffered      = True,
                 )
-                tx_packet_fifo = ClockDomainsRenamer("eth_tx")(tx_packet_fifo)
+                tx_packet_fifo = self.to_cd(tx_packet_fifo, "eth_tx")
                 self.submodules += tx_packet_fifo
                 self.pipeline.append(tx_packet_fifo)
 
@@ -276,7 +334,7 @@ class LiteEthMACCore(LiteXModule):
 
             def add_cdc(self, dw):
                 """Add an eth_rx -> sys clock-domain crossing stage."""
-                rx_cdc = stream.ClockDomainCrossing(eth_phy_description(dw),
+                rx_cdc = LiteEthMACCDC(eth_phy_description(dw),
                     cd_from  = "eth_rx",
                     cd_to    = "sys",
                     depth    = rx_cdc_depth,

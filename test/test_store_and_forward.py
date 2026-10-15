@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 from migen import *
 
+from litex.gen import LiteXContext
+
 from litex.soc.interconnect import stream
 
 from liteeth.common import eth_mtu_default, eth_needs_store_and_forward, eth_packet_fifo_depth
@@ -169,6 +171,14 @@ class TestPacketFIFODepth(unittest.TestCase):
 # Test Store-and-Forward Selection -----------------------------------------------------------------
 
 class TestStoreAndForwardAuto(unittest.TestCase):
+    def setUp(self):
+        # "auto" falls back to LiteXContext.top's sys_clk_freq; a SoC built by an earlier test
+        # stays there, so clear it for these tests to be independent of test ordering.
+        self._top, LiteXContext.top = LiteXContext.top, None
+
+    def tearDown(self):
+        LiteXContext.top = self._top
+
     def test_throughput_from_width_and_clock(self):
         # XGMII sets its 64-bit width per instance; its class attribute says 8.
         self.assertTrue(eth_needs_store_and_forward(SimpleNamespace(dw=64, tx_clk_freq=156.25e6)))
@@ -176,6 +186,24 @@ class TestStoreAndForwardAuto(unittest.TestCase):
         self.assertFalse(eth_needs_store_and_forward(SimpleNamespace(dw=8, tx_clk_freq=125e6)))
         # No transmit clock at all, like the simulation models.
         self.assertFalse(eth_needs_store_and_forward(SimpleNamespace(dw=8)))
+
+    def test_throughput_from_sys_datapath(self):
+        gigabit = SimpleNamespace(dw=8, tx_clk_freq=125e6)
+        # A sys datapath slower than the PHY can't feed it without gaps (ex 32-bit at 24MHz).
+        self.assertTrue( eth_needs_store_and_forward(gigabit, dw=32, sys_clk_freq=24e6))
+        self.assertTrue( eth_needs_store_and_forward(gigabit, dw=8,  sys_clk_freq=100e6))
+        self.assertFalse(eth_needs_store_and_forward(gigabit, dw=32, sys_clk_freq=50e6))
+        self.assertFalse(eth_needs_store_and_forward(gigabit, dw=8,  sys_clk_freq=125e6))
+        # Unknown sys clock: PHY-only heuristic.
+        self.assertFalse(eth_needs_store_and_forward(gigabit, dw=8))
+        # Sub-Gigabit PHYs overstate their rate (MII/RMII) and are not checked.
+        rmii = SimpleNamespace(dw=8, tx_clk_freq=50e6)
+        self.assertFalse(eth_needs_store_and_forward(rmii, dw=8, sys_clk_freq=12e6))
+
+    def test_mac_core_sys_clk_freq(self):
+        for sys_clk_freq, expected in [(24e6, True), (125e6, False)]:
+            core = LiteEthMACCore(phy=self.model_phy(self.SLOW), dw=8, sys_clk_freq=sys_clk_freq)
+            self.assertEqual(core.with_store_and_forward, expected, sys_clk_freq)
 
     FAST, SLOW = 312.5e6, 125e6
     SETTINGS   = [
@@ -207,7 +235,7 @@ class TestStoreAndForwardAuto(unittest.TestCase):
     def test_udp_ip_core(self):
         for tx_clk_freq, setting, expected in self.SETTINGS:
             core = LiteEthUDPIPCore(phy=self.model_phy(tx_clk_freq), mac_address=0x10e2d5000000,
-                ip_address="192.168.1.50", clk_freq=int(100e6), with_store_and_forward=setting)
+                ip_address="192.168.1.50", clk_freq=int(125e6), with_store_and_forward=setting)
             self.assertEqual(core.mac.core.with_store_and_forward, expected, (tx_clk_freq, setting))
             self.assertEqual(core.udp.crossbar.with_store_and_forward, expected,
                 (tx_clk_freq, setting))
