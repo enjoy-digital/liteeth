@@ -58,8 +58,10 @@ store-and-forward FIFO alone does not add an error-rejection policy.
   to proceed. RX accepts echo requests with code zero.
 - **Etherbone** checks the packet version and 32-bit address/data sizes. A record
   must contain exactly the base words and operations specified by its counts,
-  fit `buffer_depth` words, have full byte masks and no errors, and use the
-  supported incrementing address mode. Unsupported record flags are rejected.
+  fit `buffer_depth` operations plus its base word(s) (so up to `buffer_depth`
+  writes or reads, `buffer_depth - 1` for a mixed record), have full byte masks
+  and no errors, and use the supported incrementing address mode. Unsupported
+  record flags are rejected.
   No Wishbone access is issued before record validation. Requests are serialized
   through reply completion to preserve the peer address/port. A Wishbone target
   must eventually acknowledge an issued transaction; this change adds no bus

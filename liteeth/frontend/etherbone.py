@@ -197,10 +197,11 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
         # # #
 
         assert 2 <= buffer_depth <= 256
+        record_words = buffer_depth + 1 # Data words + base address.
         # Validate the entire record before issuing any bus accesses. Oversized records are drained
         # even when the storage is full, so a malformed count cannot deadlock reception.
         self.fifo = fifo = PacketDropFIFO(eth_etherbone_record_description(32),
-            payload_depth = 2**log2_int(buffer_depth, need_pow2=False),
+            payload_depth = 2**log2_int(record_words, need_pow2=False),
             param_depth   = 1,
         )
         # Backpressure between records while executing the previous record. Within a record the
@@ -226,16 +227,16 @@ class LiteEthEtherboneRecordReceiver(LiteXModule):
         self.comb += [
             expected.eq(sink.wcount + sink.rcount + (sink.wcount != 0) + (sink.rcount != 0)),
             fifo.discard.eq(
-                (expected > buffer_depth) | (expected == 0) |
+                (expected > record_words) | (expected == 0) |
                 (sink.be != 0xf) | ((sink.error & sink.be) != 0) |
                 sink.bca | sink.rca | sink.rff | sink.cyc | sink.wca | sink.wff |
-                (received >= buffer_depth) |
+                (received >= record_words) |
                 (sink.last & (received + 1 != expected))),
         ]
         self.sync += If(sink.valid & sink.ready,
             If(sink.last,
                 received.eq(0),
-            ).Elif(received < buffer_depth,
+            ).Elif(received < record_words,
                 received.eq(received + 1),
             )
         )
