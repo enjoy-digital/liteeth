@@ -53,6 +53,35 @@ class TestPacketContracts(unittest.TestCase):
                     got = exercise_stream(dut, bad + good, ["we", "addr", "data", "last"])
                     self.assertEqual(got, [dict(we=1, addr=64, data=0xdeadbeef, last=1)])
 
+    def test_etherbone_record_size_limit(self):
+        # A record holds up to buffer_depth operations plus its base word(s).
+        def record(wcount, rcount):
+            words = []
+            if wcount:
+                words += [0x100] + [0x1000 + i for i in range(wcount)]
+            if rcount:
+                words += [0x800] + [4*i for i in range(rcount)]
+            return packet_beats(b"".join(w.to_bytes(4, "little") for w in words), 32,
+                wcount=wcount, rcount=rcount, byte_enable=15, error=0, wff=0)
+        good = packet_beats(bytes.fromhex("00010000efbeadde"), 32,
+            wcount=1, rcount=0, byte_enable=15, error=0, wff=0)
+        for depth in [2, 3, 8, 16]:
+            for wcount, rcount, accepted in [
+                (depth,     0,         True),
+                (0,         depth,     True),
+                (1,         depth - 2, True),
+                (depth + 1, 0,         False),
+                (0,         depth + 1, False),
+                (1,         depth - 1, False),
+            ]:
+                if wcount + rcount == 0:
+                    continue
+                with self.subTest(depth=depth, wcount=wcount, rcount=rcount):
+                    dut = LiteEthEtherboneRecordReceiver(buffer_depth=depth)
+                    got = exercise_stream(dut, record(wcount, rcount) + good, ["we", "addr", "last"])
+                    self.assertEqual(len(got) - 1, (wcount + rcount) if accepted else 0)
+                    self.assertEqual(got[-1], dict(we=1, addr=64, last=1))
+
     def test_icmp_echo_rejects_bad_packets(self):
         for dw in [8, 32, 64, 128, 256, 512]:
             with self.subTest(dw=dw):
