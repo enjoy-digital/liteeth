@@ -360,8 +360,16 @@ class LiteEthIP(LiteXModule):
             tx.source.connect(mac_port.sink),
             mac_port.source.connect(rx.sink)
         ]
+        # RX Buffer: registers valid/data and ready between IP RX and the upper layers to break the
+        # long combinational paths through the stack (ex: ready path from MAC TX to MAC RX through
+        # Etherbone) when the core runs in the sys clock domain.
+        self.rx_buffer = rx_buffer = stream.Buffer(eth_ipv4_user_description(dw),
+            pipe_valid = True,
+            pipe_ready = True,
+        )
         self.crossbar = crossbar = LiteEthIPV4Crossbar(dw)
         self.comb += [
             crossbar.master.source.connect(tx.sink),
-            rx.source.connect(crossbar.master.sink)
+            rx.source.connect(rx_buffer.sink),
+            rx_buffer.source.connect(crossbar.master.sink),
         ]
