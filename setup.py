@@ -20,7 +20,7 @@ setup(
     download_url                  = "https://github.com/enjoy-digital/liteeth",
     test_suite                    = "test",
     license                       = "BSD",
-    python_requires               = "~=3.7",
+    python_requires               = ">=3.9",
     install_requires              = ["pyyaml", "litex", "liteiclink"],
     extras_require                = {"develop": ["setuptools"]},
     packages                      = find_packages(exclude=("test*", "sim*", "doc*", "examples*")),

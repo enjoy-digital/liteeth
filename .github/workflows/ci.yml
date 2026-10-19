@@ -4,21 +4,26 @@ on: [push, pull_request]
 
 jobs:
   build:
+    name: test (py${{ matrix.python-version }})
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.12"]
     steps:
       # Checkout Repository
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       # Install Tools
       - name: Install Tools
         run: |
-          sudo apt-get install wget build-essential iverilog verilator
+          sudo apt-get install -y wget build-essential iverilog verilator
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: ${{ matrix.python-version }}
           cache: "pip"
           cache-dependency-path: "setup.py"
 
