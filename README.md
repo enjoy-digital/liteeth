@@ -4,7 +4,7 @@
                                     / /__/ / __/ -_) _// __/ _ \
                                    /____/_/\__/\__/___/\__/_//_/
 
-                                 Copyright 2012-2024 / EnjoyDigital
+                                 Copyright 2012-2026 / EnjoyDigital
 
                              A small footprint and configurable Ethernet core
                                       powered by Migen & LiteX
@@ -30,37 +30,63 @@ design flow by generating the verilog rtl that you will use as a standard core.
 -----------
 PHY:
   - 10BASE-T PHY directly on FPGA IOs (experimental, see bench/arty_10baset.py).
-  - MII, RMII 100Mbps PHYs.
-  - GMII / RGMII / SGMII / 1000BaseX 1Gbps PHYs.
-  - SGMII / 2500BaseX 3.125Gbps PHYs.
-  - SGMII / 1000BaseX over LVDS SelectIO 1Gbps PHYs (Titanium, UltraScale/UltraScale+).
-  - 5/10/25GBASE-R PHYs on selected Xilinx 7-Series and UltraScale+ transceivers.
-  - 1000BaseX / 10GBASE-R PHYs on Gowin GW5AST-138 transceivers.
+  - MII / RMII 100Mbps PHYs.
+  - GMII / RGMII / SGMII / 1000BASE-X 1Gbps PHYs.
+  - SGMII / 2500BASE-X 3.125Gbps PHYs.
+  - SGMII / 1000BASE-X over LVDS SelectIO 1Gbps PHYs (Titanium, UltraScale/UltraScale+).
+  - XGMII 10Gbps interface to an external PHY or hard IP.
+  - 5/10/25GBASE-R native PHYs on Xilinx 7-Series and UltraScale+ transceivers.
+  - 1000BASE-X / 10GBASE-R native PHYs on Gowin GW5AST-138 transceivers.
+  - 100G hardware MAC adapter for the UltraScale+ CMAC (hardware validation pending).
 
-Transceiver PHY architecture and porting guidance: [doc/phy_portability.md](doc/phy_portability.md).
-PHY layout and import compatibility: [doc/phy_layout.md](doc/phy_layout.md).
-Packet byte masks and migration: [doc/stream_byte_enables.md](doc/stream_byte_enables.md).
-
-| PHY       | All | ECP5 | Spartan6 | Trion | Titanium | 7-Series | Ultrascale(+) |
-|-----------|-----|------|----------|-------|----------|----------|---------------|
-| MII       |  X  |  X   |     X    |   X   |     X    |     X    |       X       |
-| RMII      |  X  |  X   |     X    |   X   |     X    |     X    |       X       |
-| GMII      |     |      |     X    |       |          |     X    |       X       |
-| RGMII     |     |  X   |     X    |   X   |     X    |     X    |       X       |
-| SGMII     |     |      |          |       |          |     X    |       X       |
-| LVDS      |     |      |          |       |     X    |          |       X       |
-| 5GBASE-R  |     |      |          |       |          |     X    |       X       |
-| 10GBASE-R |     |      |          |       |          |     X    |       X       |
-| 25GBASE-R |     |      |          |       |          |          |       X       |
-
+| PHY                 | ECP5 | Spartan6 | Trion | Titanium | 7-Series | UltraScale | UltraScale+ | Gowin GW5 | Agilex |
+|---------------------|------|----------|-------|----------|----------|------------|-------------|-----------|--------|
+| 10BASE-T            |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
+| MII                 |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
+| RMII                |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
+| GMII                |      |    X     |       |          |     X    |      X     |      X      |           |        |
+| RGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
+| SGMII / 1000BASE-X  |      |          |       |          |     X    |      X     |      X      |     X     |        |
+| SGMII / 2500BASE-X  |      |          |       |          |     X    |      X     |      X      |           |        |
+| LVDS 1000BASE-X     |      |          |       |     X    |          |      X     |      X      |           |        |
+| XGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
+| 5GBASE-R            |      |          |       |          |     X    |            |      X      |           |        |
+| 10GBASE-R           |      |          |       |          |     X    |            |      X      |     X     |        |
+| 25GBASE-R           |      |          |       |          |          |            |      X      |           |        |
+| 100G (CMAC)         |      |          |       |          |          |            |      X      |           |        |
 
 Core:
-  - Configurable MAC (HW or SW interface)
-  - ARP / ICMP / UDP (HW or SW) / DHCP
+  - Configurable MAC (HW or SW interface), 8 to 512-bit datapaths.
+  - ARP / ICMP / IGMP (joiner) / UDP (HW or SW) / DHCP.
+  - PTP (IEEE 1588v2) slave core, Layer 3 (UDP/IPv4) transport.
 
 Frontend:
-  - Etherbone (Wishbone over UDP: Slave or Master support)
-  - UDP Streaming.
+  - Etherbone (Wishbone over UDP: Slave or Master support).
+  - UDP Streaming (streamer and raw ports).
+  - AXI-Stream adapter for frame-oriented hardware MACs (e.g. UltraScale+ CMAC).
+
+[> Documentation
+----------------
+Architecture and datapaths:
+  - [doc/packet_contracts.md](doc/packet_contracts.md): packet contracts and pipeline ownership.
+  - [doc/stream_byte_enables.md](doc/stream_byte_enables.md): byte-enabled packet streams and migration.
+  - [doc/high_speed_datapaths.md](doc/high_speed_datapaths.md): high-speed (wide) packet datapaths.
+  - [doc/mac_storage.md](doc/mac_storage.md): MAC packet storage bounds.
+  - [doc/ipv4_receive.md](doc/ipv4_receive.md): IPv4 receive validation.
+
+PHYs:
+  - [doc/phy_layout.md](doc/phy_layout.md): PHY layout and import compatibility.
+  - [doc/phy_portability.md](doc/phy_portability.md): transceiver PHY architecture and porting guidance.
+  - [doc/baser.md](doc/baser.md): native BASE-R PHYs (5/10/25G).
+  - [doc/a7_5g.md](doc/a7_5g.md): Artix-7 5GBASE-R benches.
+  - [doc/gw5_1000basex.md](doc/gw5_1000basex.md) / [doc/gw5_10gbaser.md](doc/gw5_10gbaser.md): Gowin GW5 PHYs.
+  - [doc/100g.md](doc/100g.md) / [doc/100g_pcs.md](doc/100g_pcs.md): 100G hardware MAC and native 100G PCS reference.
+
+Protocols:
+  - [doc/ptp.md](doc/ptp.md): PTP core organization.
+
+Integration:
+  - [doc/gen.md](doc/gen.md): standalone core generation (`liteeth_gen`).
 
 [> FPGA Proven
 ---------------
@@ -72,9 +98,10 @@ LiteEth is already used in commercial and open-source designs:
 
 [> Possible improvements
 ------------------------
-- add standardized interfaces (AXI, Avalon-ST)
-- add DMA interface to MAC
-- add more documentation
+- add a DMA interface to the MAC (SRAM slots are the only software interface today)
+- add PTP Master / Boundary Clock and Layer 2 (Ethernet) transport
+- add AXI-Stream / Avalon-ST user ports to the standalone core
+- validate the Artix-7 5GBASE-R and UltraScale+ 100G benches on hardware
 - ... See below Support and consulting :)
 
 If you want to support these features, please contact us at florent [AT]
@@ -82,21 +109,30 @@ enjoy-digital.fr.
 
 [> Getting started
 ------------------
-1. Install Python 3.6+ and FPGA vendor's development tools.
+1. Install Python 3.9+ and FPGA vendor's development tools.
 2. Install LiteX and the cores by following the LiteX's wiki [installation guide](https://github.com/enjoy-digital/litex/wiki/Installation).
 3. You can find examples of integration of the core with LiteX in LiteX-Boards and in the examples directory.
 
+[> Standalone core generation
+-----------------------------
+A standalone Verilog core (MAC on a Wishbone/AXI-Lite bus, or hardware UDP/IP stack with streaming
+ports) can be generated from a YAML description:
+```sh
+$ liteeth_gen examples/wishbone_mii.yml
+```
+See [doc/gen.md](doc/gen.md) for the flavours, YAML keys and examples.
+
 [> Tests
 --------
-Unit tests are available in ./test/.
+Unit tests are available in ./test/ (some RTL tests require Icarus Verilog and Verilator).
 To run all the unit tests:
 ```sh
-$ ./setup.py test
+$ python3 -m pytest -v
 ```
 
 Tests can also be run individually:
 ```sh
-$ python3 -m unittest test.test_name
+$ python3 -m pytest -v test/test_name.py
 ```
 
 [> License
