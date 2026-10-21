@@ -37,7 +37,6 @@ PHY:
   - XGMII 10Gbps interface to an external PHY or hard IP.
   - 5/10/25GBASE-R native PHYs on Xilinx 7-Series and UltraScale+ transceivers.
   - 1000BASE-X / 10GBASE-R native PHYs on Gowin GW5AST-138 transceivers.
-  - 1000BASE-X native PHY on GateMate CC_SERDES (experimental).
   - 100G hardware MAC adapter for the UltraScale+ CMAC (hardware validation pending).
 
 | PHY                 | ECP5 | Spartan6 | Trion | Titanium | 7-Series | UltraScale | UltraScale+ | Gowin GW5 | Agilex |
@@ -81,7 +80,6 @@ PHYs:
   - [doc/baser.md](doc/baser.md): native BASE-R PHYs (5/10/25G).
   - [doc/a7_5g.md](doc/a7_5g.md): Artix-7 5GBASE-R benches.
   - [doc/gw5_1000basex.md](doc/gw5_1000basex.md) / [doc/gw5_10gbaser.md](doc/gw5_10gbaser.md): Gowin GW5 PHYs.
-  - [doc/gatemate_1000basex.md](doc/gatemate_1000basex.md): GateMate 1000BASE-X PHY.
   - [doc/100g.md](doc/100g.md) / [doc/100g_pcs.md](doc/100g_pcs.md): 100G hardware MAC and native 100G PCS reference.
 
 Protocols:
