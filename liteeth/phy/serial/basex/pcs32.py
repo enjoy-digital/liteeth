@@ -487,6 +487,7 @@ class PCS32(LiteXModule):
         # TX Config.
         # ----------
         self.comb += [
+            linkdown.eq(lp_abi.o == 0),
             If(~config_empty,
                 self.tx.config_reg[0].eq(0),                            # No SGMII support
                 self.tx.config_reg[5].eq(1),                            # 1000BASE-X: Full-duplex.
