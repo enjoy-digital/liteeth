@@ -1,8 +1,9 @@
 #
-# This file is part of MiSoC and has been adapted/modified for LiteEth.
+# This file is part of LiteEth.
 #
 # Copyright (c) 2018-2020 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -55,7 +56,6 @@ class PCSTX32(LiteXModule):
         # ----
         self.fsm = fsm = FSM()
         fsm.act("START",
-            sink.ready.eq(1),
             NextValue(char_is_k, 0b0001),
             NextValue(data[0:8], K(28, 5)),
             # Wait for valid Config.
@@ -68,6 +68,7 @@ class PCSTX32(LiteXModule):
                 NextValue(data[16:32], self.config_reg),
             # Wait for valid Data.
             ).Else(
+                sink.ready.eq(1),
                 If(sink.valid,
                     NextValue(data, Cat(
                         K(27, 7), # Start-of-packet /S/.
@@ -75,10 +76,11 @@ class PCSTX32(LiteXModule):
                     )),
                     NextState("DATA")
                 ).Else(
+                    NextValue(char_is_k, 0b0101),
                     NextValue(data, Cat( # IDLE, disparity handeled by CC_SERDES
                         K(28, 5),
                         D(5, 6), 
-                        D(5, 6), 
+                        K(28, 5),
                         D(5, 6), 
                     )),
                 )
@@ -87,53 +89,63 @@ class PCSTX32(LiteXModule):
         fsm.act("DATA",
             # Send Data.
             sink.ready.eq(1),
-            If(sink.valid,
-                If(sink.last,
-                    If(sink.be == 0b1111,
-                        NextValue(char_is_k, 0b0000),
-                        NextValue(data, sink.data),
-                    ),
-                    If(sink.be == 0b0111,
-                        NextValue(char_is_k, 0b1000),
-                        NextValue(data, Cat(
-                            sink.data[0:24],
-                            K(29, 7), # End-of-frame /T/.
-                            )),
-                        NextState("START")
-                    ),
-                    If(sink.be == 0b0011,
-                        NextValue(char_is_k, 0b1100),
-                        NextValue(data, Cat(
-                            sink.data[0:16],
-                            K(29, 7), # End-of-frame /T/.
-                            K(23, 7), # Carrier Extend /R/.
-                            )),
-                        NextState("START")
-                    ),
-                    If(sink.be == 0b0001,
-                        NextValue(char_is_k, 0b1110),
-                        NextValue(data, Cat(
-                            sink.data[0:8],
-                            K(29, 7), # End-of-frame /T/.
-                            K(23, 7), # Carrier Extend /R/.
-                            K(23, 7),
-                            )),
-                        NextState("START")
-                    ),
-                ).Else(
+            If(sink.last,
+                If(sink.be == 0b1111,
                     NextValue(char_is_k, 0b0000),
                     NextValue(data, sink.data),
+                    NextState("END-TRAM")
+                ),
+                If(sink.be == 0b0111,
+                    NextValue(char_is_k, 0b1000),
+                    NextValue(data, Cat(
+                        sink.data[0:24],
+                        K(29, 7), # End-of-frame /T/.
+                        )),
+                    NextState("CARRIER-EXT")
+                ),
+                If(sink.be == 0b0011,
+                    NextValue(char_is_k, 0b1100),
+                    NextValue(data, Cat(
+                        sink.data[0:16],
+                        K(29, 7), # End-of-frame /T/.
+                        K(23, 7), # Carrier Extend /R/.
+                        )),
+                    NextState("START")
+                ),
+                If(sink.be == 0b0001,
+                    NextValue(char_is_k, 0b1110),
+                    NextValue(data, Cat(
+                        sink.data[0:8],
+                        K(29, 7), # End-of-frame /T/.
+                        K(23, 7), # Carrier Extend /R/.
+                        K(23, 7),
+                        )),
+                    NextState("START")
                 ),
             ).Else(
-                NextValue(char_is_k, 0b1111),
-                NextValue(data, Cat(
-                    K(29, 7), # End-of-frame /T/.
-                    K(23, 7), # Carrier Extend /R/.
-                    K(23, 7), # Disparity is handled by CC_SERDES
-                    K(23, 7), 
-                )),
-                NextState("START")
-            )
+                NextValue(char_is_k, 0b0000),
+                NextValue(data, sink.data),
+            ),
+        )
+        fsm.act('CARRIER-EXT',
+            NextValue(char_is_k, 0b0111),
+            NextValue(data, Cat(
+                K(23, 7), # Carrier Extend /R/.
+                K(23, 7),
+                K(28, 5), # IDLE, disparity handeled by CC_SERDES
+                D(5, 6), 
+            )),
+            NextState("START")
+        )
+        fsm.act('END-TRAM',
+            NextValue(char_is_k, 0b1111),
+            NextValue(data, Cat(
+                K(29, 7), # End-of-frame /T/.
+                K(23, 7), # Carrier Extend /R/.
+                K(23, 7), # Disparity is handled by CC_SERDES
+                K(23, 7), 
+            )),
+            NextState("START")
         )
 
 # PCS RX -------------------------------------------------------------------------------------------
@@ -157,8 +169,6 @@ class PCSRX32(LiteXModule):
         # Signals.
         # --------
         invalid = Signal()
-        eth_invalid = Signal()
-
 
         # Pre Buffer.
         # To ease routing around the CC_SERDES this buffer allow the logic to be placed further away
@@ -191,14 +201,12 @@ class PCSRX32(LiteXModule):
         self.fsm = fsm = FSM()
         fsm.act("START",
             NextValue(buffer.sink.valid, 0),
-            eth_invalid.eq(1),
             # Wait for a K-character.
             If(char_is_k == 0x0001,
                 # K-character is Config or Idle K28.5.
                 If(data[0:8] == K(28, 5),
                     If((data[8:16] == D(21, 5)) | # /C1/.
                        (data[8:16] == D( 2, 2)),  # /C2/.
-                        eth_invalid.eq(0),
                         self.seen_valid_ci.eq(1),
                         self.seen_config_reg.eq(1),
                         self.config_reg.eq(data[16:32]),
@@ -206,13 +214,11 @@ class PCSRX32(LiteXModule):
                     # Check for Idle Word.
                     If((data[8:16] == D( 5, 6)) | # /I1/.
                        (data[8:16] == D(16, 2)),  # /I2/.
-                        eth_invalid.eq(0),
                         self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
                 If(data[0:8] == K(27, 7),
-                    eth_invalid.eq(0),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1111),
                     NextValue(buffer.sink.data, Cat(
@@ -227,13 +233,11 @@ class PCSRX32(LiteXModule):
                     # Check for Idle Word.
                     If((data[16:24] == D( 5, 6)) | # /I1/.
                        (data[16:24] == D(16, 2)),  # /I2/.
-                        eth_invalid.eq(0),
                         self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
                If(data[8:16] == K(27, 7),
-                    eth_invalid.eq(0),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1110),
                     NextValue(buffer.sink.data, Cat(
@@ -249,13 +253,11 @@ class PCSRX32(LiteXModule):
                     # Check for Idle Word.
                     If((data[24:] == D( 5, 6)) | # /I1/.
                        (data[24:] == D(16, 2)),  # /I2/.
-                        eth_invalid.eq(0),
                         self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
                If(data[16:24] == K(27, 7),
-                    eth_invalid.eq(0),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1100),
                     NextValue(buffer.sink.data, Cat(
@@ -269,12 +271,10 @@ class PCSRX32(LiteXModule):
             If(char_is_k[3:] == 0x1,
                If(data[24:] == K(28, 5),
                     # Check for Idle Word. (next cycle) maybe not usfull
-                    eth_invalid.eq(0),
                     self.seen_valid_ci.eq(1),
                 ),
                 # K-character is Start-of-packet /S/.
                If(data[24:] == K(27, 7),
-                    eth_invalid.eq(0),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1000),
                     NextValue(buffer.sink.data, Cat(
@@ -286,46 +286,36 @@ class PCSRX32(LiteXModule):
             ),
         )
         fsm.act("DATA",
-            eth_invalid.eq(1),
             self.seen_valid_ci.eq(1),
+            NextValue(buffer.sink.data, data),
             If((char_is_k == 0),
                 # Receive Data.
-                eth_invalid.eq(0),
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b1111),
-                NextValue(buffer.sink.data, data),
-            ),
-            If((char_is_k[0] == 1) & (data[0:8] == K(29, 7)),
+            ).Elif((char_is_k[0] == 1) & (data[0:8] == K(29, 7)),
                 # K-character is End-of-packet /S/.
-                eth_invalid.eq(0),
+                NextValue(buffer.sink.valid, 0),
+                NextState("START"),
+            ).Elif((char_is_k[:2] == 0b0010) & (data[8:16] == K(29, 7)),
+                # K-character is End-of-packet /S/.
+                NextValue(buffer.sink.valid, 1),
+                NextValue(buffer.sink.be, 0b0001),
+                NextState("START"),
+            ).Elif((char_is_k[:3] == 0b0100) & (data[16:24] == K(29, 7)),
+                # K-character is End-of-packet /S/.
+                NextValue(buffer.sink.valid, 1),
+                NextValue(buffer.sink.be, 0b0011),
+                NextState("START"),
+            ).Elif((char_is_k == 0b1000) & (data[24:32] == K(29, 7)),
+                # K-character is End-of-packet /S/.
+                NextValue(buffer.sink.valid, 1),
+                NextValue(buffer.sink.be, 0b0111),
+                NextState("START"),
+            ).Else( # invalid
                 NextValue(buffer.sink.valid, 0),
                 NextValue(buffer.sink.be, 0b0000),
                 NextState("START"),
-            ),
-            If((char_is_k[:2] == 0b0010) & (data[8:16] == K(29, 7)),
-                # K-character is End-of-packet /S/.
-                eth_invalid.eq(0),
-                NextValue(buffer.sink.valid, 1),
-                NextValue(buffer.sink.be, 0b0001),
-                NextValue(buffer.sink.data, data),
-                NextState("START"),
-            ),
-            If((char_is_k[:3] == 0b0100) & (data[16:24] == K(29, 7)),
-                # K-character is End-of-packet /S/.
-                eth_invalid.eq(0),
-                NextValue(buffer.sink.valid, 1),
-                NextValue(buffer.sink.be, 0b0011),
-                NextValue(buffer.sink.data, data),
-                NextState("START"),
-            ),
-            If((char_is_k == 0b1000) & (data[24:32] == K(29, 7)),
-                # K-character is End-of-packet /S/.
-                eth_invalid.eq(0),
-                NextValue(buffer.sink.valid, 1),
-                NextValue(buffer.sink.be, 0b0111),
-                NextValue(buffer.sink.data, data),
-                NextState("START"),
-            ),
+            ), 
         )
 
 class Realiner32(LiteXModule):
@@ -487,7 +477,7 @@ class PCS32(LiteXModule):
         # TX Config.
         # ----------
         self.comb += [
-            linkdown.eq(lp_abi.o == 0),
+            linkdown.eq(self.lp_abi.o == 0),
             If(~config_empty,
                 self.tx.config_reg[0].eq(0),                            # No SGMII support
                 self.tx.config_reg[5].eq(1),                            # 1000BASE-X: Full-duplex.

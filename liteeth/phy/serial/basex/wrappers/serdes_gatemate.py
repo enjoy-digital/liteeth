@@ -1,9 +1,10 @@
 #
-# This file is part of MiSoC and has been adapted/modified for LiteEth.
+# This file is part of LiteEth.
 #
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2020-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2023 Sergey Razumov <cyntem@gmail.com>
+# Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -11,8 +12,6 @@ from migen.genlib.resetsync import AsyncResetSynchronizer
 from migen.genlib.cdc import PulseSynchronizer
 
 from litex.gen import *
-
-from litex.soc.cores.clock import S7PLL, S7MMCM
 
 from liteeth.common import *
 
@@ -43,8 +42,7 @@ class GateMate_1000BASEX(LiteXModule):
         pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
         self.pcs = pcs = PCS32(lsb_first=True, **pcs_kwargs)
 
-        # Optional pipeline cuts at the MAC boundary ease timing closure when
-        # the PCS runs at 312.5MHz. The TBI/autonegotiation path is unchanged.
+        # Optional pipeline cuts at the MAC boundary ease timing closure
         if with_pcs_buffers:
             self.tx_pcs_buffer = tx_pcs_buffer = ClockDomainsRenamer("eth_tx")(
                 stream.Buffer(eth_phy_description(self.dw), pipe_ready=True))
@@ -67,6 +65,7 @@ class GateMate_1000BASEX(LiteXModule):
             refclk_freq    = ref_clk_freq,
             rx_polarity    = rx_polarity,
             tx_polarity    = tx_polarity,
+            with_csr       = with_csr,
         )
         self.comb += [
             pma.tx_data.eq(pcs.tx.data),

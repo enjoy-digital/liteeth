@@ -1,10 +1,11 @@
 #
-# This file is part of MiSoC and has been adapted/modified for LiteEth.
+# This file is part of LiteEth.
 #
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2020-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2023 Sergey Razumov <cyntem@gmail.com>
 # Copyright (c) 2025 Patrick Urban <support@colognechip.com>
+# Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -14,7 +15,6 @@ from migen.genlib.cdc import PulseSynchronizer
 from litex.gen import *
 
 from litex.soc.interconnect import stream
-from litex.soc.cores.clock.colognechip import GateMatePLL
 
 from liteeth.common import *
 
@@ -67,12 +67,6 @@ class PMA_SERDES_GateMate(LiteXModule):
         
         align = Signal()
         align_done = Signal()
-
-        # RegFile
-        rf_en = Signal()
-        rf_addr = Signal(8)
-        rf_do = Signal(16)
-        rf_rdy = Signal()
 
         adpll_settings = {
             100e6: {
@@ -385,14 +379,14 @@ class PMA_SERDES_GateMate(LiteXModule):
             o_RX_CLK_O               = self.rxoutclk,
             
             # Regfile Ports
-            i_REGFILE_CLK_I          = 0, #ClockSignal('sys'),
+            i_REGFILE_CLK_I          = 0,
             i_REGFILE_WE_I           = 0,
-            i_REGFILE_EN_I           = 0, #rf_en,
-            i_REGFILE_ADDR_I         = 0, #rf_addr,
+            i_REGFILE_EN_I           = 0, 
+            i_REGFILE_ADDR_I         = 0, 
             i_REGFILE_DI_I           = 0,
             i_REGFILE_MASK_I         = 0xFFFF,
-            o_REGFILE_DO_O           = Open(),#rf_do,
-            o_REGFILE_RDY_O          = Open(),#rf_rdy,
+            o_REGFILE_DO_O           = Open(),
+            o_REGFILE_RDY_O          = Open(),
         )
 
         self.specials += [
