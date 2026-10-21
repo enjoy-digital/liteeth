@@ -15,7 +15,6 @@ from migen.genlib.cdc import PulseSynchronizer
 from litex.gen import *
 
 from litex.soc.interconnect import stream
-from litex.soc.cores.clock.colognechip import GateMatePLL
 
 from liteeth.common import *
 
@@ -35,13 +34,11 @@ class PMA_SERDES_GateMate(LiteXModule):
 
         self.align    = Signal()
         self.restart  = Signal()
-        self.rx_valid = Signal(reset=1)
-        self.comb += self.rx_valid.eq(1)
 
         self.cd_eth_tx      = ClockDomain()
         self.cd_eth_rx      = ClockDomain()
 
-        # for specifying clock constraints. 125MHz clocks.
+        # for specifying clock constraints. 31.25MHz clocks.
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
 
@@ -63,15 +60,6 @@ class PMA_SERDES_GateMate(LiteXModule):
 
         rx_reset      = Signal()
         rx_reset_done = Signal()
-        
-        align = Signal()
-        align_done = Signal()
-
-        # RegFile
-        rf_en = Signal()
-        rf_addr = Signal(8)
-        rf_do = Signal(16)
-        rf_rdy = Signal()
 
         adpll_settings = {
             100e6: {
