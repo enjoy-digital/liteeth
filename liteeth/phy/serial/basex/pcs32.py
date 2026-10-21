@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2018-2020 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *

@@ -1,10 +1,11 @@
 #
-# This file is part of MiSoC and has been adapted/modified for LiteEth.
+# This file is part of LiteEth.
 #
 # Copyright (c) 2018 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2020-2024 Florent Kermarrec <florent@enjoy-digital.fr>
 # Copyright (c) 2023 Sergey Razumov <cyntem@gmail.com>
 # Copyright (c) 2025 Patrick Urban <support@colognechip.com>
+# Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
