@@ -27,7 +27,8 @@ Serial Ethernet modes are grouped under `liteeth/phy/serial/`. The 64b/66b
 BASE-R PCS, PMAs, diagnostics, and wrappers live in `baser/`; the 8b/10b
 BASE-X PCS and device adapters live in `basex/`. Both modes put device PHYs
 in `wrappers/`, with device primitives and raw serialization helpers in `pma/`.
-BASE-X keeps its Ethernet PCS in one module; BASE-R uses a multi-module PCS
+BASE-X keeps its Ethernet PCS in one module (`pcs.py`: shared autonegotiation with 8-bit
+and 32-bit hard-8b/10b datapaths, `PCS(dw=8/32)`); BASE-R uses a multi-module PCS
 for its 64b/66b interface. PMA filenames describe the transceiver family;
 wrapper filenames describe the FPGA-facing PHY. GW5's generated register/TOML
 data lives beside each adapter in `pma/gw5_config.py`.

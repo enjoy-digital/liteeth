@@ -3,6 +3,7 @@
 #
 # Copyright (c) 2018-2020 Sebastien Bourdeauducq <sb@m-labs.hk>
 # Copyright (c) 2024 Florent Kermarrec <florent@enjoy-digital.fr>
+# Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
@@ -48,9 +49,9 @@ class PCSSGMIITimer(LiteXModule):
             )
         ]
 
-# PCS TX -------------------------------------------------------------------------------------------
+# PCS TX 8-bit -------------------------------------------------------------------------------------
 
-class PCSTX(LiteXModule):
+class PCSTX8b(LiteXModule):
     def __init__(self, lsb_first=False):
         self.config_valid = Signal()                               # Config valid.
         self.config_reg   = Signal(16)                             # Config register (16-bit).
@@ -138,9 +139,9 @@ class PCSTX(LiteXModule):
         )
         self.sync += parity.eq(~parity) # Toggle parity for /R/ extension.
 
-# PCS RX -------------------------------------------------------------------------------------------
+# PCS RX 8-bit -------------------------------------------------------------------------------------
 
-class PCSRX(LiteXModule):
+class PCSRX8b(LiteXModule):
     def __init__(self, lsb_first=False):
         self.seen_valid_ci   = Signal()   # CI seen.
         self.seen_config_reg = Signal()   # Config seen.
@@ -253,6 +254,292 @@ class PCSRX(LiteXModule):
             NextState("START")
         )
 
+# Code-Groups --------------------------------------------------------------------------------------
+
+K28_5 = K(28, 5) # Comma, first code-group of /I/ and /C/.
+K27_7 = K(27, 7) # Start-of-packet /S/.
+K29_7 = K(29, 7) # End-of-packet /T/.
+K23_7 = K(23, 7) # Carrier extend /R/.
+D5_6  = D( 5, 6) # /I1/.
+D16_2 = D(16, 2) # /I2/.
+D21_5 = D(21, 5) # /C1/.
+D2_2  = D( 2, 2) # /C2/.
+
+# PCS TX 32-bit (Hard 8b/10b) ----------------------------------------------------------------------
+
+class PCSTX32b(LiteXModule):
+    """TX datapath for transceivers with a hard 8b/10b encoder (4 code-groups per cycle, lane 0
+    first). The transceiver handles the running disparity."""
+    def __init__(self):
+        self.config_valid = Signal()   # Config valid.
+        self.config_reg   = Signal(16) # Config register (16-bit).
+        self.sgmii_speed  = Signal(2)  # Unused (no SGMII rate adaptation).
+        self.sink         = sink = stream.Endpoint(eth_phy_description(32)) # Data input.
+
+        # Transceiver interface (registered).
+        self.data      = Signal(32) # Code-groups (lane 0 first).
+        self.char_is_k = Signal(4)  # K-character flags.
+
+        # # #
+
+        # Signals.
+        # --------
+        ctype     = Signal()   # Toggles config type.
+        data      = Signal(32)
+        char_is_k = Signal(4)
+
+        # Idle /I1/ /I2/: K28.5 and D16.2 flip the running disparity, D5.6 does not, so the hard
+        # encoder's running disparity settles to negative whatever its state after a packet.
+        idle   = Cat(C(K28_5, 8), C(D5_6, 8), C(K28_5, 8), C(D16_2, 8))
+        idle_k = 0b0101
+
+        # Output Register.
+        # ----------------
+        # Two register stages ease routing to the transceiver.
+        data_r      = Signal(32)
+        char_is_k_r = Signal(4)
+        for s in [data_r, char_is_k_r, self.data, self.char_is_k]:
+            s.attr.add("keep")
+        self.sync += [
+            data_r.eq(data),
+            char_is_k_r.eq(char_is_k),
+            self.data.eq(data_r),
+            self.char_is_k.eq(char_is_k_r),
+        ]
+
+        # FSM.
+        # ----
+        self.fsm = fsm = FSM()
+        fsm.act("START",
+            # Send Configuration Word.
+            If(self.config_valid,
+                NextValue(ctype, ~ctype),
+                char_is_k.eq(0b0001),
+                data.eq(Cat(
+                    C(K28_5, 8),
+                    Mux(ctype, C(D2_2, 8), C(D21_5, 8)), # /C2/ or /C1/.
+                    self.config_reg,
+                )),
+            # Send Start-of-packet /S/ (replaces the first preamble byte).
+            ).Elif(sink.valid,
+                sink.ready.eq(1),
+                char_is_k.eq(0b0001),
+                data.eq(Cat(C(K27_7, 8), sink.data[8:])),
+                NextState("DATA"),
+            # Send Idle.
+            ).Else(
+                char_is_k.eq(idle_k),
+                data.eq(idle),
+            )
+        )
+        fsm.act("DATA",
+            sink.ready.eq(1),
+            If(sink.valid & ~sink.last,
+                # Send Data.
+                char_is_k.eq(0b0000),
+                data.eq(sink.data),
+            ).Elif(sink.valid,
+                # Send last Data and End-of-packet: /T/R/ or /T/R/R/ so that the next ordered
+                # set starts on an even code-group.
+                If(~sink.be[1],
+                    char_is_k.eq(0b1110),
+                    data.eq(Cat(sink.data[:8], C(K29_7, 8), C(K23_7, 8), C(K23_7, 8))),
+                    NextState("START"),
+                ).Elif(~sink.be[2],
+                    char_is_k.eq(0b1100),
+                    data.eq(Cat(sink.data[:16], C(K29_7, 8), C(K23_7, 8))),
+                    NextState("START"),
+                ).Elif(~sink.be[3],
+                    char_is_k.eq(0b1000),
+                    data.eq(Cat(sink.data[:24], C(K29_7, 8))),
+                    NextState("END-R-R"),
+                ).Else(
+                    char_is_k.eq(0b0000),
+                    data.eq(sink.data),
+                    NextState("END-T-R"),
+                )
+            ).Else(
+                # Underflow: end the packet.
+                sink.ready.eq(0),
+                char_is_k.eq(0b0111),
+                data.eq(Cat(C(K29_7, 8), C(K23_7, 8), C(K28_5, 8), C(D5_6, 8))),
+                NextState("START"),
+            )
+        )
+        fsm.act("END-T-R",
+            # /T/R/ followed by /I/.
+            char_is_k.eq(0b0111),
+            data.eq(Cat(C(K29_7, 8), C(K23_7, 8), C(K28_5, 8), C(D5_6, 8))),
+            NextState("START"),
+        )
+        fsm.act("END-R-R",
+            # /R/R/ (completing /T/R/R/) followed by /I/.
+            char_is_k.eq(0b0111),
+            data.eq(Cat(C(K23_7, 8), C(K23_7, 8), C(K28_5, 8), C(D5_6, 8))),
+            NextState("START"),
+        )
+
+# PCS RX 32-bit (Hard 8b/10b) ----------------------------------------------------------------------
+
+class PCSRX32b(LiteXModule):
+    """RX datapath for transceivers with a hard 8b/10b decoder (4 code-groups per cycle, lane 0
+    first)."""
+    def __init__(self):
+        self.seen_valid_ci   = Signal()   # CI seen.
+        self.seen_config_reg = Signal()   # Config seen.
+        self.config_reg      = Signal(16) # Config register (16-bit).
+        self.sgmii_speed     = Signal(2)  # Unused (no SGMII rate adaptation).
+        self.source          = source = stream.Endpoint(eth_phy_description(32)) # Data output.
+
+        # Transceiver interface.
+        self.data          = Signal(32) # Code-groups (lane 0 first).
+        self.char_is_k     = Signal(4)  # K-character flags.
+        self.disparity_err = Signal(4)  # Disparity errors.
+        self.table_err     = Signal(4)  # Not-in-table errors.
+
+        # # #
+
+        # Input Register.
+        # ---------------
+        # Eases routing from the transceiver.
+        data      = Signal(32)
+        char_is_k = Signal(4)
+        error     = Signal(4)
+        for s in [data, char_is_k, error]:
+            s.attr.add("keep")
+        self.sync += [
+            data.eq(self.data),
+            char_is_k.eq(self.char_is_k),
+            error.eq(self.disparity_err | self.table_err),
+        ]
+
+        # Lane Alignment.
+        # ---------------
+        # The transceiver aligns commas to a byte lane, but /I/, /C/ and /S/ are not necessarily on
+        # lane 0 and /C/ can straddle two words. Outside packets, realign the code-groups so that
+        # the last comma or /S/ seen is on lane 0: ordered sets and packets then always start on
+        # lane 0. The alignment is kept during packets so that no code-group is skipped.
+        in_packet = Signal()
+        prev_data      = Signal(32)
+        prev_char_is_k = Signal(4)
+        prev_error     = Signal(4)
+        self.sync += [
+            prev_data.eq(data),
+            prev_char_is_k.eq(char_is_k),
+            prev_error.eq(error),
+        ]
+        def is_special(d, k, e, lane):
+            d = d[8*lane:8*(lane + 1)]
+            return k[lane] & ~e[lane] & ((d == K28_5) | (d == K27_7))
+
+        shift   = Signal(2)
+        shift_r = Signal(2)
+        self.comb += [
+            shift.eq(shift_r),
+            # Last special code-group of the previous word sets the shift.
+            If(~in_packet,
+                [If(is_special(prev_data, prev_char_is_k, prev_error, lane), shift.eq(lane))
+                    for lane in range(4)],
+            )
+        ]
+        self.sync += shift_r.eq(shift)
+
+        w_data      = Signal(32) # Aligned code-groups.
+        w_char_is_k = Signal(4)  # Aligned K-character flags.
+        w_error     = Signal(4)  # Aligned errors.
+        self.comb += Case(shift, {lane: [
+            w_data.eq(Cat(prev_data, data)[8*lane:8*lane + 32]),
+            w_char_is_k.eq(Cat(prev_char_is_k, char_is_k)[lane:lane + 4]),
+            w_error.eq(Cat(prev_error, error)[lane:lane + 4]),
+        ] for lane in range(4)})
+
+        def lane_d(lane):
+            return w_data[8*lane:8*(lane + 1)]
+        def lane_is_d(lane):
+            return ~w_char_is_k[lane] & ~w_error[lane]
+        def lane_is_k(lane, k):
+            return w_char_is_k[lane] & ~w_error[lane] & (lane_d(lane) == k)
+        def lane_is_idle(lane):
+            return (lane_is_k(lane, K28_5) & lane_is_d(lane + 1) &
+                ((lane_d(lane + 1) == D5_6) | (lane_d(lane + 1) == D16_2)))
+
+        # Buffer.
+        # -------
+        # Delay the received words by one cycle: a /T/ on lane 0 or an error marks the previous word
+        # as the last one (with an error).
+        abort = Signal()
+        self.buffer = buffer = stream.Buffer(eth_phy_description(32),
+            pipe_valid = True,
+            pipe_ready = False,
+        )
+        self.comb += [
+            buffer.source.connect(source, omit={"last", "error"}),
+            source.last.eq(buffer.source.last | ~buffer.sink.valid),
+            source.error.eq(buffer.source.error | Replicate(abort, 4)),
+        ]
+
+        # FSM.
+        # ----
+        self.fsm = fsm = FSM(reset_state="START")
+        self.comb += in_packet.eq(fsm.ongoing("DATA"))
+        fsm.act("START",
+            # Idle /I/ (on lane 0 or 2).
+            If(lane_is_idle(0) | lane_is_idle(2),
+                self.seen_valid_ci.eq(1),
+            ),
+            # Configuration /C/.
+            If(lane_is_k(0, K28_5) & lane_is_d(1) & lane_is_d(2) & lane_is_d(3) &
+               ((lane_d(1) == D21_5) | (lane_d(1) == D2_2)),
+                self.seen_valid_ci.eq(1),
+                self.seen_config_reg.eq(1),
+                self.config_reg.eq(w_data[16:]),
+            ),
+            # Start-of-packet /S/ (replaced by the first preamble byte).
+            If(lane_is_k(0, K27_7) & lane_is_d(1) & lane_is_d(2) & lane_is_d(3),
+                buffer.sink.valid.eq(1),
+                buffer.sink.be.eq(0b1111),
+                buffer.sink.data.eq(Cat(C(0x55, 8), w_data[8:])),
+                NextState("DATA"),
+            )
+        )
+        fsm.act("DATA",
+            If(lane_is_d(0) & lane_is_d(1) & lane_is_d(2) & lane_is_d(3),
+                # Receive Data.
+                buffer.sink.valid.eq(1),
+                buffer.sink.be.eq(0b1111),
+                buffer.sink.data.eq(w_data),
+            ).Elif(lane_is_k(0, K29_7),
+                # End-of-packet /T/ on lane 0: the previous word was the last one.
+                NextState("START"),
+            ).Elif(lane_is_d(0) & lane_is_k(1, K29_7),
+                buffer.sink.valid.eq(1),
+                buffer.sink.last.eq(1),
+                buffer.sink.be.eq(0b0001),
+                buffer.sink.data.eq(w_data),
+                NextState("START"),
+            ).Elif(lane_is_d(0) & lane_is_d(1) & lane_is_k(2, K29_7),
+                buffer.sink.valid.eq(1),
+                buffer.sink.last.eq(1),
+                buffer.sink.be.eq(0b0011),
+                buffer.sink.data.eq(w_data),
+                NextState("START"),
+            ).Elif(lane_is_d(0) & lane_is_d(1) & lane_is_d(2) & lane_is_k(3, K29_7),
+                buffer.sink.valid.eq(1),
+                buffer.sink.last.eq(1),
+                buffer.sink.be.eq(0b0111),
+                buffer.sink.data.eq(w_data),
+                NextState("START"),
+            ).Else(
+                # Invalid code-group or unexpected K-character: end the packet with an error.
+                abort.eq(1),
+                NextState("START"),
+            )
+        )
+
+# Compatibility aliases.
+PCSTX = PCSTX8b
+PCSRX = PCSRX8b
+
 # PCS ----------------------------------------------------------------------------------------------
 
 class PCS(LiteXModule):
@@ -264,6 +551,11 @@ class PCS(LiteXModule):
     - True  : SGMII MAC side from the start. Required by SGMII PHYs that only complete
               Auto-Negotiation with SGMII configuration words.
     - False : 1000BASE-X only.
+
+    dw selects the datapath:
+    - 8  : 8b/10b coder in the fabric, 10-bit TBI interface (tbi_tx/tbi_rx/tbi_rx_ce).
+    - 32 : transceiver with a hard 8b/10b coder and a 4 code-group interface (tx.data/char_is_k,
+           rx.data/char_is_k/disparity_err/table_err). 1000BASE-X only.
 
     sys_clk_freq sets the one-second CSR link-event debounce. If omitted, add_csr()
     uses the frequency from LiteXContext.top for compatibility with existing targets.
@@ -279,17 +571,27 @@ class PCS(LiteXModule):
         with_csr        = False,
         with_autoneg    = True,
         sys_clk_freq    = None,
+        dw              = 8,
     ):
+        assert dw in [8, 32]
         self.sys_clk_freq = sys_clk_freq
-        self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
-        self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
+        if dw == 8:
+            self.tx = ClockDomainsRenamer("eth_tx")(PCSTX8b(lsb_first=lsb_first))
+            self.rx = ClockDomainsRenamer("eth_rx")(PCSRX8b(lsb_first=lsb_first))
 
-        self.tbi_tx    = self.tx.encoder.output[0]
-        self.tbi_rx    = self.rx.decoder.input
-        self.tbi_rx_ce = self.rx.decoder.ce
-        self.sink      = stream.Endpoint(eth_phy_description(8))
-        self.source    = stream.Endpoint(eth_phy_description(8))
-        self.comb += self.source.be.eq(1)
+            self.tbi_tx    = self.tx.encoder.output[0]
+            self.tbi_rx    = self.rx.decoder.input
+            self.tbi_rx_ce = self.rx.decoder.ce
+        else:
+            # Hard 8b/10b coder: no SGMII rate adaptation.
+            assert not sgmii
+            sgmii   = False
+            self.tx = ClockDomainsRenamer("eth_tx")(PCSTX32b())
+            self.rx = ClockDomainsRenamer("eth_rx")(PCSRX32b())
+        self.sink      = stream.Endpoint(eth_phy_description(dw))
+        self.source    = stream.Endpoint(eth_phy_description(dw))
+        if dw == 8:
+            self.comb += self.source.be.eq(1)
 
         self.link_up = Signal()
         self.restart = Signal()
@@ -307,10 +609,16 @@ class PCS(LiteXModule):
         self.autoneg_ack  = autoneg_ack  = Signal()
 
         # Sink -> TX / RX -> Source.
-        self.comb += [
-            self.sink.connect(self.tx.sink,     omit={"be", "error"}),
-            self.rx.source.connect(self.source, omit={"be"}),
-        ]
+        if dw == 8:
+            self.comb += [
+                self.sink.connect(self.tx.sink,     omit={"be", "error"}),
+                self.rx.source.connect(self.source, omit={"be"}),
+            ]
+        else:
+            self.comb += [
+                self.sink.connect(self.tx.sink, omit={"error"}),
+                self.rx.source.connect(self.source),
+            ]
 
         # Pulse Synchronizers.
         # --------------------
