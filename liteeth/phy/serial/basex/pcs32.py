@@ -76,11 +76,14 @@ class PCSTX32(LiteXModule):
                     )),
                     NextState("DATA")
                 ).Else(
-                    NextValue(data, Cat( # IDLE, disparity handeled by CC_SERDES
+                    # Idle: 2x /I2/ ordered sets (K28.5 on lanes 0 and 2), disparity handled by
+                    # the CC_SERDES.
+                    NextValue(char_is_k, 0b0101),
+                    NextValue(data, Cat(
                         K(28, 5),
-                        D(5, 6), 
-                        D(5, 6), 
-                        D(5, 6), 
+                        D(16, 2), # /I2/.
+                        K(28, 5),
+                        D(16, 2), # /I2/.
                     )),
                 )
             )
