@@ -103,7 +103,7 @@ class PCSTX32(LiteXModule):
                             sink.data[0:24],
                             K(29, 7), # End-of-frame /T/.
                             )),
-                        NextState("START")
+                        NextState("EXTEND")
                     ),
                     If(sink.be == 0b0011,
                         NextValue(char_is_k, 0b1100),
@@ -138,6 +138,18 @@ class PCSTX32(LiteXModule):
                 )),
                 NextState("START")
             )
+        )
+        fsm.act("EXTEND",
+            # /T/ was sent on lane 3: send /R/R/ so that the next ordered set starts on an even
+            # code-group.
+            NextValue(char_is_k, 0b0111),
+            NextValue(data, Cat(
+                K(23, 7), # Carrier Extend /R/.
+                K(23, 7), # Carrier Extend /R/.
+                K(28, 5),
+                D(16, 2), # /I2/.
+            )),
+            NextState("START")
         )
 
 # PCS RX -------------------------------------------------------------------------------------------
