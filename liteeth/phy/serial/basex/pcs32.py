@@ -484,6 +484,9 @@ class PCS32(LiteXModule):
 
         # Linkdown/Speed Detection.
         # -------------------------
+        # 1000BASE-X: linkup can be inferred by non-empty reg (link partner restarting
+        # Auto-Negotiation sends an empty config reg).
+        self.comb += linkdown.eq(self.lp_abi.o == 0)
 
         # TX Config.
         # ----------
