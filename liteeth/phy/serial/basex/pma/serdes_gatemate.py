@@ -23,9 +23,11 @@ class PMA_SERDES_GateMate(LiteXModule):
     def __init__(self, sys_clk_freq, refclk_freq=100e6, with_csr=True,
         tx_polarity     = 0,
         rx_polarity     = 0,
+        dw              = 32,
     ):
         assert refclk_freq in [100e6, 125e6]
-        self.dw = dw = 32 # assert dw in [16, 32, 64]
+        assert dw in [16, 32] # TODO test with , 64]
+        self.dw = dw
 
         self.reset = Signal() # sync reset
 
@@ -166,7 +168,7 @@ class PMA_SERDES_GateMate(LiteXModule):
             p_RX_BUF_RESET_TIME = 3,
             p_RX_BUF_RESET_OVR = 0,
             p_RX_BUF_RESET = 0,
-            p_RX_BUF_BYPASS = 0, # bypass buffer to use the recovered clock on RX datapath
+            p_RX_BUF_BYPASS = 1, # bypass buffer to use the recovered clock on RX datapath
             p_RX_CLKCOR_USE = 0,
             p_RX_CLKCOR_MIN_LAT = 32,
             p_RX_CLKCOR_MAX_LAT = 39,
@@ -329,7 +331,7 @@ class PMA_SERDES_GateMate(LiteXModule):
             i_LOOPBACK_I             = 0b00,
 
             # TX
-            i_TX_DATA_I              = Cat(self.tx_data, self.tx_data),
+            i_TX_DATA_I              = Cat(*(self.tx_data for _ in range(int(64//dw)))),
             i_TX_RESET_I             = tx_reset,
             i_TX_PCS_RESET_I         = 0,
             i_TX_PMA_RESET_I         = 0,
@@ -339,7 +341,7 @@ class PMA_SERDES_GateMate(LiteXModule):
             i_TX_PRBS_FORCE_ERR_I    = 0,
             i_TX_8B10B_EN_I          = 1,
             i_TX_8B10B_BYPASS_I      = 0x00,
-            i_TX_CHAR_IS_K_I         = Cat(self.tx_char_is_k, self.tx_char_is_k),
+            i_TX_CHAR_IS_K_I         = Cat(*(self.tx_char_is_k for _ in range(int(64//dw)))),
             i_TX_CHAR_DISPMODE_I     = 0,
             i_TX_CHAR_DISPVAL_I      = 0,
             i_TX_ELEC_IDLE_I         = 0,
@@ -351,7 +353,7 @@ class PMA_SERDES_GateMate(LiteXModule):
             o_TX_RESET_DONE_O        = tx_reset_done,
 
             # RX
-            i_RX_CLK_I               = self.txoutclk, #self.rxoutclk,
+            i_RX_CLK_I               = self.rxoutclk,
             i_RX_RESET_I             = rx_reset,
             i_RX_PMA_RESET_I         = 0,
             i_RX_EQA_RESET_I         = 0,
