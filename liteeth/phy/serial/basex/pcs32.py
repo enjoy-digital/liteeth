@@ -87,7 +87,10 @@ class PCSTX32(LiteXModule):
         fsm.act("DATA",
             # Send Data.
             sink.ready.eq(1),
-            If(sink.last,
+            If(~sink.valid,
+                # Underflow: end the frame (will be dropped by the receiver's CRC check).
+                NextState("END-TRAM")
+            ).Elif(sink.last,
                 If(sink.be == 0b1111,
                     NextValue(char_is_k, 0b0000),
                     NextValue(data, sink.data),

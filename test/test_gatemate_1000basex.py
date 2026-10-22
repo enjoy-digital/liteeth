@@ -242,6 +242,33 @@ class TestPCS32(unittest.TestCase):
         self.assertLess(len(rx[0]), 208) # Truncated, not flooded.
         self.assertEqual(rx[1:], frames)
 
+    def test_tx_underflow(self):
+        # TX underflow (sink.valid low in a frame, here without last): the frame is ended with /T/
+        # instead of repeating the last word, and the next frames are transmitted normally.
+        dut    = PCS32LoopbackDUT()
+        frames = frames_for_all_lengths()
+        rx, err = [], []
+        def generator():
+            yield from wait_link_up(self, [dut.a, dut.b])
+            yield dut.b.sink.valid.eq(1)
+            yield dut.b.sink.data.eq(0x55555555)
+            yield dut.b.sink.be.eq(0b1111)
+            yield dut.b.sink.last.eq(0)
+            for _ in range(8):
+                yield
+            yield dut.b.sink.valid.eq(0)
+            for _ in range(16):
+                yield
+            yield from send_frames(dut.b.sink, frames)
+            for _ in range(64):
+                yield
+        run_simulation(dut, {
+            "b_tx": generator(),
+            "a_rx": receive_frames(dut.a.source, rx, err),
+        }, clocks=PCS32_CLOCKS)
+        self.assertLess(len(rx[0]), 40) # Ended, not repeated.
+        self.assertEqual(rx[1:], frames)
+
     def test_tx_idle(self):
         # Idle words are 2 /I1/ ordered sets: K28.5 D5.6 K28.5 D5.6.
         dut   = PCS32LoopbackDUT()
