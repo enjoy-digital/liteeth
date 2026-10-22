@@ -77,11 +77,11 @@ class PCSTX32(LiteXModule):
                     NextState("DATA")
                 ).Else(
                     NextValue(char_is_k, 0b0101),
-                    NextValue(data, Cat( # IDLE, disparity handeled by CC_SERDES
+                    NextValue(data, Cat( # IDLE: /I2/ /I2/, disparity handled by CC_SERDES
                         K(28, 5),
-                        D(5, 6), 
+                        D(16, 2),
                         K(28, 5),
-                        D(5, 6), 
+                        D(16, 2),
                     )),
                 )
             )

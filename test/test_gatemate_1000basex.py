@@ -244,7 +244,7 @@ class TestPCS32(unittest.TestCase):
         self.assertEqual(rx[1:], frames)
 
     def test_tx_idle(self):
-        # Idle words are 2 /I1/ ordered sets: K28.5 D5.6 K28.5 D5.6.
+        # Idle words are 2 /I2/ ordered sets: K28.5 D16.2 K28.5 D16.2.
         dut   = PCS32LoopbackDUT()
         trace = []
         def generator():
@@ -253,7 +253,7 @@ class TestPCS32(unittest.TestCase):
                 yield
         tracer = trace_code_groups(dut.a.tx.data, dut.a.tx.char_is_k, trace)
         run_simulation(dut, {"a_tx": [generator(), tracer]}, clocks=PCS32_CLOCKS)
-        idle = [(K(28, 5), 1), (D(5, 6), 0)]*2
+        idle = [(K(28, 5), 1), (D(16, 2), 0)]*2
         self.assertEqual(trace[-16*4:], idle*16)
 
     def test_tx_end_of_packet(self):
