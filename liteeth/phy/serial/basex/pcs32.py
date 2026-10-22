@@ -7,18 +7,14 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 from migen import *
-from migen.genlib.fsm import *
-from migen.genlib.cdc import MultiReg, PulseSynchronizer
 
 from litex.gen import *
-from litex.gen.genlib.misc import WaitTimer
-from litex.gen.genlib.cdc import BusSynchronizer
 
 from litex.soc.interconnect import stream
-from litex.soc.interconnect.csr_eventmanager import *
-from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
+from litex.soc.cores.code_8b10b import K, D
 
 from liteeth.common import *
+from liteeth.phy.serial.basex.pcs import PCS
 
 _K = K
 _D = D
@@ -32,6 +28,7 @@ class PCSTX32(LiteXModule):
     def __init__(self):
         self.config_valid = Signal()                               # Config valid.
         self.config_reg   = Signal(16)                             # Config register (16-bit).
+        self.sgmii_speed  = Signal(2)                              # Unused (no SGMII).
         self.sink         = sink = stream.Endpoint(eth_phy_description(32))  # Data input.
 
 
@@ -155,6 +152,7 @@ class PCSRX32(LiteXModule):
         self.seen_valid_ci   = Signal()   # CI seen.
         self.seen_config_reg = Signal()   # Config seen.
         self.config_reg      = Signal(16) # Config register (16-bit).
+        self.sgmii_speed     = Signal(2)  # Unused (no SGMII).
         self.source          = source = stream.Endpoint(eth_phy_description(32)) # Data output.
 
         # PHY ports inputs
@@ -398,8 +396,9 @@ class Realiner32(LiteXModule):
 
 # PCS ----------------------------------------------------------------------------------------------
 
-class PCS32(LiteXModule):
-    autocsr_exclude = {"ev"}
+class PCS32(PCS):
+    """1000BASE-X PCS with a 32-bit datapath: shared PCS (Auto-Negotiation, link checker, CSRs)
+    with dw=32."""
     def __init__(self, lsb_first=False,
         check_period    = 6e-3,
         breaklink_time  = 10e-3,
@@ -410,247 +409,13 @@ class PCS32(LiteXModule):
         with_autoneg    = True,
         sys_clk_freq    = None,
     ):
-        self.sys_clk_freq = sys_clk_freq
-        self.tx = ClockDomainsRenamer("eth_tx")(PCSTX32())
-        self.rx = ClockDomainsRenamer("eth_rx")(PCSRX32())
-        self.rx_realiner = ClockDomainsRenamer("eth_rx")(Realiner32())
-
-        self.sink      = stream.Endpoint(eth_phy_description(32))
-        self.source    = stream.Endpoint(eth_phy_description(32))
-
-        self.link_up = Signal()
-        self.restart = Signal()
-        self.align   = Signal()
-
-        self.lp_abi = BusSynchronizer(16, "eth_rx", "eth_tx")
-
-        # # #
-
-        # Signals.
-        # --------
-        self.config_empty = config_empty = Signal()
-        self.is_sgmii     = is_sgmii     = Signal()
-        self.linkdown     = linkdown     = Signal()
-        self.autoneg_ack  = autoneg_ack  = Signal()
-
-        # Sink -> TX / RX -> Source.
-        self.comb += [
-            self.sink.connect(self.tx.sink,     omit={"error"}),
-            self.rx.source.connect(self.rx_realiner.sink),
-            self.rx_realiner.source.connect(self.source),
-        ]
-
-        # Pulse Synchronizers.
-        # --------------------
-        self.seen_valid_ci      = seen_valid_ci      = PulseSynchronizer("eth_rx", "eth_tx")
-        self.rx_config_reg_abi  = rx_config_reg_abi  = PulseSynchronizer("eth_rx", "eth_tx")
-        self.rx_config_reg_ack  = rx_config_reg_ack  = PulseSynchronizer("eth_rx", "eth_tx")
-        self.rx_config_reg_zero = rx_config_reg_zero = PulseSynchronizer("eth_rx", "eth_tx")
-        self.comb += seen_valid_ci.i.eq(self.rx.seen_valid_ci)
-
-        # Timers.
-        # -------
-        self.breaklink_timer = breaklink_timer = ClockDomainsRenamer("eth_tx")(WaitTimer(breaklink_time * eth_tx_clk_freq))
-        self.more_ack_timer  = more_ack_timer  = ClockDomainsRenamer("eth_tx")(WaitTimer(more_ack_time  * eth_tx_clk_freq))
-
-        # Checker.
-        # --------
-        checker_max   = int(check_period*eth_tx_clk_freq)
-        checker_count = Signal(max=checker_max + 1)
-        checker_tick  = Signal()
-        checker_error = Signal()
-        self.sync.eth_tx += [
-            checker_tick.eq(0),
-            If(checker_count == 0,
-                checker_tick.eq(1),
-                checker_count.eq(checker_max)
-            ).Else(
-                checker_count.eq(checker_count - 1)
-            ),
-            If(seen_valid_ci.o, checker_error.eq(0)),
-            If(checker_tick,    checker_error.eq(1))
-        ]
-
-        # Linkdown/Speed Detection.
-        # -------------------------
-
-        # TX Config.
-        # ----------
-        self.comb += [
-            linkdown.eq(self.lp_abi.o == 0),
-            If(~config_empty,
-                self.tx.config_reg[0].eq(0),                            # No SGMII support
-                self.tx.config_reg[5].eq(1),                            # 1000BASE-X: Full-duplex.
-                self.tx.config_reg[14].eq(autoneg_ack),                 # SGMII/1000BASE-X: Acknowledge Bit.
-            )
-        ]
-
-        if with_autoneg:
-            # FSM.
-            # ----
-            self.fsm = fsm = ClockDomainsRenamer("eth_tx")(FSM())
-            # AN_ENABLE.
-            fsm.act("AUTONEG-BREAKLINK",
-                self.tx.config_valid.eq(1),
-                config_empty.eq(1),
-                breaklink_timer.wait.eq(1),
-                If(breaklink_timer.done,
-                    NextState("AUTONEG-WAIT-ABI")
-                )
-            )
-            # ABILITY_DETECT.
-            fsm.act("AUTONEG-WAIT-ABI",
-                self.align.eq(1),
-                self.tx.config_valid.eq(1),
-                If(rx_config_reg_abi.o,
-                    NextState("AUTONEG-WAIT-ACK")
-                ),
-                If(checker_tick & checker_error,
-                    self.restart.eq(1),
-                    NextState("AUTONEG-BREAKLINK")
-                )
-            )
-            # ACKNOWLEDGE_DETECT.
-            fsm.act("AUTONEG-WAIT-ACK",
-                self.tx.config_valid.eq(1),
-                autoneg_ack.eq(1),
-                If(rx_config_reg_ack.o,
-                    NextState("AUTONEG-SEND-MORE-ACK")
-                ),
-                # Link partner restarted Auto-Negotiation: restart too.
-                If(rx_config_reg_zero.o,
-                    NextState("AUTONEG-BREAKLINK")
-                ),
-                If(checker_tick & checker_error,
-                    self.restart.eq(1),
-                    NextState("AUTONEG-BREAKLINK")
-                )
-            )
-            # COMPLETE_ACKNOWLEDGE.
-            fsm.act("AUTONEG-SEND-MORE-ACK",
-                self.tx.config_valid.eq(1),
-                autoneg_ack.eq(1),
-                more_ack_timer.wait.eq(1),
-                If(more_ack_timer.done,
-                    NextState("RUNNING")
-                ),
-                # Link partner restarted Auto-Negotiation: restart too.
-                If(rx_config_reg_zero.o,
-                    NextState("AUTONEG-BREAKLINK")
-                ),
-                If(checker_tick & checker_error,
-                    self.restart.eq(1),
-                    NextState("AUTONEG-BREAKLINK")
-                )
-            )
-            # LINK_OK.
-            fsm.act("RUNNING",
-                self.link_up.eq(~linkdown),
-                If((checker_tick & checker_error) | linkdown,
-                    self.restart.eq(1),
-                    NextState("AUTONEG-BREAKLINK")
-                )
-            )
-
-            # RX Config (and consistency check).
-            # ----------------------------------
-            rx_config_reg_count  = Signal(4)
-            rx_config_reg_last   = Signal(16)
-            self.sync.eth_rx += [
-                # Single-cycle pulses (to the PulseSynchronizers).
-                rx_config_reg_abi.i.eq(0),
-                rx_config_reg_ack.i.eq(0),
-                rx_config_reg_zero.i.eq(0),
-                If(self.rx.seen_config_reg,
-                    # Consistency Count/Check.
-                    rx_config_reg_last.eq(self.rx.config_reg),
-                    If(self.rx.config_reg != rx_config_reg_last,
-                        rx_config_reg_count.eq(8 - 1)
-                    ).Else(
-                        If(rx_config_reg_count != 0,
-                            rx_config_reg_count.eq(rx_config_reg_count - 1),
-                        ).Else(
-                            # When RX Config is consistent (Clause 37).
-                            If(self.rx.config_reg == 0,
-                                # Link partner restarting Auto-Negotiation (AN_ENABLE/breaklink).
-                                rx_config_reg_zero.i.eq(1),
-                            ).Else(
-                                # Ability match, regardless of the Acknowledge bit: the link
-                                # partner can already be acknowledging.
-                                rx_config_reg_abi.i.eq(1),
-                                # Acknowledge match.
-                                rx_config_reg_ack.i.eq(self.rx.config_reg[14]),
-                            )
-                        )
-                    ),
-                    self.lp_abi.i.eq(self.rx.config_reg)
-                )
-            ]
-        else:
-            # Fixed-rate link, no Clause 37 autonegotiation.
-            self.comb += self.align.eq(1)
-            self.sync.eth_tx += [
-                # Release RX reset between failed checks so valid code groups can return.
-                self.restart.eq(checker_tick & checker_error),
-                If(checker_tick,
-                    self.link_up.eq(~checker_error),
-                ),
-            ]
-
-        if with_csr:
-            self.add_csr()
-
-    def add_csr(self, sys_clk_freq=None):
-        if sys_clk_freq is None:
-            sys_clk_freq = self.sys_clk_freq
-        if sys_clk_freq is None:
-            sys_clk_freq = getattr(LiteXContext.top, "sys_clk_freq", None)
-        if sys_clk_freq is None or int(sys_clk_freq) <= 0:
-            raise ValueError("A positive sys_clk_freq is required for PCS CSRs.")
-
-        self.status = CSRStatus(fields=[
-            CSRField("link_up",    size=1,  offset=0,  description="Link is up."),
-            CSRField("is_sgmii",   size=1,  offset=1,  description="SGMII in-use."),
-            CSRField("config_reg", size=16, offset=16, description="Link partner ability register."),
-        ])
-
-        self.lp_abi_csr = BusSynchronizer(16, "eth_rx", "sys")
-
-        self.ev      = EventManager()
-        self.ev.link = EventSourceProcess(edge="any")
-        self.ev.finalize()
-
-        self.comb += [
-            self.lp_abi_csr.i.eq(self.lp_abi.i),
-            self.status.fields.config_reg.eq(self.lp_abi_csr.o),
-        ]
-
-
-        # The PCS status originates in eth_tx. Both software and the event FSM consume
-        # synchronized system-domain copies; the link-partner word uses its bus handshake.
-        link_up_tx  = Signal()
-        is_sgmii_tx = Signal()
-        self.sync.eth_tx += [
-            link_up_tx.eq(self.link_up),
-            is_sgmii_tx.eq(self.is_sgmii),
-        ]
-        self.specials += [
-            MultiReg(link_up_tx,  self.status.fields.link_up),
-            MultiReg(is_sgmii_tx, self.status.fields.is_sgmii),
-        ]
-
-        self.link_up_timer = link_up_timer = WaitTimer(int(sys_clk_freq))
-
-        self.csr_fsm = fsm = FSM()
-        fsm.act("DOWN",
-            If(self.status.fields.link_up,
-                NextState("UP")
-            )
-        )
-        fsm.act("UP",
-            link_up_timer.wait.eq(1),
-            self.ev.link.trigger.eq(link_up_timer.done),
-            If(~self.status.fields.link_up,
-                NextState("DOWN"),
-            )
+        PCS.__init__(self, lsb_first=lsb_first, dw=32, sgmii=False,
+            check_period    = check_period,
+            breaklink_time  = breaklink_time,
+            more_ack_time   = more_ack_time,
+            sgmii_ack_time  = sgmii_ack_time,
+            eth_tx_clk_freq = eth_tx_clk_freq,
+            with_csr        = with_csr,
+            with_autoneg    = with_autoneg,
+            sys_clk_freq    = sys_clk_freq,
         )
