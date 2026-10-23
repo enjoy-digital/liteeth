@@ -13,8 +13,7 @@ from litex.gen import *
 
 from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
-from liteeth.phy.serial.basex.pcs   import PCS
-from liteeth.phy.serial.basex.pcs32 import PCS32
+from liteeth.phy.serial.basex.pcs import PCS
 from liteeth.phy.serial.basex.wrappers.serdes_gatemate import GateMate_1000BASEX
 
 # Helpers ------------------------------------------------------------------------------------------
@@ -126,8 +125,8 @@ class PCS32LoopbackDUT(LiteXModule):
         self.cd_b_tx = ClockDomain()
         self.cd_b_rx = ClockDomain()
         pcs_kwargs = dict(PCS32_TIMINGS, with_csr=False, **kwargs)
-        self.a  = ClockDomainsRenamer({"eth_tx": "a_tx", "eth_rx": "a_rx"})(PCS32(**pcs_kwargs))
-        self.b  = ClockDomainsRenamer({"eth_tx": "b_tx", "eth_rx": "b_rx"})(PCS32(**pcs_kwargs))
+        self.a  = ClockDomainsRenamer({"eth_tx": "a_tx", "eth_rx": "a_rx"})(PCS(dw=32, **pcs_kwargs))
+        self.b  = ClockDomainsRenamer({"eth_tx": "b_tx", "eth_rx": "b_rx"})(PCS(dw=32, **pcs_kwargs))
         self.ab = ClockDomainsRenamer("b_rx")(LaneShifter(offset_ab))
         self.ba = ClockDomainsRenamer("a_rx")(LaneShifter(offset_ba))
         for src, link, dst in [(self.a, self.ab, self.b), (self.b, self.ba, self.a)]:
@@ -292,7 +291,7 @@ class PCS8To32DUT(LiteXModule):
             PCS(lsb_first=True, sgmii=False, with_csr=False, eth_tx_clk_freq=125e6,
                 check_period=1024/125e6, breaklink_time=64/125e6, more_ack_time=64/125e6))
         self.p32 = ClockDomainsRenamer({"eth_tx": "p32", "eth_rx": "p32"})(
-            PCS32(with_csr=False, **PCS32_TIMINGS))
+            PCS(dw=32, with_csr=False, **PCS32_TIMINGS))
 
         # # #
 
