@@ -13,8 +13,7 @@ from litex.gen import *
 
 from litex.soc.cores.code_8b10b import K, D, Encoder, Decoder
 
-from liteeth.phy.serial.basex.pcs   import PCS
-from liteeth.phy.serial.basex.pcs32 import PCS32
+from liteeth.phy.serial.basex.pcs import PCS
 from liteeth.phy.serial.basex.wrappers.serdes_gatemate import GateMate_1000BASEX
 
 # Helpers ------------------------------------------------------------------------------------------
@@ -126,8 +125,8 @@ class PCS32LoopbackDUT(LiteXModule):
         self.cd_b_tx = ClockDomain()
         self.cd_b_rx = ClockDomain()
         pcs_kwargs = dict(PCS32_TIMINGS, with_csr=False, **kwargs)
-        self.a  = ClockDomainsRenamer({"eth_tx": "a_tx", "eth_rx": "a_rx"})(PCS32(**pcs_kwargs))
-        self.b  = ClockDomainsRenamer({"eth_tx": "b_tx", "eth_rx": "b_rx"})(PCS32(**pcs_kwargs))
+        self.a  = ClockDomainsRenamer({"eth_tx": "a_tx", "eth_rx": "a_rx"})(PCS(dw=32, **pcs_kwargs))
+        self.b  = ClockDomainsRenamer({"eth_tx": "b_tx", "eth_rx": "b_rx"})(PCS(dw=32, **pcs_kwargs))
         self.ab = ClockDomainsRenamer("b_rx")(LaneShifter(offset_ab))
         self.ba = ClockDomainsRenamer("a_rx")(LaneShifter(offset_ba))
         for src, link, dst in [(self.a, self.ab, self.b), (self.b, self.ba, self.a)]:
@@ -243,6 +242,33 @@ class TestPCS32(unittest.TestCase):
         self.assertLess(len(rx[0]), 208) # Truncated, not flooded.
         self.assertEqual(rx[1:], frames)
 
+    def test_tx_underflow(self):
+        # TX underflow (sink.valid low in a frame, here without last): the frame is ended with /T/
+        # instead of repeating the last word, and the next frames are transmitted normally.
+        dut    = PCS32LoopbackDUT()
+        frames = frames_for_all_lengths()
+        rx, err = [], []
+        def generator():
+            yield from wait_link_up(self, [dut.a, dut.b])
+            yield dut.b.sink.valid.eq(1)
+            yield dut.b.sink.data.eq(0x55555555)
+            yield dut.b.sink.be.eq(0b1111)
+            yield dut.b.sink.last.eq(0)
+            for _ in range(8):
+                yield
+            yield dut.b.sink.valid.eq(0)
+            for _ in range(16):
+                yield
+            yield from send_frames(dut.b.sink, frames)
+            for _ in range(64):
+                yield
+        run_simulation(dut, {
+            "b_tx": generator(),
+            "a_rx": receive_frames(dut.a.source, rx, err),
+        }, clocks=PCS32_CLOCKS)
+        self.assertLess(len(rx[0]), 40) # Ended, not repeated.
+        self.assertEqual(rx[1:], frames)
+
     def test_tx_idle(self):
         # Idle words are 2 /I1/ ordered sets: K28.5 D5.6 K28.5 D5.6.
         dut   = PCS32LoopbackDUT()
@@ -292,7 +318,7 @@ class PCS8To32DUT(LiteXModule):
             PCS(lsb_first=True, sgmii=False, with_csr=False, eth_tx_clk_freq=125e6,
                 check_period=1024/125e6, breaklink_time=64/125e6, more_ack_time=64/125e6))
         self.p32 = ClockDomainsRenamer({"eth_tx": "p32", "eth_rx": "p32"})(
-            PCS32(with_csr=False, **PCS32_TIMINGS))
+            PCS(dw=32, with_csr=False, **PCS32_TIMINGS))
 
         # # #
 

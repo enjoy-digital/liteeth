@@ -265,11 +265,17 @@ class PCS(LiteXModule):
               Auto-Negotiation with SGMII configuration words.
     - False : 1000BASE-X only.
 
+    dw selects the datapath:
+    - 8  : 8-bit datapath with fabric 8b/10b coding (TBI interface: tbi_tx/tbi_rx/tbi_rx_ce).
+    - 32 : 32-bit datapath for transceivers with hard 8b/10b coding (4 code-groups per cycle,
+           tx/rx data/char_is_k interface), 1000BASE-X only.
+
     sys_clk_freq sets the one-second CSR link-event debounce. If omitted, add_csr()
     uses the frequency from LiteXContext.top for compatibility with existing targets.
     """
     autocsr_exclude = {"ev"}
     def __init__(self, lsb_first=False,
+        dw              = 8,
         sgmii           = None,
         check_period    = 6e-3,
         breaklink_time  = 10e-3,
@@ -280,16 +286,27 @@ class PCS(LiteXModule):
         with_autoneg    = True,
         sys_clk_freq    = None,
     ):
+        assert dw in [8, 32]
         self.sys_clk_freq = sys_clk_freq
-        self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
-        self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
+        if dw == 8:
+            self.tx = ClockDomainsRenamer("eth_tx")(PCSTX(lsb_first=lsb_first))
+            self.rx = ClockDomainsRenamer("eth_rx")(PCSRX(lsb_first=lsb_first))
 
-        self.tbi_tx    = self.tx.encoder.output[0]
-        self.tbi_rx    = self.rx.decoder.input
-        self.tbi_rx_ce = self.rx.decoder.ce
-        self.sink      = stream.Endpoint(eth_phy_description(8))
-        self.source    = stream.Endpoint(eth_phy_description(8))
-        self.comb += self.source.be.eq(1)
+            self.tbi_tx    = self.tx.encoder.output[0]
+            self.tbi_rx    = self.rx.decoder.input
+            self.tbi_rx_ce = self.rx.decoder.ce
+        if dw == 32:
+            # 32-bit datapath (hard 8b/10b coding), no SGMII rate adaptation: 1000BASE-X only.
+            from liteeth.phy.serial.basex.pcs32 import PCSTX32, PCSRX32, Realiner32
+            assert sgmii in [None, False]
+            sgmii = False
+            self.tx = ClockDomainsRenamer("eth_tx")(PCSTX32())
+            self.rx = ClockDomainsRenamer("eth_rx")(PCSRX32())
+            self.rx_realiner = ClockDomainsRenamer("eth_rx")(Realiner32())
+        self.sink      = stream.Endpoint(eth_phy_description(dw))
+        self.source    = stream.Endpoint(eth_phy_description(dw))
+        if dw == 8:
+            self.comb += self.source.be.eq(1)
 
         self.link_up = Signal()
         self.restart = Signal()
@@ -307,10 +324,17 @@ class PCS(LiteXModule):
         self.autoneg_ack  = autoneg_ack  = Signal()
 
         # Sink -> TX / RX -> Source.
-        self.comb += [
-            self.sink.connect(self.tx.sink,     omit={"be", "error"}),
-            self.rx.source.connect(self.source, omit={"be"}),
-        ]
+        if dw == 8:
+            self.comb += [
+                self.sink.connect(self.tx.sink,     omit={"be", "error"}),
+                self.rx.source.connect(self.source, omit={"be"}),
+            ]
+        if dw == 32:
+            self.comb += [
+                self.sink.connect(self.tx.sink, omit={"error"}),
+                self.rx.source.connect(self.rx_realiner.sink),
+                self.rx_realiner.source.connect(self.source),
+            ]
 
         # Pulse Synchronizers.
         # --------------------
