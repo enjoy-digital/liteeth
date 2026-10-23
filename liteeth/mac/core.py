@@ -173,6 +173,12 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += tx_cdc
                 self.pipeline.append(tx_cdc)
 
+                # Cut the downstream ready -> CDC read pointer/RAM address path.
+                tx_cdc_buffer = stream.Buffer(eth_phy_description(dw), pipe_valid=True, pipe_ready=True)
+                tx_cdc_buffer = self.to_cd(tx_cdc_buffer, "eth_tx")
+                self.submodules += tx_cdc_buffer
+                self.pipeline.append(tx_cdc_buffer)
+
             def add_converter(self, cd):
                 """Add a stride converter in the selected clock domain."""
                 tx_converter = stream.StrideConverter(
