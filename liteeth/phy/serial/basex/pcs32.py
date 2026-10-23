@@ -195,6 +195,7 @@ class PCSRX32(LiteXModule):
         self.fsm = fsm = FSM()
         fsm.act("START",
             NextValue(buffer.sink.valid, 0),
+            NextValue(buffer.sink.data, data),
             # Wait for a K-character.
             If(char_is_k == 1,
                 # K-character is Config or Idle K28.5.
@@ -207,48 +208,37 @@ class PCSRX32(LiteXModule):
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
-                If(data[0:8] == K(27, 7),
+                If(data[:8] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1111),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0x55, 8), # First Preamble Byte.
-                        data[8:32]
-                    )),
+                    NextValue(buffer.sink.data[:8], C(0x55, 8)), # First Preamble Byte.
                     NextState("DATA")
                 )
             ),
-            If(char_is_k[1:] == 0x001,
+            If(char_is_k[1:] == 1,
                 # K-character is Start-of-packet /S/.
                 If(data[8:16] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1110),
-                    NextValue(buffer.sink.data[8:32], Cat(
-                        C(0x55, 8), # First Preamble Byte.
-                        data[16:32]
-                    )),
+                    NextValue(buffer.sink.data[8:16], C(0x55, 8)), # First Preamble Byte.
                     NextState("DATA")
                 )
             ),
-            If(char_is_k[2:] == 0x01,
+            If(char_is_k[2:] == 1,
                 # K-character is Start-of-packet /S/.
                 If(data[16:24] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1100),
-                    NextValue(buffer.sink.data[16:32], Cat(
-                        C(0x55, 8), # First Preamble Byte.
-                        data[24:32]
-                    )),
+                    NextValue(buffer.sink.data[16:24], C(0x55, 8)), # First Preamble Byte.
                     NextState("DATA")
                 )
             ),
-            If(char_is_k[3:] == 0x1,
+            If(char_is_k[3:] == 1,
                 # K-character is Start-of-packet /S/.
                 If(data[24:] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1000),
-                    NextValue(buffer.sink.data[24:32], Cat(
-                        C(0x55, 8), # First Preamble Byte.
-                    )),
+                    NextValue(buffer.sink.data[24:], C(0x55, 8)), # First Preamble Byte.
                     NextState("DATA")
                 )
             ),
