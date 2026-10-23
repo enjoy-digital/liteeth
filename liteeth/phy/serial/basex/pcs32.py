@@ -6,6 +6,8 @@
 # Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+# 32-bit TX/RX datapaths (hard 8b/10b coding), used by PCS(dw=32) in pcs.py.
+
 from migen import *
 
 from litex.gen import *
@@ -14,7 +16,6 @@ from litex.soc.interconnect import stream
 from litex.soc.cores.code_8b10b import K, D
 
 from liteeth.common import *
-from liteeth.phy.serial.basex.pcs import PCS
 
 _K = K
 _D = D
@@ -391,31 +392,3 @@ class Realiner32(LiteXModule):
                     NextValue(self.source.last, 1),
                     NextState('IDLE'),
                 )
-
-            
-
-# PCS ----------------------------------------------------------------------------------------------
-
-class PCS32(PCS):
-    """1000BASE-X PCS with a 32-bit datapath: shared PCS (Auto-Negotiation, link checker, CSRs)
-    with dw=32."""
-    def __init__(self, lsb_first=False,
-        check_period    = 6e-3,
-        breaklink_time  = 10e-3,
-        more_ack_time   = 10e-3,
-        sgmii_ack_time  = 1.6e-3,
-        eth_tx_clk_freq = 125e6,
-        with_csr        = True,
-        with_autoneg    = True,
-        sys_clk_freq    = None,
-    ):
-        PCS.__init__(self, lsb_first=lsb_first, dw=32, sgmii=False,
-            check_period    = check_period,
-            breaklink_time  = breaklink_time,
-            more_ack_time   = more_ack_time,
-            sgmii_ack_time  = sgmii_ack_time,
-            eth_tx_clk_freq = eth_tx_clk_freq,
-            with_csr        = with_csr,
-            with_autoneg    = with_autoneg,
-            sys_clk_freq    = sys_clk_freq,
-        )

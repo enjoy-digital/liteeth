@@ -15,7 +15,7 @@ from litex.gen import *
 
 from liteeth.common import *
 
-from liteeth.phy.serial.basex.pcs32 import PCS32
+from liteeth.phy.serial.basex.pcs import PCS
 from liteeth.phy.serial.basex.pma.serdes_gatemate import PMA_SERDES_GateMate
 
 # GateMate_1000BASEX PHY ---------------------------------------------------------------------------------
@@ -40,7 +40,8 @@ class GateMate_1000BASEX(LiteXModule):
     ):
         pcs_kwargs = {} if pcs_kwargs is None else dict(pcs_kwargs)
         pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
-        self.pcs = pcs = PCS32(lsb_first=True, **pcs_kwargs)
+        pcs_kwargs.setdefault("with_csr", with_csr)
+        self.pcs = pcs = PCS(dw=32, **pcs_kwargs)
 
         # Optional pipeline cuts at the MAC boundary ease timing closure
         if with_pcs_buffers:
