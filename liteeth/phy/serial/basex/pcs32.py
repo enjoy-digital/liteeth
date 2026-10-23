@@ -33,17 +33,17 @@ class PCSTX32(LiteXModule):
 
 
         # PHY ports output
-        self.char_is_k = Signal(4) # is K output
-        self.data = Signal(32) # Data output
+        self.char_is_k = Signal(4, reset_less=True) # is K output
+        self.data = Signal(32, reset_less=True) # Data output
+        self.data.attr.add('keep')
+        self.char_is_k.attr.add('keep')
 
         # Signals.
         # --------
         ctype  = Signal() # Toggles config type.
         
-        char_is_k = Signal(4)
-        data = Signal(32)
-        data.attr.add('keep')
-        char_is_k.attr.add('keep')
+        char_is_k = Signal(4, reset_less=True)
+        data = Signal(32, reset_less=True)
         self.sync += [
                 self.data.eq(data),
                 self.char_is_k.eq(char_is_k),
@@ -86,10 +86,11 @@ class PCSTX32(LiteXModule):
         fsm.act("DATA",
             # Send Data.
             sink.ready.eq(1),
+            NextValue(data, sink.data),
+            NextValue(char_is_k, 0b0000),
             If(sink.last,
                 If(sink.be == 0b1111,
                     NextValue(char_is_k, 0b0000),
-                    NextValue(data, sink.data),
                     NextState("END-TRAM")
                 ),
                 If(sink.be == 0b0111,
@@ -119,9 +120,6 @@ class PCSTX32(LiteXModule):
                         )),
                     NextState("START")
                 ),
-            ).Else(
-                NextValue(char_is_k, 0b0000),
-                NextValue(data, sink.data),
             ),
         )
         fsm.act('CARRIER-EXT',
@@ -171,14 +169,12 @@ class PCSRX32(LiteXModule):
         # Pre Buffer.
         # To ease routing around the CC_SERDES this buffer allow the logic to be placed further away
         # -----------
-        data          = Signal.like(self.data)
-        char_is_k     = Signal.like(self.char_is_k)
-        disparity_err = Signal.like(self.disparity_err)
-        table_err     = Signal.like(self.table_err)
+        data          = Signal.like(self.data,          reset_less=True)
+        char_is_k     = Signal.like(self.char_is_k,     reset_less=True)
+        disparity_err = Signal.like(self.disparity_err, reset_less=True)
+        table_err     = Signal.like(self.table_err,     reset_less=True)
         data.attr.add('keep')
         char_is_k.attr.add('keep')
-        disparity_err.attr.add('keep')
-        table_err.attr.add('keep')
         self.sync += [
             data.eq(self.data),
             char_is_k.eq(self.char_is_k),
@@ -200,7 +196,7 @@ class PCSRX32(LiteXModule):
         fsm.act("START",
             NextValue(buffer.sink.valid, 0),
             # Wait for a K-character.
-            If(char_is_k == 0x0001,
+            If(char_is_k == 1,
                 # K-character is Config or Idle K28.5.
                 If(data[0:8] == K(28, 5),
                     If((data[8:16] == D(21, 5)) | # /C1/.
@@ -208,11 +204,6 @@ class PCSRX32(LiteXModule):
                         self.seen_valid_ci.eq(1),
                         self.seen_config_reg.eq(1),
                         self.config_reg.eq(data[16:32]),
-                    ),
-                    # Check for Idle Word.
-                    If((data[8:16] == D( 5, 6)) | # /I1/.
-                       (data[8:16] == D(16, 2)),  # /I2/.
-                        self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
@@ -227,19 +218,11 @@ class PCSRX32(LiteXModule):
                 )
             ),
             If(char_is_k[1:] == 0x001,
-               If(data[8:16] == K(28, 5),
-                    # Check for Idle Word.
-                    If((data[16:24] == D( 5, 6)) | # /I1/.
-                       (data[16:24] == D(16, 2)),  # /I2/.
-                        self.seen_valid_ci.eq(1),
-                    ),
-                ),
                 # K-character is Start-of-packet /S/.
-               If(data[8:16] == K(27, 7),
+                If(data[8:16] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1110),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0, 8), # First Preamble Byte.
+                    NextValue(buffer.sink.data[8:32], Cat(
                         C(0x55, 8), # First Preamble Byte.
                         data[16:32]
                     )),
@@ -247,19 +230,11 @@ class PCSRX32(LiteXModule):
                 )
             ),
             If(char_is_k[2:] == 0x01,
-               If(data[16:24] == K(28, 5),
-                    # Check for Idle Word.
-                    If((data[24:] == D( 5, 6)) | # /I1/.
-                       (data[24:] == D(16, 2)),  # /I2/.
-                        self.seen_valid_ci.eq(1),
-                    ),
-                ),
                 # K-character is Start-of-packet /S/.
-               If(data[16:24] == K(27, 7),
+                If(data[16:24] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1100),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0, 16), # First Preamble Byte.
+                    NextValue(buffer.sink.data[16:32], Cat(
                         C(0x55, 8), # First Preamble Byte.
                         data[24:32]
                     )),
@@ -267,21 +242,25 @@ class PCSRX32(LiteXModule):
                 )
             ),
             If(char_is_k[3:] == 0x1,
-               If(data[24:] == K(28, 5),
-                    # Check for Idle Word. (next cycle) maybe not usfull
-                    self.seen_valid_ci.eq(1),
-                ),
                 # K-character is Start-of-packet /S/.
-               If(data[24:] == K(27, 7),
+                If(data[24:] == K(27, 7),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1000),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0, 24), # First Preamble Byte.
+                    NextValue(buffer.sink.data[24:32], Cat(
                         C(0x55, 8), # First Preamble Byte.
                     )),
                     NextState("DATA")
                 )
             ),
+            # check for Idle word
+            *(If(char_is_k[i],
+                If(data[i*8:(i+1)*8] == K(28, 5),
+                    If((data[(i+1)*8:(i+2)*8] == D( 5, 6)) | # /I1/.
+                       (data[(i+1)*8:(i+2)*8] == D( 16, 2)), # /I2/.
+                        self.seen_valid_ci.eq(1),
+                    )
+                ),
+            ) for i in range(2))# don't check IDLE word if it requiere another state on the FSM, routing is already too tight
         )
         fsm.act("DATA",
             self.seen_valid_ci.eq(1),
@@ -321,8 +300,8 @@ class Realiner32(LiteXModule):
         self.sink      = stream.Endpoint(eth_phy_description(32))
         self.source    = stream.Endpoint(eth_phy_description(32))
 
-        rem = Signal(32)
-        rem_be = Signal(4)
+        rem = Signal(32, reset_less=True)
+        rem_be = Signal(4, reset_less=True)
 
         self.comb += self.sink.ready.eq(1)
 
