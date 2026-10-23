@@ -30,7 +30,7 @@ class PCSTX32(LiteXModule):
         self.config_valid = Signal()                               # Config valid.
         self.config_reg   = Signal(16)                             # Config register (16-bit).
         self.sgmii_speed  = Signal(2)                              # Unused (no SGMII).
-        self.sink         = sink = stream.Endpoint(eth_phy_description(32))  # Data input.
+        self.sink         = stream.Endpoint(eth_phy_description(32))  # Data input.
 
 
         # PHY ports output
@@ -49,6 +49,28 @@ class PCSTX32(LiteXModule):
                 self.data.eq(data),
                 self.char_is_k.eq(char_is_k),
                 ]
+
+        # Underflow Stage.
+        # ----------------
+        # Registered stage before the FSM: when sink.valid is deasserted inside a frame (underflow),
+        # end the frame with an empty last word (be=0) so that the FSM can assume valid data.
+        sink     = stream.Endpoint(eth_phy_description(32))
+        in_frame = Signal()
+        self.comb += self.sink.ready.eq(~sink.valid | sink.ready)
+        self.sync += If(~sink.valid | sink.ready,
+            sink.valid.eq(self.sink.valid),
+            sink.data.eq(self.sink.data),
+            sink.be.eq(self.sink.be),
+            sink.last.eq(self.sink.last),
+            If(self.sink.valid,
+                in_frame.eq(~self.sink.last),
+            ).Elif(in_frame,
+                sink.valid.eq(1),
+                sink.be.eq(0b0000),
+                sink.last.eq(1),
+                in_frame.eq(0),
+            )
+        )
 
         # FSM.
         # ----
@@ -88,6 +110,17 @@ class PCSTX32(LiteXModule):
             # Send Data.
             sink.ready.eq(1),
             If(sink.last,
+                If(sink.be == 0b0000,
+                    # Underflow: end the frame (will be dropped by the receiver's CRC check).
+                    NextValue(char_is_k, 0b1111),
+                    NextValue(data, Cat(
+                        K(29, 7), # End-of-frame /T/.
+                        K(23, 7), # Carrier Extend /R/.
+                        K(23, 7),
+                        K(23, 7),
+                    )),
+                    NextState("START")
+                ),
                 If(sink.be == 0b1111,
                     NextValue(char_is_k, 0b0000),
                     NextValue(data, sink.data),
