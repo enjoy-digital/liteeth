@@ -358,6 +358,12 @@ class LiteEthMACCore(LiteXModule):
                 self.submodules += rx_packet_fifo
                 self.pipeline.append(rx_packet_fifo)
 
+                # Cut the CDC ready -> FIFO fetch/RAM read path.
+                rx_cdc_buffer = stream.Buffer(eth_phy_description(dw), pipe_valid=True, pipe_ready=True)
+                rx_cdc_buffer = ClockDomainsRenamer("eth_rx")(rx_cdc_buffer)
+                self.submodules += rx_cdc_buffer
+                self.pipeline.append(rx_cdc_buffer)
+
                 # Synchronize the drop count to sys.
                 ps = PulseSynchronizer("eth_rx", "sys")
                 self.submodules += ps
