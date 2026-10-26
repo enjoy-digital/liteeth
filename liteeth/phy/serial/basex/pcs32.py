@@ -198,9 +198,10 @@ class PCSRX32(LiteXModule):
         def match(lane, code):
             key = (lane, code.value)
             if key not in matches:
-                matches[key] = Signal(reset_less=True)
+                #matches[key] = Signal(reset_less=True)
                 #self.sync += matches[key].eq(_data[8*lane:8*(lane + 1)] == code)
-                self.comb += matches[key].eq(data[8*lane:8*(lane + 1)] == code)
+                #self.comb += matches[key].eq(data[8*lane:8*(lane + 1)] == code)
+                matches[key] = (data[8*lane:8*(lane + 1)] == code)
             return matches[key]
 
         # Buffer.
@@ -286,74 +287,54 @@ class Realiner32(LiteXModule):
     def __init__(self,):
         self.sink      = stream.Endpoint(eth_phy_description(32))
         self.source    = stream.Endpoint(eth_phy_description(32))
+        self.comb += self.sink.ready.eq(1)
+
 
         rem = Signal(32, reset_less=True)
         rem_be = Signal(4, reset_less=True)
 
-        self.comb += self.sink.ready.eq(1)
+        align = Signal(2)
+        buf = Signal(64)
+        buf_be = Signal(8)
+        
+        self.sync += rem.eq(self.sink.data)
+        self.comb += buf.eq(Cat(rem, self.sink.data))
+        self.sync += Case(align, {
+            shift: self.source.data.eq(buf >> (8*shift))
+            for shift in range(4)
+            })
+        
+        self.sync += rem_be.eq(self.sink.be)
+        self.comb += buf_be.eq(Cat(rem_be, Mux(self.sink.valid, self.sink.be, 0)))
+        self.sync += Case(align, {
+            shift: self.source.be.eq(buf_be >> (shift))
+            for shift in range(4)
+            })
 
         self.fsm = fsm = FSM()
         fsm.act('IDLE',
                 NextValue(self.source.valid, 0),
                 NextValue(self.source.last, 0),
                 If(self.sink.valid,
-                   If(self.sink.be == 0b1111,
-                      NextValue(self.source.be, 0b1111),
-                      NextValue(self.source.data, self.sink.data),
-                      NextValue(self.source.valid, 1),
-                      NextState('ALIGN_0'),
-                    ),
-                   If(self.sink.be == 0b1110,
-                      NextValue(self.source.be, 0b0000),
-                      NextValue(rem, self.sink.data[8:]),
-                      NextState('ALIGN_1'),
-                    ),
-                   If(self.sink.be == 0b1100,
-                      NextValue(self.source.be, 0b0000),
-                      NextValue(rem, self.sink.data[16:]),
-                      NextState('ALIGN_2'),
-                    ),
-                   If(self.sink.be == 0b1000,
-                      NextValue(self.source.be, 0b0000),
-                      NextValue(rem, self.sink.data[24:]),
-                      NextState('ALIGN_3'),
-                    ),
+                    Case(self.sink.be, {
+                        (0b1111 << i) & 0b1111: NextValue(align, i)
+                        for i in range(4)
+                        }),
+                    NextState('RUN'),
                 ),
         )
-        fsm.act('ALIGN_0',
-                If(self.sink.valid,
-                    NextValue(self.source.be, self.sink.be),
-                    NextValue(self.source.data, self.sink.data),
-                    NextValue(self.source.valid, 1),
-                    If(self.sink.last,
-                       NextValue(self.source.last, 1),
-                       NextState('IDLE'),
-                    ),
+        fsm.act('RUN',
+                NextValue(self.source.valid, 1),
+                If(self.sink.last,
+                    If((self.sink.be >> align) == 0,
+                        NextValue(self.source.last, 1),
+                        NextState('IDLE'),
+                    ).Else(
+                        NextState('END'),
+                    )
                 ),
             )
-        for i in range(1, 4):
-            j = i * 8 # for bytes index
-            fsm.act(f'ALIGN_{i}',
-                    If(self.sink.valid,
-                        NextValue(self.source.be, Cat((1 << (4-i)) - 1, self.sink.be[:i])),
-                        NextValue(self.source.valid, 1),
-                        NextValue(self.source.data, Cat(rem[:-j], self.sink.data[:j])),
-                        NextValue(rem, self.sink.data[j:]),
-                        If(self.sink.last,
-                           If(self.sink.be[i:],
-                               NextValue(rem_be, self.sink.be[i:]),
-                               NextState(f'END_{i}'),
-                           ).Else(
-                               NextValue(self.source.last, 1),
-                               NextState('IDLE'),
-                           )
-                        ),
-                    ),
-                )
-            fsm.act(f'END_{i}',
-                    NextValue(self.source.be, rem_be),
-                    NextValue(self.source.valid, 1),
-                    NextValue(self.source.data, rem),
-                    NextValue(self.source.last, 1),
-                    NextState('IDLE'),
-                )
+        fsm.act('END',
+                NextValue(self.source.last, 1),
+                NextState('IDLE'),
+            )
