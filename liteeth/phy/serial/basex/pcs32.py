@@ -6,6 +6,8 @@
 # Copyright (c) 2026 Emilien Decoux <emilien.decoux@edu.univ-fcomte.fr>
 # SPDX-License-Identifier: BSD-2-Clause
 
+# 32-bit TX/RX datapaths (hard 8b/10b coding), used by PCS(dw=32) in pcs.py.
+
 from migen import *
 
 from litex.gen import *
@@ -14,7 +16,6 @@ from litex.soc.interconnect import stream
 from litex.soc.cores.code_8b10b import K, D
 
 from liteeth.common import *
-from liteeth.phy.serial.basex.pcs import PCS
 
 _K = K
 _D = D
@@ -182,6 +183,26 @@ class PCSRX32(LiteXModule):
             table_err.eq(self.table_err),
         ]
 
+        # Decode.
+        # Second register stage with the byte comparisons pre-computed, to keep the FSM shallow.
+        # -------
+        #_data      = data
+        #_char_is_k = char_is_k
+        #data       = Signal.like(_data,      reset_less=True)
+        #char_is_k  = Signal.like(_char_is_k, reset_less=True)
+        #self.sync += [
+        #    data.eq(_data),
+        #    char_is_k.eq(_char_is_k),
+        #]
+        matches = {}
+        def match(lane, code):
+            key = (lane, code.value)
+            if key not in matches:
+                matches[key] = Signal(reset_less=True)
+                #self.sync += matches[key].eq(_data[8*lane:8*(lane + 1)] == code)
+                self.comb += matches[key].eq(data[8*lane:8*(lane + 1)] == code)
+            return matches[key]
+
         # Buffer.
         # -------
         self.buffer = buffer = stream.Buffer(eth_phy_description(32), pipe_valid=True, pipe_ready=False)
@@ -196,61 +217,37 @@ class PCSRX32(LiteXModule):
         fsm.act("START",
             NextValue(buffer.sink.valid, 0),
             NextValue(buffer.sink.data, data),
+            NextValue(buffer.sink.be, 0b0000),
             # Wait for a K-character.
             If(char_is_k == 1,
                 # K-character is Config or Idle K28.5.
-                If(data[0:8] == K(28, 5),
-                    If((data[8:16] == D(21, 5)) | # /C1/.
-                       (data[8:16] == D( 2, 2)),  # /C2/.
+                If(match(0, K(28, 5)),
+                    If(match(1, D(21, 5)) | # /C1/.
+                       match(1, D( 2, 2)),  # /C2/.
                         self.seen_valid_ci.eq(1),
                         self.seen_config_reg.eq(1),
                         self.config_reg.eq(data[16:32]),
                     ),
                 ),
+            ),
+            *(If(char_is_k[i:] == 1,
                 # K-character is Start-of-packet /S/.
-                If(data[:8] == K(27, 7),
+                If(match(i, K(27, 7)),
                     NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1111),
-                    NextValue(buffer.sink.data[:8], C(0x55, 8)), # First Preamble Byte.
+                    NextValue(buffer.sink.be, (0b1111 << i) & 0b1111),
+                    NextValue(buffer.sink.data[i*8:(i+1)*8], C(0x55, 8)), # First Preamble Byte.
                     NextState("DATA")
                 )
-            ),
-            If(char_is_k[1:] == 1,
-                # K-character is Start-of-packet /S/.
-                If(data[8:16] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1110),
-                    NextValue(buffer.sink.data[8:16], C(0x55, 8)), # First Preamble Byte.
-                    NextState("DATA")
-                )
-            ),
-            If(char_is_k[2:] == 1,
-                # K-character is Start-of-packet /S/.
-                If(data[16:24] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1100),
-                    NextValue(buffer.sink.data[16:24], C(0x55, 8)), # First Preamble Byte.
-                    NextState("DATA")
-                )
-            ),
-            If(char_is_k[3:] == 1,
-                # K-character is Start-of-packet /S/.
-                If(data[24:] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1000),
-                    NextValue(buffer.sink.data[24:], C(0x55, 8)), # First Preamble Byte.
-                    NextState("DATA")
-                )
-            ),
+            ) for i in range(4)),
             # check for Idle word
             *(If(char_is_k[i],
-                If(data[i*8:(i+1)*8] == K(28, 5),
-                    If((data[(i+1)*8:(i+2)*8] == D( 5, 6)) | # /I1/.
-                       (data[(i+1)*8:(i+2)*8] == D( 16, 2)), # /I2/.
+                If(match(i, K(28, 5)),
+                    If(match(i+1, D( 5, 6)) | # /I1/.
+                       match(i+1, D( 16, 2)), # /I2/.
                         self.seen_valid_ci.eq(1),
                     )
                 ),
-            ) for i in range(2))# don't check IDLE word if it requiere another state on the FSM, routing is already too tight
+            ) for i in range(3))# don't check IDLE word if it requiere another state on the FSM, routing is already too tight
         )
         fsm.act("DATA",
             self.seen_valid_ci.eq(1),
@@ -259,21 +256,21 @@ class PCSRX32(LiteXModule):
                 # Receive Data.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b1111),
-            ).Elif((char_is_k[0] == 1) & (data[0:8] == K(29, 7)),
+            ).Elif((char_is_k[0] == 1) & match(0, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 0),
                 NextState("START"),
-            ).Elif((char_is_k[:2] == 0b0010) & (data[8:16] == K(29, 7)),
+            ).Elif((char_is_k[:2] == 0b0010) & match(1, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0001),
                 NextState("START"),
-            ).Elif((char_is_k[:3] == 0b0100) & (data[16:24] == K(29, 7)),
+            ).Elif((char_is_k[:3] == 0b0100) & match(2, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0011),
                 NextState("START"),
-            ).Elif((char_is_k == 0b1000) & (data[24:32] == K(29, 7)),
+            ).Elif((char_is_k == 0b1000) & match(3, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0111),
@@ -356,35 +353,7 @@ class Realiner32(LiteXModule):
             fsm.act(f'END_{i}',
                     NextValue(self.source.be, rem_be),
                     NextValue(self.source.valid, 1),
-                    NextValue(self.source.data, rem[:-j]),
+                    NextValue(self.source.data, rem),
                     NextValue(self.source.last, 1),
                     NextState('IDLE'),
                 )
-
-            
-
-# PCS ----------------------------------------------------------------------------------------------
-
-class PCS32(PCS):
-    """1000BASE-X PCS with a 32-bit datapath: shared PCS (Auto-Negotiation, link checker, CSRs)
-    with dw=32."""
-    def __init__(self, lsb_first=False,
-        check_period    = 6e-3,
-        breaklink_time  = 10e-3,
-        more_ack_time   = 10e-3,
-        sgmii_ack_time  = 1.6e-3,
-        eth_tx_clk_freq = 125e6,
-        with_csr        = True,
-        with_autoneg    = True,
-        sys_clk_freq    = None,
-    ):
-        PCS.__init__(self, lsb_first=lsb_first, dw=32, sgmii=False,
-            check_period    = check_period,
-            breaklink_time  = breaklink_time,
-            more_ack_time   = more_ack_time,
-            sgmii_ack_time  = sgmii_ack_time,
-            eth_tx_clk_freq = eth_tx_clk_freq,
-            with_csr        = with_csr,
-            with_autoneg    = with_autoneg,
-            sys_clk_freq    = sys_clk_freq,
-        )
