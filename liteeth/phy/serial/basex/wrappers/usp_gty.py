@@ -58,7 +58,7 @@ class USP_GTY_1000BASEX(LiteXModule):
         # Preserve public handles without registering the PMA's submodules twice.
         for name in (
             "cd_eth_tx", "cd_eth_rx", "cd_eth_tx_half", "cd_eth_rx_half",
-            "txoutclk", "rxoutclk", "reset", "gearbox",
+            "txoutclk", "rxoutclk", "txoutclk_freq", "rxoutclk_freq", "reset", "gearbox",
             "pll",
         ):
             object.__setattr__(self, name, getattr(pma, name))
