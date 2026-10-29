@@ -42,9 +42,12 @@ class PMA_USP_GTH_BASEX(LiteXModule):
         self.cd_eth_tx_half = ClockDomain(reset_less=True)
         self.cd_eth_rx_half = ClockDomain(reset_less=True)
 
-        # for specifying clock constraints. 125MHz clocks.
+        # for specifying clock constraints: the transceiver's output clocks, at the eth_tx/eth_rx
+        # rate (the BUFG_GTs divide them into eth_tx/eth_rx and the halves).
         self.txoutclk = Signal()
         self.rxoutclk = Signal()
+        self.txoutclk_freq = tx_clk_freq
+        self.rxoutclk_freq = rx_clk_freq
 
         # # #
 
