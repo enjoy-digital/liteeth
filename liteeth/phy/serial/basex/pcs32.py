@@ -187,6 +187,25 @@ class PCSRX32(LiteXModule):
             table_err.eq(self.table_err),
         ]
 
+        # Decode.
+        # Second register stage with the byte comparisons pre-computed, to keep the FSM shallow.
+        # -------
+        _data      = data
+        _char_is_k = char_is_k
+        data       = Signal.like(_data)
+        char_is_k  = Signal.like(_char_is_k)
+        self.sync += [
+            data.eq(_data),
+            char_is_k.eq(_char_is_k),
+        ]
+        matches = {}
+        def match(lane, code):
+            key = (lane, code.value)
+            if key not in matches:
+                matches[key] = Signal()
+                self.sync += matches[key].eq(_data[8*lane:8*(lane + 1)] == code)
+            return matches[key]
+
         # Buffer.
         # -------
         self.buffer = buffer = stream.Buffer(eth_phy_description(32), pipe_valid=True, pipe_ready=False)
@@ -203,21 +222,21 @@ class PCSRX32(LiteXModule):
             # Wait for a K-character.
             If(char_is_k == 0x0001,
                 # K-character is Config or Idle K28.5.
-                If(data[0:8] == K(28, 5),
-                    If((data[8:16] == D(21, 5)) | # /C1/.
-                       (data[8:16] == D( 2, 2)),  # /C2/.
+                If(match(0, K(28, 5)),
+                    If(match(1, D(21, 5)) | # /C1/.
+                       match(1, D( 2, 2)),  # /C2/.
                         self.seen_valid_ci.eq(1),
                         self.seen_config_reg.eq(1),
                         self.config_reg.eq(data[16:32]),
                     ),
                     # Check for Idle Word.
-                    If((data[8:16] == D( 5, 6)) | # /I1/.
-                       (data[8:16] == D(16, 2)),  # /I2/.
+                    If(match(1, D( 5, 6)) | # /I1/.
+                       match(1, D(16, 2)),  # /I2/.
                         self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
-                If(data[0:8] == K(27, 7),
+                If(match(0, K(27, 7)),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1111),
                     NextValue(buffer.sink.data, Cat(
@@ -228,15 +247,15 @@ class PCSRX32(LiteXModule):
                 )
             ),
             If(char_is_k[1:] == 0x001,
-               If(data[8:16] == K(28, 5),
+               If(match(1, K(28, 5)),
                     # Check for Idle Word.
-                    If((data[16:24] == D( 5, 6)) | # /I1/.
-                       (data[16:24] == D(16, 2)),  # /I2/.
+                    If(match(2, D( 5, 6)) | # /I1/.
+                       match(2, D(16, 2)),  # /I2/.
                         self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
-               If(data[8:16] == K(27, 7),
+               If(match(1, K(27, 7)),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1110),
                     NextValue(buffer.sink.data, Cat(
@@ -248,15 +267,15 @@ class PCSRX32(LiteXModule):
                 )
             ),
             If(char_is_k[2:] == 0x01,
-               If(data[16:24] == K(28, 5),
+               If(match(2, K(28, 5)),
                     # Check for Idle Word.
-                    If((data[24:] == D( 5, 6)) | # /I1/.
-                       (data[24:] == D(16, 2)),  # /I2/.
+                    If(match(3, D( 5, 6)) | # /I1/.
+                       match(3, D(16, 2)),  # /I2/.
                         self.seen_valid_ci.eq(1),
                     ),
                 ),
                 # K-character is Start-of-packet /S/.
-               If(data[16:24] == K(27, 7),
+               If(match(2, K(27, 7)),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1100),
                     NextValue(buffer.sink.data, Cat(
@@ -268,12 +287,12 @@ class PCSRX32(LiteXModule):
                 )
             ),
             If(char_is_k[3:] == 0x1,
-               If(data[24:] == K(28, 5),
+               If(match(3, K(28, 5)),
                     # Check for Idle Word. (next cycle) maybe not usfull
                     self.seen_valid_ci.eq(1),
                 ),
                 # K-character is Start-of-packet /S/.
-               If(data[24:] == K(27, 7),
+               If(match(3, K(27, 7)),
                     NextValue(buffer.sink.valid, 1),
                     NextValue(buffer.sink.be, 0b1000),
                     NextValue(buffer.sink.data, Cat(
@@ -291,21 +310,21 @@ class PCSRX32(LiteXModule):
                 # Receive Data.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b1111),
-            ).Elif((char_is_k[0] == 1) & (data[0:8] == K(29, 7)),
+            ).Elif((char_is_k[0] == 1) & match(0, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 0),
                 NextState("START"),
-            ).Elif((char_is_k[:2] == 0b0010) & (data[8:16] == K(29, 7)),
+            ).Elif((char_is_k[:2] == 0b0010) & match(1, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0001),
                 NextState("START"),
-            ).Elif((char_is_k[:3] == 0b0100) & (data[16:24] == K(29, 7)),
+            ).Elif((char_is_k[:3] == 0b0100) & match(2, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0011),
                 NextState("START"),
-            ).Elif((char_is_k == 0b1000) & (data[24:32] == K(29, 7)),
+            ).Elif((char_is_k == 0b1000) & match(3, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0111),
