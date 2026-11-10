@@ -20,15 +20,18 @@ from litex.tools.remote.comm_udp import CommUDP
 KiB = 1024
 MiB = 1024*KiB
 
-comms = {
-    "cli": RemoteClient,
-    "udp": CommUDP
-}
+# Bus ----------------------------------------------------------------------------------------------
+
+def get_bus(comm, port, ip_address):
+    # CommUDP: Etherbone UDP port/IP address of the board, RemoteClient: litex_server port.
+    if comm == "udp":
+        return CommUDP(server=ip_address, port=port, csr_csv="csr.csv")
+    return RemoteClient(port=port, csr_csv="csr.csv")
 
 # Identifier Test ----------------------------------------------------------------------------------
 
-def ident_test(comm, port):
-    wb = comms[comm](port=port, csr_csv="csr.csv")
+def ident_test(comm, port, ip_address):
+    wb = get_bus(comm, port, ip_address)
     wb.open()
 
     fpga_identifier = ""
@@ -45,8 +48,8 @@ def ident_test(comm, port):
 
 # Access Test --------------------------------------------------------------------------------------
 
-def access_test(comm, port):
-    wb = comms[comm](port=port, csr_csv="csr.csv")
+def access_test(comm, port, ip_address):
+    wb = get_bus(comm, port, ip_address)
     wb.open()
 
     data = 0x12345678
@@ -60,8 +63,8 @@ def access_test(comm, port):
 
 # SRAM Test ----------------------------------------------------------------------------------------
 
-def sram_test(comm, port):
-    wb = comms[comm](port=port, csr_csv="csr.csv")
+def sram_test(comm, port, ip_address):
+    wb = get_bus(comm, port, ip_address)
     wb.open()
 
     def mem_dump(base, length):
@@ -108,8 +111,8 @@ def sram_test(comm, port):
 
 # Speed Test ---------------------------------------------------------------------------------------
 
-def speed_test(comm, port):
-    wb = comms[comm](port=port, csr_csv="csr.csv")
+def speed_test(comm, port, ip_address):
+    wb = get_bus(comm, port, ip_address)
     wb.open()
 
     test_size  = 16*KiB
@@ -137,28 +140,29 @@ def speed_test(comm, port):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth Etherbone test utility")
-    parser.add_argument("--port",   default="1234",      help="Host bind port")
-    parser.add_argument("--udp",    action="store_true", help="Use CommUDP directly instead of RemoteClient")
-    parser.add_argument("--ident",  action="store_true", help="Read FPGA identifier")
-    parser.add_argument("--access", action="store_true", help="Test single Write/Read access over Etherbone")
-    parser.add_argument("--sram",   action="store_true", help="Test SRAM access over Etherbone")
-    parser.add_argument("--speed",  action="store_true", help="Test speed over Etherbone")
+    parser.add_argument("--port",       default="1234",         help="litex_server port (or board Etherbone UDP port with --udp).")
+    parser.add_argument("--udp",        action="store_true",    help="Use CommUDP directly instead of RemoteClient")
+    parser.add_argument("--ip-address", default="192.168.1.50", help="Board IP address (with --udp).")
+    parser.add_argument("--ident",      action="store_true",    help="Read FPGA identifier")
+    parser.add_argument("--access",     action="store_true",    help="Test single Write/Read access over Etherbone")
+    parser.add_argument("--sram",       action="store_true",    help="Test SRAM access over Etherbone")
+    parser.add_argument("--speed",      action="store_true",    help="Test speed over Etherbone")
     args = parser.parse_args()
 
     port = int(args.port, 0)
     comm = "cli" if not args.udp else "udp"
 
     if args.ident:
-        ident_test(comm=comm, port=port)
+        ident_test(comm=comm, port=port, ip_address=args.ip_address)
 
     if args.access:
-        access_test(comm=comm, port=port)
+        access_test(comm=comm, port=port, ip_address=args.ip_address)
 
     if args.sram:
-        sram_test(comm=comm, port=port)
+        sram_test(comm=comm, port=port, ip_address=args.ip_address)
 
     if args.speed:
-        speed_test(comm=comm, port=port)
+        speed_test(comm=comm, port=port, ip_address=args.ip_address)
 
 if __name__ == "__main__":
     main()
