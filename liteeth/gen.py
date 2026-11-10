@@ -602,6 +602,8 @@ class UDPCore(PHYCore):
         else:
             ip_address = port_cfg.get("ip_address")
             udp_port   = port_cfg.get("udp_port")
+            if udp_port is None:
+                raise ValueError(f"UDP port \"{name}\": \"ip_address\" requires \"udp_port\".")
 
         # Create UDPStreamer.
         # -------------------
