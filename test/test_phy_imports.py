@@ -63,6 +63,7 @@ class TestPHYImports(unittest.TestCase):
         "xgmii":              ("LiteEthPHYXGMII",),
         "a7_1000basex":      ("A7_1000BASEX", "A7_2500BASEX"),
         "k7_1000basex":      ("K7_1000BASEX", "K7_2500BASEX"),
+        "v7_1000basex":      ("V7_1000BASEX", "V7_2500BASEX"),
         "ku_1000basex":      ("KU_1000BASEX", "KU_2500BASEX"),
         "usp_gth_1000basex": ("USP_GTH_1000BASEX", "USP_GTH_2500BASEX"),
         "usp_gty_1000basex": ("USP_GTY_1000BASEX", "USP_GTY_2500BASEX"),
@@ -70,7 +71,6 @@ class TestPHYImports(unittest.TestCase):
     }
 
     direct_imports = {
-        "v7_1000basex":  ("V7_1000BASEX", "V7_2500BASEX"),
         "gw5_1000basex": ("GW5_1000BASEX",),
         "a7_gtp":        ("QPLL", "QPLLChannel", "QPLLSettings", "GTPTxInit", "GTPRxInit"),
         "model":         ("LiteEthPHYModel",),
