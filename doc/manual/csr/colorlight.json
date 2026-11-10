@@ -1,0 +1,135 @@
+{
+ "argv": [],
+ "banks": {
+  "ethphy_ecp5_rgmii": [
+   {
+    "access": "rw",
+    "description": "PHY reset.",
+    "fields": [],
+    "name": "crg_reset",
+    "offset": 0,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "RGMII in-band status.",
+    "fields": [
+     {
+      "description": "Link status.",
+      "name": "link_status",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "Link down."
+       ],
+       [
+        "``0b1``",
+        "Link up."
+       ]
+      ]
+     },
+     {
+      "description": "Clock speed.",
+      "name": "clock_speed",
+      "offset": 1,
+      "reset": 0,
+      "size": 2,
+      "values": [
+       [
+        "``0b00``",
+        "2.5MHz   (10Mbps)."
+       ],
+       [
+        "``0b01``",
+        "25MHz   (100MBps)."
+       ],
+       [
+        "``0b10``",
+        "125MHz (1000MBps)."
+       ]
+      ]
+     },
+     {
+      "description": "Duplex status.",
+      "name": "duplex_status",
+      "offset": 3,
+      "reset": 0,
+      "size": 1,
+      "values": [
+       [
+        "``0b0``",
+        "Half-duplex."
+       ],
+       [
+        "``0b1``",
+        "Full-duplex."
+       ]
+      ]
+     }
+    ],
+    "name": "rx_inband_status",
+    "offset": 4,
+    "reset": null,
+    "size": 4
+   },
+   {
+    "access": "rw",
+    "description": "",
+    "fields": [
+     {
+      "description": "MDIO clock.",
+      "name": "mdc",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "MDIO output enable.",
+      "name": "oe",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "MDIO write data.",
+      "name": "w",
+      "offset": 2,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "mdio_w",
+    "offset": 8,
+    "reset": 0,
+    "size": 3
+   },
+   {
+    "access": "ro",
+    "description": "",
+    "fields": [
+     {
+      "description": "MDIO read data.",
+      "name": "r",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "mdio_r",
+    "offset": 12,
+    "reset": null,
+    "size": 1
+   }
+  ]
+ },
+ "config": "colorlight",
+ "target": "bench/colorlight_5a_75b"
+}

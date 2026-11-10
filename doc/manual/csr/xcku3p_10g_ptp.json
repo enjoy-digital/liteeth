@@ -1,0 +1,375 @@
+{
+ "argv": [
+  "soc_xcku3p_10g_ptp"
+ ],
+ "banks": {
+  "ethmac": [
+   {
+    "access": "ro",
+    "description": "Receive slot.",
+    "fields": [],
+    "name": "sram_writer_slot",
+    "offset": 0,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Receive packet length in bytes.",
+    "fields": [],
+    "name": "sram_writer_length",
+    "offset": 4,
+    "reset": null,
+    "size": 11
+   },
+   {
+    "access": "ro",
+    "description": "Receive packet drop count.",
+    "fields": [],
+    "name": "sram_writer_errors",
+    "offset": 8,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "This register contains the current raw level of the event trigger. Writes to this register have no effect.",
+    "fields": [
+     {
+      "description": "Level of the ``available`` event.",
+      "name": "available",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_writer_ev_status",
+    "offset": 12,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "When an event occurs, the corresponding bit will be set in this register. To clear the Event, set the corresponding bit in this register.",
+    "fields": [
+     {
+      "description": "`1` if a `available` event occurred. This Event is **level triggered** when the signal is **high**.",
+      "name": "available",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_writer_ev_pending",
+    "offset": 16,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "This register enables the corresponding events. Write a ``0`` to this register to disable individual events.",
+    "fields": [
+     {
+      "description": "Write a ``1`` to enable the ``available`` Event.",
+      "name": "available",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_writer_ev_enable",
+    "offset": 20,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "wo",
+    "description": "",
+    "fields": [],
+    "name": "sram_reader_start",
+    "offset": 24,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Transmit command FIFO ready.",
+    "fields": [],
+    "name": "sram_reader_ready",
+    "offset": 28,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Transmit command FIFO level.",
+    "fields": [],
+    "name": "sram_reader_level",
+    "offset": 32,
+    "reset": null,
+    "size": 2
+   },
+   {
+    "access": "rw",
+    "description": "Transmit slot.",
+    "fields": [],
+    "name": "sram_reader_slot",
+    "offset": 36,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "Transmit packet length in bytes.",
+    "fields": [],
+    "name": "sram_reader_length",
+    "offset": 40,
+    "reset": 0,
+    "size": 11
+   },
+   {
+    "access": "ro",
+    "description": "This register contains the current raw level of the event trigger. Writes to this register have no effect.",
+    "fields": [
+     {
+      "description": "Level of the ``event0`` event.",
+      "name": "event0",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_reader_ev_status",
+    "offset": 44,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "When an event occurs, the corresponding bit will be set in this register. To clear the Event, set the corresponding bit in this register.",
+    "fields": [
+     {
+      "description": "`1` if a this particular event occurred. This Event is triggered on a **rising** edge.",
+      "name": "event0",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_reader_ev_pending",
+    "offset": 48,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "This register enables the corresponding events. Write a ``0`` to this register to disable individual events.",
+    "fields": [
+     {
+      "description": "Write a ``1`` to enable the ``event0`` Event.",
+      "name": "event0",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_reader_ev_enable",
+    "offset": 52,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Preamble/CRC support enabled.",
+    "fields": [],
+    "name": "preamble_crc",
+    "offset": 56,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Preamble error count.",
+    "fields": [],
+    "name": "rx_datapath_preamble_errors",
+    "offset": 60,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "CRC error count.",
+    "fields": [],
+    "name": "rx_datapath_crc_errors",
+    "offset": 64,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "Receive packet drop count.",
+    "fields": [],
+    "name": "rx_datapath_drops",
+    "offset": 68,
+    "reset": null,
+    "size": 32
+   }
+  ],
+  "ethphy_baser": [
+   {
+    "access": "rw",
+    "description": "PHY reset.",
+    "fields": [],
+    "name": "reset",
+    "offset": 0,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "PHY control.",
+    "fields": [
+     {
+      "description": "Transceiver loopback (UG578 ch 2): 0 off, 1 near-end PCS, 2 near-end PMA, 4 far-end PMA, 6 far-end PCS",
+      "name": "loopback",
+      "offset": 0,
+      "reset": 0,
+      "size": 3,
+      "values": []
+     },
+     {
+      "description": "Transmit PRBS31 test pattern (49.2.8)",
+      "name": "tx_prbs31_enable",
+      "offset": 3,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Check received stream against PRBS31 (49.2.12)",
+      "name": "rx_prbs31_enable",
+      "offset": 4,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Freeze the PRBS31 error counter; wait for prbs_paused before reading",
+      "name": "prbs_pause",
+      "offset": 5,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "control",
+    "offset": 4,
+    "reset": 0,
+    "size": 6
+   },
+   {
+    "access": "ro",
+    "description": "PHY status.",
+    "fields": [
+     {
+      "description": "Block synchronisation acquired (49.2.9, Figure 49-12)",
+      "name": "block_lock",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Invalid sync-header threshold exceeded in the rate-specific BER window",
+      "name": "high_ber",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "PCS_status: block lock held and no high BER (49.2.14.1)",
+      "name": "link_up",
+      "offset": 2,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "PRBS31 bit errors in a sampled receive block, valid in receive test-pattern mode",
+      "name": "error_count",
+      "offset": 3,
+      "reset": 0,
+      "size": 7,
+      "values": []
+     },
+     {
+      "description": "Block lock has been absent at some point since this register was last read",
+      "name": "block_lock_lost",
+      "offset": 10,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "high_ber has been asserted at some point since this register was last read",
+      "name": "high_ber_latched",
+      "offset": 11,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "The paused PRBS31 counter snapshot has reached sys; zero without PRBS support",
+      "name": "prbs_paused",
+      "offset": 12,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "status",
+    "offset": 8,
+    "reset": null,
+    "size": 13
+   },
+   {
+    "access": "ro",
+    "description": "PRBS31 bit errors since the test was last enabled, saturating rather than wrapping. Set prbs_pause and wait for prbs_paused before reading all words. Clear prbs_pause and wait for prbs_paused to clear before requesting another snapshot. Disabling the checker clears the counter, even while paused. For a bit error ratio, the denominator is the elapsed time times the receive clock frequency times 66 bits per block.",
+    "fields": [],
+    "name": "rx_prbs_errors",
+    "offset": 12,
+    "reset": null,
+    "size": 32
+   }
+  ],
+  "ptp": [
+   {
+    "access": "ro",
+    "description": "PTP lock status.",
+    "fields": [],
+    "name": "locked",
+    "offset": 0,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Master IPv4.",
+    "fields": [],
+    "name": "master_ip",
+    "offset": 4,
+    "reset": null,
+    "size": 32
+   }
+  ]
+ },
+ "config": "xcku3p_10g_ptp",
+ "target": "doc/manual/registers.py"
+}
