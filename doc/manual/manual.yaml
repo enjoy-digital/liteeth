@@ -1,0 +1,29 @@
+# Manual of this project: output name and chapters, in order (read by build.py; the pandoc defaults
+# files and the theme are generic, from the manual kit).
+name: liteeth_manual
+chapters:
+  - 00_front.md
+  - 01_introduction.md
+  - 02_ethernet_primer.md
+  - 03_phy_interfaces.md
+  - 04_network_primer.md
+  - 05_architecture.md
+  - 06_mac.md
+  - 07_ip_stack.md
+  - 08_frontends.md
+  - 09_ptp.md
+  - 10_parallel_phys.md
+  - 11_basex_phys.md
+  - 12_baser_phys.md
+  - 13_boards.md
+  - 14_getting_started.md
+  - 15_integration.md
+  - 16_examples.md
+  - 17_simulation.md
+  - 18_debugging.md
+  - Z_appendix.md
+  - A_registers.md
+  - B_build_options.md
+  - C_glossary.md
+  - D_performance.md
+  - E_maintenance.md
