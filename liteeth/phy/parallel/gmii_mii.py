@@ -184,5 +184,12 @@ class LiteEthPHYGMIIMII(LiteXModule):
         self.rx  = ClockDomainsRenamer("eth_rx")(LiteEthPHYGMIIMIIRX(pads, mode))
         self.sink, self.source = self.tx.sink, self.rx.source
 
+        # Inter-frame gap: 96 bit times in bytes (GMII) or 4-bit nibbles (MII).
+        self.tx_gap_cycles = Signal(max=2*eth_interpacket_gap + 1)
+        self.comb += self.tx_gap_cycles.eq(Mux(mode == modes["MII"],
+            2*eth_interpacket_gap,
+            1*eth_interpacket_gap,
+        ))
+
         if hasattr(pads, "mdc"):
             self.mdio = LiteEthPHYMDIO(pads)
