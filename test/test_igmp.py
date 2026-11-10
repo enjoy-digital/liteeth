@@ -264,6 +264,13 @@ class TestIGMPData(unittest.TestCase):
         ip_hdr = frame[ip_start:ip_start + 20]
         self.assertEqual(ip_hdr[9], 0x02, "Protocol should be IGMP")
 
+        # Verify TTL = 1 (RFC 2236) and IP header checksum.
+        self.assertEqual(ip_hdr[8], 1, "IGMP TTL should be 1")
+        hdr_sum = sum((ip_hdr[i] << 8) | ip_hdr[i + 1] for i in range(0, 20, 2))
+        while hdr_sum >> 16:
+            hdr_sum = (hdr_sum & 0xffff) + (hdr_sum >> 16)
+        self.assertEqual(hdr_sum, 0xffff, "Invalid IP header checksum")
+
         # Verify destination IP = 224.0.1.129.
         dst_ip = (ip_hdr[16] << 24) | (ip_hdr[17] << 16) | (ip_hdr[18] << 8) | ip_hdr[19]
         self.assertEqual(dst_ip, 0xE0000181)

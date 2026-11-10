@@ -8,6 +8,7 @@ from litex.gen import *
 
 from liteeth.common import *
 from liteeth.crossbar import LiteEthCrossbar
+from liteeth.core.igmp import igmp_protocol
 
 from litex.soc.interconnect.packet import Depacketizer, Packetizer
 
@@ -171,7 +172,8 @@ class LiteEthIPTX(LiteXModule):
             packetizer.sink.ihl.eq(ipv4_header.length//4),
             packetizer.sink.identification.eq(0),
             packetizer.sink.flags_offset.eq(0),  # No fragmentation (DF not set).
-            packetizer.sink.ttl.eq(0x80),
+            # TTL: 1 for IGMP (RFC 2236: reports are link-local), 128 otherwise.
+            packetizer.sink.ttl.eq(Mux(sink.protocol == igmp_protocol, 1, 0x80)),
             packetizer.sink.sender_ip.eq(ip_address),
             checksum.header.eq(packetizer.header),
             packetizer.sink.checksum.eq(checksum.value)
