@@ -137,6 +137,17 @@ class TestGeneratedCore(unittest.TestCase):
         self.assertEqual(jumbo, alias)
         self.assertNotEqual(jumbo, default)
 
+    def test_dhcp_mac_address(self):
+        # The DHCP client must send the core MAC address (fixed or from the mac_address pins).
+        verilog  = generate_config("udp_s7phyrgmii", dhcp=True, ip_address=None)
+        mac_wire = re.search(r"assign liteethdhcptx_mac_address = (\w+);", verilog)
+        self.assertIsNotNone(mac_wire)
+        self.assertRegex(verilog, rf"assign {mac_wire[1]} = \d+'h10e2d5000000;")
+        verilog  = generate_config("udp_s7phyrgmii", dhcp=True, ip_address=None, mac_address=None)
+        mac_wire = re.search(r"assign liteethdhcptx_mac_address = (\w+);", verilog)
+        self.assertIsNotNone(mac_wire)
+        self.assertRegex(verilog, rf"assign {mac_wire[1]} = mac_address;")
+
     def test_dynamic_params_not_used_as_reset_values(self):
         # Regression: dynamic udp_port/ip_address pads (port without a fixed IP address) were used
         # as Signal reset values, generating non-constant register initializers that synthesis
