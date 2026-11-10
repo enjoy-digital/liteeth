@@ -1,0 +1,151 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="334" viewBox="0 0 760 334">
+<defs>
+  <marker id="arrow-ctrl" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-ctrl-rev" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+    <path d="M8,0 L0,4 L8,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-stream" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#606060"/></marker>
+  <marker id="arrow-accent" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-accent-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-stream-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#606060"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="50" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="67" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">MAC</tspan></text>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="90" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="107" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">RS</tspan></text>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="130" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="147" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">xMII</tspan></text>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="170" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="187" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">PCS</tspan></text>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="210" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="227" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">PMA</tspan></text>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="250" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="267" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">PMD</tspan></text>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="20" y="290" width="90" height="34" rx="0" ry="0"/>
+</g>
+<text x="65" y="307" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="65" dy="0">MDI</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,52 L422.7,52 L431.2,60.5 L431.2,86 Q431.2,86 431.2,86 L159.7,86 L151.2,77.5 L151.2,52 Q151.2,52 151.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,52 L422.7,52 L431.2,60.5 L431.2,86 Q431.2,86 431.2,86 L159.7,86 L151.2,77.5 L151.2,52 Q151.2,52 151.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M151,51.5 L422.5,51.5 L431,60 L431,85.5 Q431,85.5 431,85.5 L159.5,85.5 L151,77 L151,51.5 Q151,51.5 151,51.5 Z"/>
+</g>
+<g fill="#bfe6f5" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M150,50 L421.5,50 L430,58.5 L430,84 Q430,84 430,84 L158.5,84 L150,75.5 L150,50 Q150,50 150,50 Z"/>
+</g>
+<text x="290" y="67" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="290" dy="0">LiteEth MAC</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,92 L419.2,92 L431.2,104 L431.2,166 Q431.2,166 431.2,166 L163.2,166 L151.2,154 L151.2,92 Q151.2,92 151.2,92 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,92 L419.2,92 L431.2,104 L431.2,166 Q431.2,166 431.2,166 L163.2,166 L151.2,154 L151.2,92 Q151.2,92 151.2,92 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M151,91.5 L419,91.5 L431,103.5 L431,165.5 Q431,165.5 431,165.5 L163,165.5 L151,153.5 L151,91.5 Q151,91.5 151,91.5 Z"/>
+</g>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M150,90 L418,90 L430,102 L430,164 Q430,164 430,164 L162,164 L150,152 L150,90 Q150,90 150,90 Z"/>
+</g>
+<text x="290" y="127" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="290" dy="0">LiteEth PHY (MII to RGMII)</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,172 L419.2,172 L431.2,184 L431.2,286 Q431.2,286 431.2,286 L163.2,286 L151.2,274 L151.2,172 Q151.2,172 151.2,172 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,172 L419.2,172 L431.2,184 L431.2,286 Q431.2,286 431.2,286 L163.2,286 L151.2,274 L151.2,172 Q151.2,172 151.2,172 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M151,171.5 L419,171.5 L431,183.5 L431,285.5 Q431,285.5 431,285.5 L163,285.5 L151,273.5 L151,171.5 Q151,171.5 151,171.5 Z"/>
+</g>
+<g fill="#b8b8b8" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M150,170 L418,170 L430,182 L430,284 Q430,284 430,284 L162,284 L150,272 L150,170 Q150,170 150,170 Z"/>
+</g>
+<text x="290" y="227" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="290" dy="0">External PHY chip</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,292 L422.7,292 L431.2,300.5 L431.2,326 Q431.2,326 431.2,326 L159.7,326 L151.2,317.5 L151.2,292 Q151.2,292 151.2,292 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M151.2,292 L422.7,292 L431.2,300.5 L431.2,326 Q431.2,326 431.2,326 L159.7,326 L151.2,317.5 L151.2,292 Q151.2,292 151.2,292 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M151,291.5 L422.5,291.5 L431,300 L431,325.5 Q431,325.5 431,325.5 L159.5,325.5 L151,317 L151,291.5 Q151,291.5 151,291.5 Z"/>
+</g>
+<g fill="#b8b8b8" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M150,290 L421.5,290 L430,298.5 L430,324 Q430,324 430,324 L158.5,324 L150,315.5 L150,290 Q150,290 150,290 Z"/>
+</g>
+<text x="290" y="307" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="290" dy="0">RJ45 and magnetics</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,52 L732.7,52 L741.2,60.5 L741.2,86 Q741.2,86 741.2,86 L469.7,86 L461.2,77.5 L461.2,52 Q461.2,52 461.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,52 L732.7,52 L741.2,60.5 L741.2,86 Q741.2,86 741.2,86 L469.7,86 L461.2,77.5 L461.2,52 Q461.2,52 461.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M461,51.5 L732.5,51.5 L741,60 L741,85.5 Q741,85.5 741,85.5 L469.5,85.5 L461,77 L461,51.5 Q461,51.5 461,51.5 Z"/>
+</g>
+<g fill="#bfe6f5" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M460,50 L731.5,50 L740,58.5 L740,84 Q740,84 740,84 L468.5,84 L460,75.5 L460,50 Q460,50 460,50 Z"/>
+</g>
+<text x="600" y="67" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="600" dy="0">LiteEth MAC</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,92 L729.2,92 L741.2,104 L741.2,206 Q741.2,206 741.2,206 L473.2,206 L461.2,194 L461.2,92 Q461.2,92 461.2,92 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,92 L729.2,92 L741.2,104 L741.2,206 Q741.2,206 741.2,206 L473.2,206 L461.2,194 L461.2,92 Q461.2,92 461.2,92 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M461,91.5 L729,91.5 L741,103.5 L741,205.5 Q741,205.5 741,205.5 L473,205.5 L461,193.5 L461,91.5 Q461,91.5 461,91.5 Z"/>
+</g>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M460,90 L728,90 L740,102 L740,204 Q740,204 740,204 L472,204 L460,192 L460,90 Q460,90 460,90 Z"/>
+</g>
+<text x="600" y="147" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="600" dy="0">LiteEth PHY (PCS)</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,212 L732.7,212 L741.2,220.5 L741.2,246 Q741.2,246 741.2,246 L469.7,246 L461.2,237.5 L461.2,212 Q461.2,212 461.2,212 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,212 L732.7,212 L741.2,220.5 L741.2,246 Q741.2,246 741.2,246 L469.7,246 L461.2,237.5 L461.2,212 Q461.2,212 461.2,212 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M461,211.5 L732.5,211.5 L741,220 L741,245.5 Q741,245.5 741,245.5 L469.5,245.5 L461,237 L461,211.5 Q461,211.5 461,211.5 Z"/>
+</g>
+<g fill="#b8b8b8" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M460,210 L731.5,210 L740,218.5 L740,244 Q740,244 740,244 L468.5,244 L460,235.5 L460,210 Q460,210 460,210 Z"/>
+</g>
+<text x="600" y="227" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="600" dy="0">FPGA transceiver</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,252 L729.2,252 L741.2,264 L741.2,326 Q741.2,326 741.2,326 L473.2,326 L461.2,314 L461.2,252 Q461.2,252 461.2,252 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M461.2,252 L729.2,252 L741.2,264 L741.2,326 Q741.2,326 741.2,326 L473.2,326 L461.2,314 L461.2,252 Q461.2,252 461.2,252 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M461,251.5 L729,251.5 L741,263.5 L741,325.5 Q741,325.5 741,325.5 L473,325.5 L461,313.5 L461,251.5 Q461,251.5 461,251.5 Z"/>
+</g>
+<g fill="#b8b8b8" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M460,250 L728,250 L740,262 L740,324 Q740,324 740,324 L472,324 L460,312 L460,250 Q460,250 460,250 Z"/>
+</g>
+<text x="600" y="287" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="600" dy="0">SFP module and cage</tspan></text>
+<text x="290" y="22" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" font-style="italic" dominant-baseline="central"><tspan x="290" dy="0">External PHY chip</tspan></text>
+<text x="600" y="22" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" font-style="italic" dominant-baseline="central"><tspan x="600" dy="0">Transceiver and SFP</tspan></text>
+</svg>
