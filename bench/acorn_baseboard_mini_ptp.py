@@ -33,10 +33,8 @@
 #   Run ptp4l:
 #     sudo ptp4l -f ptp-master.cfg
 #
-# Monitor PTP state over Etherbone:
+# Monitor PTP lock state over Etherbone:
 #   ./bench/test_ptp.py --count 100
-#   ./bench/test_ptp.py --count 100 --debug
-#   ./bench/test_ptp.py --count 100 --plot
 
 import os
 import argparse
@@ -91,7 +89,7 @@ class _CRG(LiteXModule):
 # PTP Bench SoC ------------------------------------------------------------------------------------
 
 class PTPBenchSoC(SoCCore):
-    def __init__(self, variant="cle-215+", sys_clk_freq=int(125e6), sfp=0, p2p=False, ptp_debug=False):
+    def __init__(self, variant="cle-215+", sys_clk_freq=int(125e6), sfp=0, p2p=False):
         platform = sqrl_acorn.Platform(variant=variant)
         platform.add_extension(sqrl_acorn._litex_acorn_baseboard_mini_io, prepend=True)
 
@@ -153,7 +151,6 @@ class PTPBenchSoC(SoCCore):
             self.ptp_event_port,
             self.ptp_general_port,
             sys_clk_freq,
-            monitor_debug = ptp_debug,
         ))
 
         # PTP configuration.
@@ -181,7 +178,6 @@ def main():
     parser.add_argument("--sys-clk-freq", default=125e6, type=float, help="System clock frequency.")
     parser.add_argument("--sfp",          default=0, type=int, choices=[0, 1], help="SFP port to use.")
     parser.add_argument("--p2p",          action="store_true", help="Enable PTP P2P mode.")
-    parser.add_argument("--ptp-debug",    action="store_true", help="Enable PTP debug monitor CSRs.")
     args = parser.parse_args()
 
     soc = PTPBenchSoC(
@@ -189,7 +185,6 @@ def main():
         sys_clk_freq = int(args.sys_clk_freq),
         sfp          = args.sfp,
         p2p          = args.p2p,
-        ptp_debug    = args.ptp_debug,
     )
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)

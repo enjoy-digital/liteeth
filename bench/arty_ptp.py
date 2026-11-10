@@ -33,10 +33,8 @@
 #   Run ptp4l:
 #     sudo ptp4l -f ptp-master.cfg
 #
-# Monitor PTP state over Etherbone:
+# Monitor PTP lock state over Etherbone:
 #   ./bench/test_ptp.py --count 100
-#   ./bench/test_ptp.py --count 100 --debug
-#   ./bench/test_ptp.py --count 100 --plot
 
 import os
 import argparse
@@ -83,7 +81,7 @@ class _CRG(LiteXModule):
 # PTP Bench SoC ------------------------------------------------------------------------------------
 
 class PTPBenchSoC(SoCCore):
-    def __init__(self, sys_clk_freq=int(100e6), p2p=False, ptp_debug=False):
+    def __init__(self, sys_clk_freq=int(100e6), p2p=False):
         platform = digilent_arty.Platform()
 
         # SoCMini ----------------------------------------------------------------------------------
@@ -128,7 +126,6 @@ class PTPBenchSoC(SoCCore):
             self.ptp_event_port,
             self.ptp_general_port,
             sys_clk_freq,
-            monitor_debug = ptp_debug,
         ))
 
         # PTP configuration.
@@ -147,13 +144,12 @@ class PTPBenchSoC(SoCCore):
 
 def main():
     parser = argparse.ArgumentParser(description="LiteEth PTP Bench on Arty A7.")
-    parser.add_argument("--build",     action="store_true", help="Build bitstream.")
-    parser.add_argument("--load",      action="store_true", help="Load bitstream.")
-    parser.add_argument("--p2p",       action="store_true", help="Enable PTP P2P mode.")
-    parser.add_argument("--ptp-debug", action="store_true", help="Enable PTP debug monitor CSRs.")
+    parser.add_argument("--build", action="store_true", help="Build bitstream.")
+    parser.add_argument("--load",  action="store_true", help="Load bitstream.")
+    parser.add_argument("--p2p",   action="store_true", help="Enable PTP P2P mode.")
     args = parser.parse_args()
 
-    soc     = PTPBenchSoC(p2p=args.p2p, ptp_debug=args.ptp_debug)
+    soc     = PTPBenchSoC(p2p=args.p2p)
     builder = Builder(soc, csr_csv="csr.csv")
     builder.build(run=args.build)
 
