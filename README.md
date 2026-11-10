@@ -37,23 +37,24 @@ PHY:
   - XGMII 10Gbps interface to an external PHY or hard IP.
   - 5/10/25GBASE-R native PHYs on Xilinx 7-Series and UltraScale+ transceivers.
   - 1000BASE-X / 10GBASE-R native PHYs on Gowin GW5AST-138 transceivers.
+  - 1000BASE-X native PHY on Cologne Chip GateMate SerDes.
   - 100G hardware MAC adapter for the UltraScale+ CMAC (hardware validation pending).
 
-| PHY                 | ECP5 | Spartan6 | Trion | Titanium | 7-Series | UltraScale | UltraScale+ | Gowin GW5 | Agilex |
-|---------------------|------|----------|-------|----------|----------|------------|-------------|-----------|--------|
-| 10BASE-T            |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| MII                 |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| RMII                |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| GMII                |      |    X     |       |          |     X    |      X     |      X      |           |        |
-| RGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| SGMII / 1000BASE-X  |      |          |       |          |     X    |      X     |      X      |     X     |        |
-| SGMII / 2500BASE-X  |      |          |       |          |     X    |      X     |      X      |           |        |
-| LVDS 1000BASE-X     |      |          |       |     X    |          |      X     |      X      |           |        |
-| XGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| 5GBASE-R            |      |          |       |          |     X    |            |      X      |           |        |
-| 10GBASE-R           |      |          |       |          |     X    |            |      X      |     X     |        |
-| 25GBASE-R           |      |          |       |          |          |            |      X      |           |        |
-| 100G (CMAC)         |      |          |       |          |          |            |      X      |           |        |
+| PHY                 | ECP5 | Spartan6 | Trion | Titanium | 7-Series | UltraScale | UltraScale+ | Gowin GW5 | Agilex | GateMate |
+|---------------------|------|----------|-------|----------|----------|------------|-------------|-----------|--------|----------|
+| 10BASE-T            |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| MII                 |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| RMII                |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| GMII                |      |    X     |       |          |     X    |      X     |      X      |           |        |          |
+| RGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |          |
+| SGMII / 1000BASE-X  |      |          |       |          |     X    |      X     |      X      |     X     |        |    X     |
+| SGMII / 2500BASE-X  |      |          |       |          |     X    |      X     |      X      |           |        |          |
+| LVDS 1000BASE-X     |      |          |       |     X    |          |      X     |      X      |           |        |          |
+| XGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| 5GBASE-R            |      |          |       |          |     X    |            |      X      |           |        |          |
+| 10GBASE-R           |      |          |       |          |     X    |            |      X      |     X     |        |          |
+| 25GBASE-R           |      |          |       |          |          |            |      X      |           |        |          |
+| 100G (CMAC)         |      |          |       |          |          |            |      X      |           |        |          |
 
 Core:
   - Configurable MAC (HW or SW interface), 8 to 512-bit datapaths.
