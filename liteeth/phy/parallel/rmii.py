@@ -84,8 +84,9 @@ class LiteEthPHYRMIISpeedDetect(LiteXModule):
 
 class LiteEthPHYRMIITX(LiteXModule):
     def __init__(self, pads, clk_signal):
-        self.sink  = sink = stream.Endpoint(eth_phy_description(8))
-        self.speed = Signal() # 0: 10Mbps / 1: 100Mbps.
+        self.sink       = sink = stream.Endpoint(eth_phy_description(8))
+        self.speed      = Signal() # 0: 10Mbps / 1: 100Mbps.
+        self.gap_cycles = Signal(max=40*eth_interpacket_gap + 1) # Inter-frame gap (MAC Gap).
 
         # # #
 
@@ -93,6 +94,14 @@ class LiteEthPHYRMIITX(LiteXModule):
         # -------------------------------
         self.timer = timer = LiteEthPHYRMIITimer(speed=self.speed)
         self.comb += timer.rst.eq(~sink.valid)
+
+        # Inter-Frame Gap: 96 bit times in 2-bit dibits, sent every cycle (100Mbps) or every 10
+        # cycles (10Mbps).
+        # ------------------------------------------------------------------------------------
+        self.comb += Case(self.speed, {
+            0b0: self.gap_cycles.eq(40*eth_interpacket_gap), #  10Mbps.
+            0b1: self.gap_cycles.eq( 4*eth_interpacket_gap), # 100Mbps.
+        })
 
         # Converter: 8-bit to 2-bit.
         # --------------------------
@@ -275,6 +284,7 @@ class LiteEthPHYRMII(LiteXModule):
         self.rx = ClockDomainsRenamer("eth_rx")(LiteEthPHYRMIIRX(pads, self.crg.clk_signal))
         self.comb             += self.tx.speed.eq(self.rx.speed)
         self.sink, self.source = self.tx.sink, self.rx.source
+        self.tx_gap_cycles     = self.tx.gap_cycles
 
         # MDIO.
         # -----

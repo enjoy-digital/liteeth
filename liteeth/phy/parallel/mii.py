@@ -94,9 +94,10 @@ class LiteEthPHYMIICRG(LiteXModule):
 # LiteEth PHY MII ----------------------------------------------------------------------------------
 
 class LiteEthPHYMII(LiteXModule):
-    dw          = 8
-    tx_clk_freq = 25e6
-    rx_clk_freq = 25e6
+    dw            = 8
+    tx_clk_freq   = 25e6
+    rx_clk_freq   = 25e6
+    tx_gap_cycles = 2*eth_interpacket_gap # 4-bit nibbles: 96 bit times at 10/100Mbps.
     def __init__(self, clock_pads, pads, with_hw_init_reset=True):
         self.crg = LiteEthPHYMIICRG(clock_pads, pads, with_hw_init_reset)
         self.tx  = ClockDomainsRenamer("eth_tx")(LiteEthPHYMIITX(pads))
