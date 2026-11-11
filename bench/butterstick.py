@@ -95,7 +95,6 @@ class BenchSoC(SoCCore):
             etherbone.packet.rx.fsm,
             etherbone.packet.tx.source.valid,
             etherbone.packet.tx.source.ready,
-            etherbone.packet.tx.fsm,
             etherbone.record.receiver.fsm,
             etherbone.record.sender.fsm
         ],

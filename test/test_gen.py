@@ -102,6 +102,8 @@ class TestGeneratedCore(unittest.TestCase):
         for phy, primitive in [
             ("K7_1000BASEX", "GTXE2_CHANNEL"),
             ("K7_2500BASEX", "GTXE2_CHANNEL"),
+            ("V7_1000BASEX", "GTHE2_CHANNEL"),
+            ("V7_2500BASEX", "GTHE2_CHANNEL"),
             ("KU_1000BASEX", "GTHE3_CHANNEL"),
             ("KU_2500BASEX", "GTHE3_CHANNEL"),
             ("USP_GTH_2500BASEX", "GTHE4_CHANNEL"),
@@ -153,6 +155,16 @@ class TestGeneratedCore(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ValueError", result.stderr)
         self.assertIn("udp_port", result.stderr)
+    def test_dhcp_mac_address(self):
+        # The DHCP client must send the core MAC address (fixed or from the mac_address pins).
+        verilog  = generate_config("udp_s7phyrgmii", dhcp=True, ip_address=None)
+        mac_wire = re.search(r"assign liteethdhcptx_mac_address = (\w+);", verilog)
+        self.assertIsNotNone(mac_wire)
+        self.assertRegex(verilog, rf"assign {mac_wire[1]} = \d+'h10e2d5000000;")
+        verilog  = generate_config("udp_s7phyrgmii", dhcp=True, ip_address=None, mac_address=None)
+        mac_wire = re.search(r"assign liteethdhcptx_mac_address = (\w+);", verilog)
+        self.assertIsNotNone(mac_wire)
+        self.assertRegex(verilog, rf"assign {mac_wire[1]} = mac_address;")
 
     def test_dynamic_params_not_used_as_reset_values(self):
         # Regression: dynamic udp_port/ip_address pads (port without a fixed IP address) were used

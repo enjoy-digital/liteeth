@@ -37,23 +37,24 @@ PHY:
   - XGMII 10Gbps interface to an external PHY or hard IP.
   - 5/10/25GBASE-R native PHYs on Xilinx 7-Series and UltraScale+ transceivers.
   - 1000BASE-X / 10GBASE-R native PHYs on Gowin GW5AST-138 transceivers.
+  - 1000BASE-X native PHY on Cologne Chip GateMate SerDes.
   - 100G hardware MAC adapter for the UltraScale+ CMAC (hardware validation pending).
 
-| PHY                 | ECP5 | Spartan6 | Trion | Titanium | 7-Series | UltraScale | UltraScale+ | Gowin GW5 | Agilex |
-|---------------------|------|----------|-------|----------|----------|------------|-------------|-----------|--------|
-| 10BASE-T            |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| MII                 |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| RMII                |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| GMII                |      |    X     |       |          |     X    |      X     |      X      |           |        |
-| RGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| SGMII / 1000BASE-X  |      |          |       |          |     X    |      X     |      X      |     X     |        |
-| SGMII / 2500BASE-X  |      |          |       |          |     X    |      X     |      X      |           |        |
-| LVDS 1000BASE-X     |      |          |       |     X    |          |      X     |      X      |           |        |
-| XGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |
-| 5GBASE-R            |      |          |       |          |     X    |            |      X      |           |        |
-| 10GBASE-R           |      |          |       |          |     X    |            |      X      |     X     |        |
-| 25GBASE-R           |      |          |       |          |          |            |      X      |           |        |
-| 100G (CMAC)         |      |          |       |          |          |            |      X      |           |        |
+| PHY                 | ECP5 | Spartan6 | Trion | Titanium | 7-Series | UltraScale | UltraScale+ | Gowin GW5 | Agilex | GateMate |
+|---------------------|------|----------|-------|----------|----------|------------|-------------|-----------|--------|----------|
+| 10BASE-T            |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| MII                 |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| RMII                |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| GMII                |      |    X     |       |          |     X    |      X     |      X      |           |        |          |
+| RGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |          |
+| SGMII / 1000BASE-X  |      |          |       |          |     X    |      X     |      X      |     X     |        |    X     |
+| SGMII / 2500BASE-X  |      |          |       |          |     X    |      X     |      X      |           |        |          |
+| LVDS 1000BASE-X     |      |          |       |     X    |          |      X     |      X      |           |        |          |
+| XGMII               |  X   |    X     |   X   |     X    |     X    |      X     |      X      |     X     |    X   |    X     |
+| 5GBASE-R            |      |          |       |          |     X    |            |      X      |           |        |          |
+| 10GBASE-R           |      |          |       |          |     X    |            |      X      |     X     |        |          |
+| 25GBASE-R           |      |          |       |          |          |            |      X      |           |        |          |
+| 100G (CMAC)         |      |          |       |          |          |            |      X      |           |        |          |
 
 Core:
   - Configurable MAC (HW or SW interface), 8 to 512-bit datapaths.
@@ -67,7 +68,32 @@ Frontend:
 
 [> Documentation
 ----------------
-Architecture and datapaths:
+The **Ethernet Core & PHYs manual** is the reference of the project: a nightly
+[PDF](https://github.com/enjoy-digital/liteeth/releases/download/manual-nightly/liteeth_manual.pdf)
+and [HTML page](https://github.com/enjoy-digital/liteeth/releases/download/manual-nightly/liteeth_manual.html)
+are published on the [manual-nightly](https://github.com/enjoy-digital/liteeth/releases/tag/manual-nightly)
+release. Sources in [doc/manual](doc/manual/README.md); to build it locally (pandoc and XeLaTeX,
+see the README there), outputs in `build/doc/`:
+```sh
+$ python3 doc/manual/build.py                 # figures, checks, PDF and HTML
+$ python3 doc/manual/build.py --check         # links, anchors, figures, tables only
+```
+
+- **Understand**: [introduction](doc/manual/01_introduction.md), [Ethernet in a nutshell](doc/manual/02_ethernet_primer.md),
+  [PHY interfaces and line coding](doc/manual/03_phy_interfaces.md), [ARP, IP, UDP and Etherbone](doc/manual/04_network_primer.md).
+- **The core**: [architecture](doc/manual/05_architecture.md), [MAC](doc/manual/06_mac.md),
+  [ARP, IP, ICMP, UDP, DHCP and IGMP](doc/manual/07_ip_stack.md), [frontends](doc/manual/08_frontends.md),
+  [PTP](doc/manual/09_ptp.md).
+- **The PHYs**: [MII to XGMII and 10BASE-T](doc/manual/10_parallel_phys.md), [1000BASE-X, 2500BASE-X and SGMII](doc/manual/11_basex_phys.md),
+  [5G, 10G and 25G BASE-R, and 100G](doc/manual/12_baser_phys.md).
+- **Use it**: [supported FPGAs and boards](doc/manual/13_boards.md), [getting started](doc/manual/14_getting_started.md),
+  [integration](doc/manual/15_integration.md), [examples and targets](doc/manual/16_examples.md),
+  [simulation](doc/manual/17_simulation.md), [debugging](doc/manual/18_debugging.md).
+- **Appendices**: [registers](doc/manual/A_registers.md), [build options](doc/manual/B_build_options.md),
+  [glossary](doc/manual/C_glossary.md), [performance and resources](doc/manual/D_performance.md),
+  [maintaining this manual](doc/manual/E_maintenance.md).
+
+Developer notes (architecture and datapaths):
   - [doc/packet_contracts.md](doc/packet_contracts.md): packet contracts and pipeline ownership.
   - [doc/stream_byte_enables.md](doc/stream_byte_enables.md): byte-enabled packet streams and migration.
   - [doc/high_speed_datapaths.md](doc/high_speed_datapaths.md): high-speed (wide) packet datapaths.

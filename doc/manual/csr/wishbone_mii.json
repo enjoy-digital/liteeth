@@ -1,0 +1,281 @@
+{
+ "argv": [
+  "examples/wishbone_mii.yml"
+ ],
+ "banks": {
+  "ethmac": [
+   {
+    "access": "ro",
+    "description": "Receive slot.",
+    "fields": [],
+    "name": "sram_writer_slot",
+    "offset": 0,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Receive packet length in bytes.",
+    "fields": [],
+    "name": "sram_writer_length",
+    "offset": 4,
+    "reset": null,
+    "size": 11
+   },
+   {
+    "access": "ro",
+    "description": "Receive packet drop count.",
+    "fields": [],
+    "name": "sram_writer_errors",
+    "offset": 8,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "This register contains the current raw level of the event trigger. Writes to this register have no effect.",
+    "fields": [
+     {
+      "description": "Level of the ``available`` event.",
+      "name": "available",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_writer_ev_status",
+    "offset": 12,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "When an event occurs, the corresponding bit will be set in this register. To clear the Event, set the corresponding bit in this register.",
+    "fields": [
+     {
+      "description": "`1` if a `available` event occurred. This Event is **level triggered** when the signal is **high**.",
+      "name": "available",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_writer_ev_pending",
+    "offset": 16,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "This register enables the corresponding events. Write a ``0`` to this register to disable individual events.",
+    "fields": [
+     {
+      "description": "Write a ``1`` to enable the ``available`` Event.",
+      "name": "available",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_writer_ev_enable",
+    "offset": 20,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "wo",
+    "description": "",
+    "fields": [],
+    "name": "sram_reader_start",
+    "offset": 24,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Transmit command FIFO ready.",
+    "fields": [],
+    "name": "sram_reader_ready",
+    "offset": 28,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Transmit command FIFO level.",
+    "fields": [],
+    "name": "sram_reader_level",
+    "offset": 32,
+    "reset": null,
+    "size": 2
+   },
+   {
+    "access": "rw",
+    "description": "Transmit slot.",
+    "fields": [],
+    "name": "sram_reader_slot",
+    "offset": 36,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "Transmit packet length in bytes.",
+    "fields": [],
+    "name": "sram_reader_length",
+    "offset": 40,
+    "reset": 0,
+    "size": 11
+   },
+   {
+    "access": "ro",
+    "description": "This register contains the current raw level of the event trigger. Writes to this register have no effect.",
+    "fields": [
+     {
+      "description": "Level of the ``event0`` event.",
+      "name": "event0",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_reader_ev_status",
+    "offset": 44,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "When an event occurs, the corresponding bit will be set in this register. To clear the Event, set the corresponding bit in this register.",
+    "fields": [
+     {
+      "description": "`1` if a this particular event occurred. This Event is triggered on a **rising** edge.",
+      "name": "event0",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_reader_ev_pending",
+    "offset": 48,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "This register enables the corresponding events. Write a ``0`` to this register to disable individual events.",
+    "fields": [
+     {
+      "description": "Write a ``1`` to enable the ``event0`` Event.",
+      "name": "event0",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "sram_reader_ev_enable",
+    "offset": 52,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Preamble/CRC support enabled.",
+    "fields": [],
+    "name": "preamble_crc",
+    "offset": 56,
+    "reset": null,
+    "size": 1
+   },
+   {
+    "access": "ro",
+    "description": "Preamble error count.",
+    "fields": [],
+    "name": "rx_datapath_preamble_errors",
+    "offset": 60,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "ro",
+    "description": "CRC error count.",
+    "fields": [],
+    "name": "rx_datapath_crc_errors",
+    "offset": 64,
+    "reset": null,
+    "size": 32
+   }
+  ],
+  "ethphy_mii": [
+   {
+    "access": "rw",
+    "description": "PHY reset.",
+    "fields": [],
+    "name": "crg_reset",
+    "offset": 0,
+    "reset": 0,
+    "size": 1
+   },
+   {
+    "access": "rw",
+    "description": "",
+    "fields": [
+     {
+      "description": "MDIO clock.",
+      "name": "mdc",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "MDIO output enable.",
+      "name": "oe",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "MDIO write data.",
+      "name": "w",
+      "offset": 2,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "mdio_w",
+    "offset": 4,
+    "reset": 0,
+    "size": 3
+   },
+   {
+    "access": "ro",
+    "description": "",
+    "fields": [
+     {
+      "description": "MDIO read data.",
+      "name": "r",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "mdio_r",
+    "offset": 8,
+    "reset": null,
+    "size": 1
+   }
+  ]
+ },
+ "config": "wishbone_mii",
+ "target": "gen"
+}

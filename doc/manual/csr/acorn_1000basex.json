@@ -1,0 +1,54 @@
+{
+ "argv": [
+  "soc_acorn_1000basex"
+ ],
+ "banks": {
+  "ethphy_basex": [
+   {
+    "access": "ro",
+    "description": "",
+    "fields": [
+     {
+      "description": "Link is up.",
+      "name": "link_up",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "SGMII in-use.",
+      "name": "is_sgmii",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Link partner ability register.",
+      "name": "config_reg",
+      "offset": 16,
+      "reset": 0,
+      "size": 16,
+      "values": []
+     }
+    ],
+    "name": "pcs_status",
+    "offset": 0,
+    "reset": null,
+    "size": 32
+   },
+   {
+    "access": "rw",
+    "description": "PHY reset.",
+    "fields": [],
+    "name": "reset",
+    "offset": 4,
+    "reset": 0,
+    "size": 1
+   }
+  ]
+ },
+ "config": "acorn_1000basex",
+ "target": "doc/manual/registers.py"
+}

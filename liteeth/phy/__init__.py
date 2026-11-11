@@ -48,6 +48,8 @@ from liteeth.phy.serial.basex.wrappers.a7_gtp  import A7_1000BASEX
 from liteeth.phy.serial.basex.wrappers.a7_gtp  import A7_2500BASEX
 from liteeth.phy.serial.basex.wrappers.k7_gtx  import K7_1000BASEX
 from liteeth.phy.serial.basex.wrappers.k7_gtx  import K7_2500BASEX
+from liteeth.phy.serial.basex.wrappers.v7_gth  import V7_1000BASEX
+from liteeth.phy.serial.basex.wrappers.v7_gth  import V7_2500BASEX
 from liteeth.phy.serial.basex.wrappers.ku_gth  import KU_1000BASEX
 from liteeth.phy.serial.basex.wrappers.ku_gth  import KU_2500BASEX
 from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_1000BASEX

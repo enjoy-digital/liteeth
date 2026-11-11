@@ -90,28 +90,27 @@ class BenchSoC(SoCCore):
 
         # Switches ---------------------------------------------------------------------------------
 
-        if False:
-            # Resynchronize Swiches inputs.
-            switches_pads = platform.request_all("user_sw")
-            switches      = Signal(len(switches_pads))
-            self.specials += MultiReg(switches_pads, switches)
+        # Resynchronize Switches inputs.
+        switches_pads = platform.request_all("user_sw")
+        switches      = Signal(len(switches_pads))
+        self.specials += MultiReg(switches_pads, switches)
 
-            # Send Switches value on UDP Streamer TX every 500ms.
-            switches_timer = WaitTimer(500e-3*sys_clk_freq)
-            switches_fsm   = FSM(reset_state="IDLE")
-            self.submodules += switches_timer, switches_fsm
-            switches_fsm.act("IDLE",
-                switches_timer.wait.eq(1),
-                If(switches_timer.done,
-                    NextState("SEND")
-                )
+        # Send Switches value on UDP Streamer TX every 500ms (one byte per packet).
+        self.switches_timer = switches_timer = WaitTimer(500e-3*sys_clk_freq)
+        self.switches_fsm   = switches_fsm   = FSM(reset_state="IDLE")
+        switches_fsm.act("IDLE",
+            switches_timer.wait.eq(1),
+            If(switches_timer.done,
+                NextState("SEND")
             )
-            switches_fsm.act("SEND",
-                udp_streamer.sink.valid.eq(1),
-                udp_streamer.sink.data.eq(switches),
-                If(udp_streamer.sink.ready,
-                    NextState("IDLE")
-                )
+        )
+        switches_fsm.act("SEND",
+            udp_streamer.sink.valid.eq(1),
+            udp_streamer.sink.last.eq(1),
+            udp_streamer.sink.data.eq(switches),
+            If(udp_streamer.sink.ready,
+                NextState("IDLE")
+            )
         )
 
 # Main ---------------------------------------------------------------------------------------------
