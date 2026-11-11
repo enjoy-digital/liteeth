@@ -730,12 +730,9 @@ class UDPCore(PHYCore):
         if dhcp:
             dhcp_pads = platform.request("dhcp")
             dhcp_port = self.core.udp.crossbar.get_port(68, dw=32, cd="sys")
-            if isinstance(mac_address, Signal):
-                dhcp_mac_address = mac_address
-            else:
-                dhcp_mac_address = Signal(48, reset=0x10e2d5000001)
             self.dhcp = LiteEthDHCP(udp_port=dhcp_port, sys_clk_freq=self.sys_clk_freq)
             self.comb += [
+                self.dhcp.mac_address.eq(mac_address),
                 self.dhcp.start.eq(dhcp_pads.start),
                 dhcp_pads.done.eq(self.dhcp.done),
                 dhcp_pads.timeout.eq(self.dhcp.timeout),
