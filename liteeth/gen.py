@@ -344,11 +344,13 @@ class PHYCore(SoCMini):
             ethphy = phy(**phy_kwargs)
         # SGMII.
         elif phy in [
-            # 7-Series GTP/GTX.
+            # 7-Series GTP/GTX/GTH.
             liteeth_phys.A7_1000BASEX,
             liteeth_phys.A7_2500BASEX,
             liteeth_phys.K7_1000BASEX,
             liteeth_phys.K7_2500BASEX,
+            liteeth_phys.V7_1000BASEX,
+            liteeth_phys.V7_2500BASEX,
             # Ultrascale GTHE3.
             liteeth_phys.KU_1000BASEX,
             liteeth_phys.KU_2500BASEX,

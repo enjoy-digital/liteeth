@@ -102,6 +102,8 @@ class TestGeneratedCore(unittest.TestCase):
         for phy, primitive in [
             ("K7_1000BASEX", "GTXE2_CHANNEL"),
             ("K7_2500BASEX", "GTXE2_CHANNEL"),
+            ("V7_1000BASEX", "GTHE2_CHANNEL"),
+            ("V7_2500BASEX", "GTHE2_CHANNEL"),
             ("KU_1000BASEX", "GTHE3_CHANNEL"),
             ("KU_2500BASEX", "GTHE3_CHANNEL"),
             ("USP_GTH_2500BASEX", "GTHE4_CHANNEL"),
