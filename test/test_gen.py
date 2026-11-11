@@ -139,6 +139,22 @@ class TestGeneratedCore(unittest.TestCase):
         self.assertEqual(jumbo, alias)
         self.assertNotEqual(jumbo, default)
 
+    def test_streamer_ip_address_requires_udp_port(self):
+        # A static streamer (ip_address set) without udp_port must be rejected with a clear error.
+        with open(_examples_dir / "udp_s7phyrgmii.yml", "r", encoding="utf-8") as f:
+            config = yaml.load(f, Loader=yaml.Loader)
+        config["udp_ports"] = {"udp0" : {"data_width" : 8, "ip_address" : "192.168.1.100"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp        = Path(tmp)
+            config_yml = tmp / "config.yml"
+            with open(config_yml, "w", encoding="utf-8") as f:
+                yaml.dump(config, f)
+            gen_cmd = [sys.executable, str(_repo_root / "liteeth" / "gen.py"), str(config_yml)]
+            gen_cmd += ["--output-dir", str(tmp / "build")]
+            result = subprocess.run(gen_cmd, cwd=tmp, env=generator_env(), capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("ValueError", result.stderr)
+        self.assertIn("udp_port", result.stderr)
     def test_dhcp_mac_address(self):
         # The DHCP client must send the core MAC address (fixed or from the mac_address pins).
         verilog  = generate_config("udp_s7phyrgmii", dhcp=True, ip_address=None)
