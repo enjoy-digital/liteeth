@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="150" viewBox="0 0 760 150">
+<defs>
+  <marker id="arrow-ctrl" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-ctrl-rev" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+    <path d="M8,0 L0,4 L8,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-stream" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#606060"/></marker>
+  <marker id="arrow-accent" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-accent-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-stream-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#606060"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<polyline points="170,112 720,112" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)" marker-start="url(#arrow-ctrl-rev)"/>
+<text x="445" y="132" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="13" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="445" dy="0">frame: 64 to 1518 bytes</tspan></text>
+<g fill="#d0d0d0" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="40" y="30" width="85" height="44" rx="0" ry="0"/>
+</g>
+<text x="82.5" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="82.5" dy="0">Preamble</tspan></text>
+<g fill="#d0d0d0" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="125" y="30" width="45" height="44" rx="0" ry="0"/>
+</g>
+<text x="147.5" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="147.5" dy="0">SFD</tspan></text>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="170" y="30" width="100" height="44" rx="0" ry="0"/>
+</g>
+<text x="220" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="220" dy="0">Destination</tspan></text>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="270" y="30" width="100" height="44" rx="0" ry="0"/>
+</g>
+<text x="320" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="320" dy="0">Source</tspan></text>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="370" y="30" width="85" height="44" rx="0" ry="0"/>
+</g>
+<text x="412.5" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="412.5" dy="0">EtherType</tspan></text>
+<g fill="#bfe6f5" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="455" y="30" width="200" height="44" rx="0" ry="0"/>
+</g>
+<text x="555" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="555" dy="0">Payload</tspan></text>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<rect x="655" y="30" width="65" height="44" rx="0" ry="0"/>
+</g>
+<text x="687.5" y="52" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="687.5" dy="0">FCS</tspan></text>
+<text x="82.5" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="82.5" dy="0">7</tspan></text>
+<text x="147.5" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="147.5" dy="0">1</tspan></text>
+<text x="220" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="220" dy="0">6</tspan></text>
+<text x="320" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="320" dy="0">6</tspan></text>
+<text x="412.5" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="412.5" dy="0">2</tspan></text>
+<text x="555" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="555" dy="0">46 to 1500</tspan></text>
+<text x="687.5" y="90" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="687.5" dy="0">4</tspan></text>
+<text x="105" y="112" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#444444" text-anchor="middle" dominant-baseline="central"><tspan x="105" dy="0">on the wire only</tspan></text>
+</svg>

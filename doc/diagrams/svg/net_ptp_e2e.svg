@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="220" viewBox="0 0 760 220">
+<defs>
+  <marker id="arrow-ctrl" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-ctrl-rev" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+    <path d="M8,0 L0,4 L8,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-stream" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#606060"/></marker>
+  <marker id="arrow-accent" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-accent-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-stream-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#606060"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<polyline points="170,46 170,210" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="590,46 590,210" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="4,3"/>
+<polyline points="590,76 170,76" fill="none" stroke="#2eaadc" stroke-width="2.0" marker-end="url(#arrow-accent)"/>
+<text x="380" y="66" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="380" dy="0">Sync</tspan></text>
+<polyline points="590,116 170,116" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)"/>
+<text x="380" y="109" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="380" dy="0">Follow_Up: t1</tspan></text>
+<polyline points="170,156 590,156" fill="none" stroke="#2eaadc" stroke-width="2.0" marker-end="url(#arrow-accent)"/>
+<text x="380" y="146" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="380" dy="0">Delay_Req</tspan></text>
+<polyline points="590,196 170,196" fill="none" stroke="#5b5b5b" stroke-width="1.0" marker-end="url(#arrow-ctrl)"/>
+<text x="380" y="189" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="380" dy="0">Delay_Resp: t4</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M101.2,12 L232.2,12 L241.2,21 L241.2,48 Q241.2,48 241.2,48 L110.2,48 L101.2,39 L101.2,12 Q101.2,12 101.2,12 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M101.2,12 L232.2,12 L241.2,21 L241.2,48 Q241.2,48 241.2,48 L110.2,48 L101.2,39 L101.2,12 Q101.2,12 101.2,12 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M101,11.5 L232,11.5 L241,20.5 L241,47.5 Q241,47.5 241,47.5 L110,47.5 L101,38.5 L101,11.5 Q101,11.5 101,11.5 Z"/>
+</g>
+<g fill="#bfe6f5" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M100,10 L231,10 L240,19 L240,46 Q240,46 240,46 L109,46 L100,37 L100,10 Q100,10 100,10 Z"/>
+</g>
+<text x="170" y="28" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="170" dy="0">Slave (LiteEth)</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M521.2,12 L652.2,12 L661.2,21 L661.2,48 Q661.2,48 661.2,48 L530.2,48 L521.2,39 L521.2,12 Q521.2,12 521.2,12 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M521.2,12 L652.2,12 L661.2,21 L661.2,48 Q661.2,48 661.2,48 L530.2,48 L521.2,39 L521.2,12 Q521.2,12 521.2,12 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M521,11.5 L652,11.5 L661,20.5 L661,47.5 Q661,47.5 661,47.5 L530,47.5 L521,38.5 L521,11.5 Q521,11.5 521,11.5 Z"/>
+</g>
+<g fill="#b8b8b8" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M520,10 L651,10 L660,19 L660,46 Q660,46 660,46 L529,46 L520,37 L520,10 Q520,10 520,10 Z"/>
+</g>
+<text x="590" y="28" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="590" dy="0">Master</tspan></text>
+<text x="158" y="76" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="158" dy="0">t2</tspan></text>
+<text x="602" y="76" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="start" dominant-baseline="central"><tspan x="602" dy="0">t1</tspan></text>
+<text x="158" y="156" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="158" dy="0">t3</tspan></text>
+<text x="602" y="156" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="14" fill="#000000" text-anchor="start" dominant-baseline="central"><tspan x="602" dy="0">t4</tspan></text>
+</svg>

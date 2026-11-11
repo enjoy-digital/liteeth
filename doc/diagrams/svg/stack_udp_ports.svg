@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="290" viewBox="0 0 760 290">
+<defs>
+  <marker id="arrow-ctrl" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+    <path d="M0,0 L8,4 L0,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-ctrl-rev" markerUnits="userSpaceOnUse" markerWidth="8" markerHeight="8" refX="1" refY="4" orient="auto">
+    <path d="M8,0 L0,4 L8,8 Z" fill="#5b5b5b"/></marker>
+  <marker id="arrow-stream" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#606060"/></marker>
+  <marker id="arrow-accent" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="9" refY="4.5" orient="auto">
+    <path d="M0,0 L9,4.5 L0,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-accent-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#2eaadc"/></marker>
+  <marker id="arrow-stream-rev" markerUnits="userSpaceOnUse" markerWidth="9" markerHeight="9" refX="0" refY="4.5" orient="auto">
+    <path d="M9,0 L0,4.5 L9,9 Z" fill="#606060"/></marker>
+</defs>
+<rect width="100%" height="100%" fill="#ffffff"/>
+<polyline points="110,95 145,95" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<text x="127" y="85" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="127" dy="0">TX</tspan></text>
+<polyline points="265,95 305,95" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<polyline points="425,95 465,95" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<polyline points="585,95 640,95" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<polyline points="640,225 585,225" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<polyline points="305,225 265,225" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<polyline points="465,225 425,225" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<polyline points="145,225 110,225" fill="none" stroke="#606060" stroke-width="2.0" marker-end="url(#arrow-stream)"/>
+<text x="127" y="215" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="12" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="127" dy="0">RX</tspan></text>
+<polyline points="205,30 205,70" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="1,3"/>
+<polyline points="205,120 205,200" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="1,3"/>
+<polyline points="205,250 205,280" fill="none" stroke="#5b5b5b" stroke-width="1.0" stroke-dasharray="1,3"/>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M11.2,52 L99.2,52 L111.2,64 L111.2,272 Q111.2,272 111.2,272 L23.2,272 L11.2,260 L11.2,52 Q11.2,52 11.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M11.2,52 L99.2,52 L111.2,64 L111.2,272 Q111.2,272 111.2,272 L23.2,272 L11.2,260 L11.2,52 Q11.2,52 11.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M11,51.5 L99,51.5 L111,63.5 L111,271.5 Q111,271.5 111,271.5 L23,271.5 L11,259.5 L11,51.5 Q11,51.5 11,51.5 Z"/>
+</g>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M10,50 L98,50 L110,62 L110,270 Q110,270 110,270 L22,270 L10,258 L10,50 Q10,50 10,50 Z"/>
+</g>
+<text x="60" y="151" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="60" dy="0">User</tspan><tspan x="60" dy="18">logic</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M641.2,52 L739.2,52 L751.2,64 L751.2,272 Q751.2,272 751.2,272 L653.2,272 L641.2,260 L641.2,52 Q641.2,52 641.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M641.2,52 L739.2,52 L751.2,64 L751.2,272 Q751.2,272 751.2,272 L653.2,272 L641.2,260 L641.2,52 Q641.2,52 641.2,52 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M641,51.5 L739,51.5 L751,63.5 L751,271.5 Q751,271.5 751,271.5 L653,271.5 L641,259.5 L641,51.5 Q641,51.5 641,51.5 Z"/>
+</g>
+<g fill="#bfe6f5" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M640,50 L738,50 L750,62 L750,270 Q750,270 750,270 L652,270 L640,258 L640,50 Q640,50 640,50 Z"/>
+</g>
+<text x="695" y="151" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="695" dy="0">UDP</tspan><tspan x="695" dy="18">crossbar</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M146.2,72 L254.2,72 L266.2,84 L266.2,122 Q266.2,122 266.2,122 L158.2,122 L146.2,110 L146.2,72 Q146.2,72 146.2,72 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M146.2,72 L254.2,72 L266.2,84 L266.2,122 Q266.2,122 266.2,122 L158.2,122 L146.2,110 L146.2,72 Q146.2,72 146.2,72 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M146,71.5 L254,71.5 L266,83.5 L266,121.5 Q266,121.5 266,121.5 L158,121.5 L146,109.5 L146,71.5 Q146,71.5 146,71.5 Z"/>
+</g>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M145,70 L253,70 L265,82 L265,120 Q265,120 265,120 L157,120 L145,108 L145,70 Q145,70 145,70 Z"/>
+</g>
+<text x="205" y="95" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="205" dy="0">CDC</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M306.2,72 L414.2,72 L426.2,84 L426.2,122 Q426.2,122 426.2,122 L318.2,122 L306.2,110 L306.2,72 Q306.2,72 306.2,72 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M306.2,72 L414.2,72 L426.2,84 L426.2,122 Q426.2,122 426.2,122 L318.2,122 L306.2,110 L306.2,72 Q306.2,72 306.2,72 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M306,71.5 L414,71.5 L426,83.5 L426,121.5 Q426,121.5 426,121.5 L318,121.5 L306,109.5 L306,71.5 Q306,71.5 306,71.5 Z"/>
+</g>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M305,70 L413,70 L425,82 L425,120 Q425,120 425,120 L317,120 L305,108 L305,70 Q305,70 305,70 Z"/>
+</g>
+<text x="365" y="95" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="365" dy="0">Converter</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M466.2,72 L574.2,72 L586.2,84 L586.2,122 Q586.2,122 586.2,122 L478.2,122 L466.2,110 L466.2,72 Q466.2,72 466.2,72 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M466.2,72 L574.2,72 L586.2,84 L586.2,122 Q586.2,122 586.2,122 L478.2,122 L466.2,110 L466.2,72 Q466.2,72 466.2,72 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M466,71.5 L574,71.5 L586,83.5 L586,121.5 Q586,121.5 586,121.5 L478,121.5 L466,109.5 L466,71.5 Q466,71.5 466,71.5 Z"/>
+</g>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M465,70 L573,70 L585,82 L585,120 Q585,120 585,120 L477,120 L465,108 L465,70 Q465,70 465,70 Z"/>
+</g>
+<text x="525" y="95" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="525" dy="0">Packet FIFO</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M146.2,202 L254.2,202 L266.2,214 L266.2,252 Q266.2,252 266.2,252 L158.2,252 L146.2,240 L146.2,202 Q146.2,202 146.2,202 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M146.2,202 L254.2,202 L266.2,214 L266.2,252 Q266.2,252 266.2,252 L158.2,252 L146.2,240 L146.2,202 Q146.2,202 146.2,202 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M146,201.5 L254,201.5 L266,213.5 L266,251.5 Q266,251.5 266,251.5 L158,251.5 L146,239.5 L146,201.5 Q146,201.5 146,201.5 Z"/>
+</g>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M145,200 L253,200 L265,212 L265,250 Q265,250 265,250 L157,250 L145,238 L145,200 Q145,200 145,200 Z"/>
+</g>
+<text x="205" y="225" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="205" dy="0">CDC</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M306.2,202 L414.2,202 L426.2,214 L426.2,252 Q426.2,252 426.2,252 L318.2,252 L306.2,240 L306.2,202 Q306.2,202 306.2,202 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M306.2,202 L414.2,202 L426.2,214 L426.2,252 Q426.2,252 426.2,252 L318.2,252 L306.2,240 L306.2,202 Q306.2,202 306.2,202 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M306,201.5 L414,201.5 L426,213.5 L426,251.5 Q426,251.5 426,251.5 L318,251.5 L306,239.5 L306,201.5 Q306,201.5 306,201.5 Z"/>
+</g>
+<g fill="#e6f5fb" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M305,200 L413,200 L425,212 L425,250 Q425,250 425,250 L317,250 L305,238 L305,200 Q305,200 305,200 Z"/>
+</g>
+<text x="365" y="225" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="365" dy="0">Converter</tspan></text>
+<g fill="#000000" stroke="#000000" stroke-width="3.0" opacity="0.05" stroke-linejoin="round" aria-hidden="true">
+<path d="M466.2,202 L574.2,202 L586.2,214 L586.2,252 Q586.2,252 586.2,252 L478.2,252 L466.2,240 L466.2,202 Q466.2,202 466.2,202 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="1.5" opacity="0.08" stroke-linejoin="round" aria-hidden="true">
+<path d="M466.2,202 L574.2,202 L586.2,214 L586.2,252 Q586.2,252 586.2,252 L478.2,252 L466.2,240 L466.2,202 Q466.2,202 466.2,202 Z"/>
+</g>
+<g fill="#000000" stroke="#000000" stroke-width="0" opacity="0.12" stroke-linejoin="round" aria-hidden="true">
+<path d="M466,201.5 L574,201.5 L586,213.5 L586,251.5 Q586,251.5 586,251.5 L478,251.5 L466,239.5 L466,201.5 Q466,201.5 466,201.5 Z"/>
+</g>
+<g fill="#fafafa" stroke="#5b5b5b" stroke-width="0.9" stroke-linejoin="round">
+<path d="M465,200 L573,200 L585,212 L585,250 Q585,250 585,250 L477,250 L465,238 L465,200 Q465,200 465,200 Z"/>
+</g>
+<text x="525" y="225" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="15" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="525" dy="0">Drop FIFO</tspan></text>
+<text x="195" y="20" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="13" fill="#000000" text-anchor="end" dominant-baseline="central"><tspan x="195" dy="0">port cd</tspan></text>
+<text x="215" y="20" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="13" fill="#000000" text-anchor="start" dominant-baseline="central"><tspan x="215" dy="0">sys of the core</tspan></text>
+<text x="525" y="160" font-family="Carlito, Calibri, &#x27;Liberation Sans&#x27;, Arial, sans-serif" font-size="13" fill="#000000" text-anchor="middle" dominant-baseline="central"><tspan x="525" dy="0">optional</tspan></text>
+</svg>

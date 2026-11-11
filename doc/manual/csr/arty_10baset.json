@@ -1,0 +1,44 @@
+{
+ "argv": [],
+ "banks": {
+  "ethphy_10baset": [
+   {
+    "access": "ro",
+    "description": "",
+    "fields": [
+     {
+      "description": "Link up (frames/link pulses received).",
+      "name": "link_up",
+      "offset": 0,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     },
+     {
+      "description": "Receive pair polarity inverted.",
+      "name": "inverted",
+      "offset": 1,
+      "reset": 0,
+      "size": 1,
+      "values": []
+     }
+    ],
+    "name": "status",
+    "offset": 0,
+    "reset": null,
+    "size": 2
+   },
+   {
+    "access": "rw",
+    "description": "PHY reset.",
+    "fields": [],
+    "name": "crg_reset",
+    "offset": 4,
+    "reset": 0,
+    "size": 1
+   }
+  ]
+ },
+ "config": "arty_10baset",
+ "target": "bench/arty_10baset"
+}
