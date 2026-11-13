@@ -207,7 +207,7 @@ class LiteEthARPCache(LiteXModule):
             mem_rd_port_mac_address.eq(mem_rd_port.dat_r[32:80]),
         ]
 
-        # Clear Timer to clear table every 1s.
+        # Clear Timer: clears the table after 1s in IDLE (each lookup/update restarts it).
         self.clear_timer = WaitTimer(1e-0*clk_freq)
 
         # FSM.
