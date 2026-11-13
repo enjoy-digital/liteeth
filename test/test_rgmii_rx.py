@@ -81,6 +81,21 @@ class TestRGMIIRX(unittest.TestCase):
                     expected += [(value, 0, int(i == len(data) - 1)) for i, value in enumerate(data)]
                     self.assertEqual(observed, expected)
 
+    def test_s7_rx_delay_range(self):
+        # The IDELAYE2 has 32 taps of 1/(64*iodelay_clk_freq): the default 2ns only fits with a
+        # 200MHz reference and a larger delay is rejected with a message that names the limit.
+        pads = Record([("rx_ctl", 1), ("rx_data", 4)])
+        for iodelay_clk_freq, rx_delay in [(200e6, 2e-9), (300e6, 1.6e-9), (400e6, 1.2e-9)]:
+            with self.subTest(iodelay_clk_freq=iodelay_clk_freq, rx_delay=rx_delay):
+                s7.LiteEthPHYRGMIIRX(pads, rx_delay=rx_delay, iodelay_clk_freq=iodelay_clk_freq)
+        for iodelay_clk_freq, max_delay in [(300e6, "1.61ns"), (400e6, "1.21ns")]:
+            with self.subTest(iodelay_clk_freq=iodelay_clk_freq):
+                with self.assertRaises(AssertionError) as cm:
+                    s7.LiteEthPHYRGMIIRX(pads, rx_delay=2e-9, iodelay_clk_freq=iodelay_clk_freq)
+                self.assertIn("IDELAYE2", str(cm.exception))
+                self.assertNotIn("ODELAYE2", str(cm.exception))
+                self.assertIn(max_delay, str(cm.exception))
+
 
 class RGMIIReceiveDUT(LiteXModule):
     def __init__(self, dw, with_sys_datapath=False):
