@@ -74,7 +74,10 @@ class LiteEthPHYRGMIIRX(LiteXModule):
         assert iodelay_clk_freq in [200e6, 300e6, 400e6]
         iodelay_tap_average = 1 / (2*32 * iodelay_clk_freq)
         rx_delay_taps = round(rx_delay / iodelay_tap_average)
-        assert rx_delay_taps < 32, "Exceeded ODELAYE2 max value: {} >= 32".format(rx_delay_taps)
+        assert rx_delay_taps < 32, (
+            "Exceeded IDELAYE2 max value: {} >= 32 taps (rx_delay of {:.2f}ns, max {:.2f}ns with a "
+            "{:.0f}MHz IDELAYCTRL reference).".format(
+                rx_delay_taps, rx_delay*1e9, 31*iodelay_tap_average*1e9, iodelay_clk_freq/1e6))
 
         rx_ctl_ibuf    = Signal()
         rx_ctl_idelay  = Signal()
