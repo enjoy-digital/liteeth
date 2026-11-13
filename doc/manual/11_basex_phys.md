@@ -156,8 +156,8 @@ The wrappers create the PCS registers differently. The UltraScale LVDS and GateM
 `pcs_kwargs` to the PCS, so a design adds `with_csr` and `sys_clk_freq` there; the `with_csr` of
 the GW5 wrapper adds its own `reset` and `status` registers.
 
-The Kintex-7, Virtex-7, UltraScale and UltraScale+ PHYs build the PCS without registers and take no
-PCS arguments; their `with_csr` only adds the PHY `reset` register.
+The Kintex-7, Virtex-7, UltraScale and UltraScale+ PHYs also pass `pcs_kwargs` to the PCS. Their
+`with_csr` only adds the PHY `reset` register: without `pcs_kwargs`, the PCS has no registers.
 
 ## The PMA boundary {#basex-pma}
 
@@ -347,10 +347,9 @@ parameters of the PMA are marked for checking in the code.
 
 - **SGMII at 2.5 Gbps.** The SGMII flavour and its rate adaptation apply to 1.25 Gbps links; the
   32-bit PCS has no SGMII at all.
-- **Kintex-7, Virtex-7, UltraScale and UltraScale+ wrappers.** They take no PCS arguments: no
-  PCS `status` register, no forced SGMII, no `with_autoneg=False`, so a 2500BASE-X partner without
-  autonegotiation cannot link. A design can call `phy.pcs.add_csr(sys_clk_freq)` after
-  construction to get the `status` register.
+- **Kintex-7, Virtex-7, UltraScale and UltraScale+ wrappers.** Their `with_csr` does not create
+  the PCS `status` register: pass `pcs_kwargs` with `with_csr` and `sys_clk_freq` for it. The
+  generator does not pass `pcs_kwargs`.
 - **Fixed link and SGMII.** With `with_autoneg=False` and the default `sgmii=None`, the PCS runs
   SGMII and `is_sgmii` reads 1.
 - **UltraScale LVDS.** No reset register; a free-running local reference is untested.

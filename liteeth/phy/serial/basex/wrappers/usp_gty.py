@@ -27,10 +27,12 @@ class USP_GTY_1000BASEX(LiteXModule):
 
     supported_refclk_freqs = (200e6, 156.25e6)
 
-    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False):
+    def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=200e6, with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False, pcs_kwargs=None):
         if refclk_freq not in self.supported_refclk_freqs:
             raise ValueError(f"Unsupported reference clock {refclk_freq/1e6:g} MHz for {type(self).__name__}.")
-        self.pcs = pcs = PCS(lsb_first=True, eth_tx_clk_freq=self.tx_clk_freq)
+        pcs_kwargs = {} if pcs_kwargs is None else dict(pcs_kwargs)
+        pcs_kwargs.setdefault("eth_tx_clk_freq", self.tx_clk_freq)
+        self.pcs = pcs = PCS(lsb_first=True, **pcs_kwargs)
 
         self.sink    = pcs.sink
         self.source  = pcs.source
@@ -79,8 +81,8 @@ class USP_GTY_2500BASEX(USP_GTY_1000BASEX):
     supported_refclk_freqs = (156.25e6,)
 
     def __init__(self, refclk_or_clk_pads, data_pads, sys_clk_freq, refclk_freq=156.25e6,
-        with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False):
+        with_csr=True, rx_polarity=0, tx_polarity=0, refclk_from_fabric=False, pcs_kwargs=None):
         super().__init__(refclk_or_clk_pads, data_pads, sys_clk_freq,
             refclk_freq=refclk_freq, with_csr=with_csr,
             rx_polarity=rx_polarity, tx_polarity=tx_polarity,
-            refclk_from_fabric=refclk_from_fabric)
+            refclk_from_fabric=refclk_from_fabric, pcs_kwargs=pcs_kwargs)

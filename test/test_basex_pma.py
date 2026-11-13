@@ -61,6 +61,31 @@ class TestBASEXPMA(unittest.TestCase):
                             self.assertIs(getattr(phy, name), getattr(phy.pma, name))
                         self.assertEqual(instances.count("MMCME2_ADV"), 2)
 
+    def test_pcs_kwargs(self):
+        # pcs_kwargs reaches the PCS: its status register and link event are available on the
+        # GTX/GTH/GTY wrappers too, and the PCS options (sgmii, with_autoneg) can be set.
+        for cls, kwargs in (
+            (K7_1000BASEX, {}),
+            (K7_2500BASEX, {}),
+            (V7_1000BASEX, {}),
+            (V7_2500BASEX, {}),
+            (USP_GTY_1000BASEX, {}),
+            (USP_GTY_2500BASEX, {"refclk_freq": 156.25e6}),
+            (USP_GTH_1000BASEX, {}),
+            (USP_GTH_2500BASEX, {"refclk_freq": 156.25e6}),
+            (KU_1000BASEX, {}),
+            (KU_2500BASEX, {"refclk_freq": 156.25e6}),
+        ):
+            with self.subTest(phy=cls.__name__):
+                pcs_kwargs = dict(with_csr=True, sys_clk_freq=100e6, sgmii=False)
+                phy = cls(Signal(), data_pads(), 100e6, pcs_kwargs=pcs_kwargs, **kwargs)
+                # The caller's dict is left untouched.
+                self.assertEqual(pcs_kwargs, dict(with_csr=True, sys_clk_freq=100e6, sgmii=False))
+                self.assertEqual(sorted(csr.name for csr in phy.get_csrs()), ["pcs_status", "reset"])
+                self.assertEqual(phy.pcs.status.size, 32)
+                self.assertTrue(hasattr(phy.pcs, "ev"))
+                phy.get_fragment()
+
     def test_a7_mutable_parameters_and_deferred_instantiation(self):
         for cls in (A7_1000BASEX, A7_2500BASEX):
             for channel in (0, 1):
