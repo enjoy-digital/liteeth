@@ -12,7 +12,7 @@ in [ARP, IP, UDP and Etherbone](#network-primer).
 | Item | Value |
 |-------------------|------------------------------------------------------------------------|
 | ARP | Replies to requests for its IP; cache of at least 2 entries, cleared after 1 s idle |
-| ARP requests | One every 100 ms while unresolved, failure after 7 requests |
+| ARP requests | One every 100 ms while unresolved, failure after 8 requests |
 | IPv4 TX | No options, no fragmentation, TTL 128, header checksum |
 | IPv4 RX | No options, no fragments, checksum verified, nonempty payload |
 | Destinations | Unicast through ARP and an optional gateway, broadcast, multicast |
@@ -45,12 +45,12 @@ of resolved addresses. The figure below shows its state machine.
 
 ![ARP table state machine. Follow a lookup: IDLE, CHECK_TABLE, then either a hit straight to
 PRESENT_RESPONSE, or a miss through SEND_REQUEST. Requests repeat every 100 ms until a reply or the
-seventh request.](stack_arp.svg)
+eighth request.](stack_arp.svg)
 
 A lookup searches the cache one entry per cycle. On a hit, the table answers at once. On a miss, it
 sends an ARP request and remembers the IP address it is waiting for.
 
-While that request is pending, a timer resends it every 100 ms; after 7 requests without a reply,
+While that request is pending, a timer resends it every 100 ms; after 8 requests without a reply,
 the table answers with a failure. A reply updates the cache only when it is for the pending address.
 
 The cache has `arp_entries` entries, at least 2 (the core default of 1 gives 2). New entries
@@ -65,7 +65,7 @@ While the table is busy, an incoming ARP packet is lost; the peer's retries reco
 | Entries | `arp_entries`, at least 2 | `LiteEthIPCore`, `LiteEthUDPIPCore` |
 | Cache clear | After 1 s without lookup, while `clear_enable` | `LiteEthARPCache` |
 | Request interval | 100 ms | `LiteEthARPTable` |
-| Requests before failure | 7 (the `max_requests` argument, 8, counts the failure check as one) | `LiteEthARPTable` |
+| Requests before failure | 8 (the `max_requests` argument) | `LiteEthARPTable` |
 
 ## IPv4 transmit {#stack-ip-tx}
 

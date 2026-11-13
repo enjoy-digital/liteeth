@@ -60,7 +60,7 @@ It is padded to the minimum frame size like any short payload.
 
 In LiteEth, the ARP layer answers requests for its own IP address and resolves the destinations of
 outgoing packets. Its cache is small, two entries at least, and is cleared after one second without
-lookup. An unresolved address is requested every 100 ms; after 7 requests without a reply the packet
+lookup. An unresolved address is requested every 100 ms; after 8 requests without a reply the packet
 is dropped ([ARP, IP, ICMP, UDP, DHCP and IGMP](#ip-stack)).
 
 ## IPv4 {#net-ipv4}

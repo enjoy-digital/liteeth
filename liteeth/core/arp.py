@@ -285,7 +285,7 @@ class LiteEthARPTable(LiteXModule):
         # # #
 
         request_pending    = Signal()
-        request_counter    = Signal(max=max_requests)
+        request_counter    = Signal(max=max_requests + 1)
         request_ip_address = Signal(32, reset_less=True)
 
         self.request_timer = WaitTimer(100e-3*clk_freq)
@@ -331,7 +331,8 @@ class LiteEthARPTable(LiteXModule):
             )
         )
         fsm.act("CHECK_REQUEST",
-            If(request_counter == (max_requests - 1),
+            # Fail once max_requests requests have been sent without a reply.
+            If(request_counter == max_requests,
                 NextValue(response.failed, 1),
                 NextValue(request_counter, 0),
                 NextValue(request_pending, 0),
