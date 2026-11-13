@@ -275,7 +275,7 @@ that a reader does not chase them as board problems.
 | ARP requests after an idle second | The ARP cache is cleared after one second without lookup (`clear_enable`) |
 | Short gap between frames on MII and RMII | The gap is counted in clock cycles of a byte stream |
 | Extra idle between frames on BASE-R | The MAC adds its gap and the PHY its own idle insertion |
-| No PCS status or link event on Kintex-7, Virtex-7, UltraScale(+) BASE-X | These wrappers build the PCS without its registers ([1000BASE-X, 2500BASE-X and SGMII](#basex-phys)) |
+| No PCS status or link event on Kintex-7, Virtex-7, UltraScale(+) BASE-X | These wrappers build the PCS without its registers unless `pcs_kwargs` asks for them ([1000BASE-X, 2500BASE-X and SGMII](#basex-phys)) |
 
 Where to go next: [Simulation and verification](#simulation) to reproduce a finding;
 [Register reference](#registers) for every register named here.
