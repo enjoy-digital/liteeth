@@ -39,6 +39,28 @@ Main keys (see `liteeth/gen.py` for the complete list and the PHY tuning keys):
 | `tx_cdc_depth`, `rx_cdc_depth`, `*_cdc_buffered`     | PHY/sys clock domain crossing FIFOs                           | 32 / 32 / False   |
 | `soc`                                                | Extra `SoCMini` arguments (`csr_map`, `mem_map`, ...)         | none              |
 
+## PHYs
+
+The `phy` value is a class name of `liteeth.phy`. The generator builds the PHYs below; any other
+value is rejected with an `Unsupported PHY` error (the other PHYs of LiteEth need their own
+pads/clocking and are used from a LiteX SoC):
+
+| `phy`                                                                 | Pads                  |
+|-----------------------------------------------------------------------|-----------------------|
+| `LiteEthPHYMII`                                                       | `mii_clocks`, `mii`   |
+| `LiteEthPHYRMII`                                                      | `rmii_clocks`, `rmii` |
+| `LiteEthPHY10BASET`                                                   | `baset`               |
+| `LiteEthPHYGMII`, `LiteEthPHYGMIIMII`                                 | `gmii_clocks`, `gmii` |
+| `LiteEthS7PHYRGMII`, `LiteEthECP5PHYRGMII`, `LiteEthUSPHYRGMII`       | `rgmii_clocks`, `rgmii` |
+| `A7_1000BASEX`, `A7_2500BASEX`                                        | `sgmii` (`sgmii_qpll` with `qpll: False`) |
+| `K7_1000BASEX`, `K7_2500BASEX`, `V7_1000BASEX`, `V7_2500BASEX`        | `sgmii`               |
+| `KU_1000BASEX`, `KU_2500BASEX`                                        | `sgmii`               |
+| `USP_GTH_1000BASEX`, `USP_GTH_2500BASEX`, `USP_GTY_1000BASEX`, `USP_GTY_2500BASEX` | `sgmii`  |
+| `K7_GTX_5G_BASER`, `K7_GTX_10G_BASER`                                 | `baser_refclk`, `baser` |
+| `USP_GTH_5G_BASER`, `USP_GTH_10G_BASER`                               | `baser_refclk`, `baser` |
+| `USP_GTY_5G_BASER`, `USP_GTY_10G_BASER`, `USP_GTY_25G_BASER`          | `baser_refclk`, `baser` |
+| `LiteEthPHYXGMII`                                                     | `xgmii`               |
+
 ## Examples
 
 Configurations in `examples/`:
