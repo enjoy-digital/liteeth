@@ -13,7 +13,8 @@ toolchain       : vivado
 
 # Core -------------------------------------------------------------------------
 refclk_freq : 156.25e6
-clk_freq    : 25e6
+clk_freq    : 25e6     # 32-bit core at 25 MHz: 0.8 Gbps at most, below the 1 Gbps line rate.
+                       # Use 31.25e6 at least (40e6 or more for margin) for full rate.
 core        : udp
 data_width  : 32
 dhcp        : True
