@@ -51,10 +51,10 @@ class DUT(LiteXModule):
 
 class DUT64(LiteXModule):
     """64-bit core and user port with jumbo MTU, byte-granular (be) packets."""
-    def __init__(self, packet_length, eth_mtu=eth_mtu_jumboframe, dw=64):
+    def __init__(self, packet_length, eth_mtu=eth_mtu_jumboframe, dw=64, phy_dw=None):
         self.dw        = dw
         # 64-bit PHY model (8x fewer cycles than the byte model).
-        self.phy_model = phy.PHY(dw, debug=False)
+        self.phy_model = phy.PHY(dw if phy_dw is None else phy_dw, debug=False)
         self.mac_model = mac.MAC(self.phy_model, debug=False, loopback=False)
         self.arp_model = arp.ARP(self.mac_model, mac_address, ip_address, debug=False)
         self.ip_model  = ip.IP(self.mac_model, mac_address, ip_address, debug=False, loopback=False)
@@ -138,6 +138,45 @@ class TestUDP(unittest.TestCase):
                     dut.streamer.send(packet)
                     yield from dut.logger.receive(timeout=20000)
                     self.assertTrue(dut.logger.packet.done, "Jumbo UDP loopback timed out")
+                    result["packet"]   = list(dut.logger.packet)
+                    result["rx_error"] = (yield dut.rx_error)
+
+                generators = {
+                    "sys"    : [
+                        generator(dut),
+                        dut.streamer.generator(),
+                        dut.logger.generator(),
+                    ],
+                    "eth_tx" : [
+                        dut.phy_model.phy_sink.generator(),
+                        dut.phy_model.generator(),
+                    ],
+                    "eth_rx" : [
+                        dut.phy_model.phy_source.generator()
+                    ]
+                }
+                clocks = {
+                    "sys"    : 10,
+                    "eth_rx" : 10,
+                    "eth_tx" : 10,
+                }
+                run_simulation(dut, generators, clocks)
+                self.assertEqual(result["packet"], list(packet))
+                self.assertEqual(result["rx_error"], 0)
+
+    def test_16bit(self):
+        # 16-bit core on an 8-bit PHY (MAC framing at the PHY width, as the generator builds it
+        # for data_width: 16): even and odd length UDP packets are looped back intact.
+        for length in [64, 77]:
+            with self.subTest(length=length):
+                dut    = DUT64(packet_length=length, eth_mtu=eth_mtu_default, dw=16, phy_dw=8)
+                packet = Packet([(i*7 + 1) & 0xff for i in range(length)])
+                result = {}
+
+                def generator(dut):
+                    dut.streamer.send(packet)
+                    yield from dut.logger.receive(timeout=40000)
+                    self.assertTrue(dut.logger.packet.done, "16-bit UDP loopback timed out")
                     result["packet"]   = list(dut.logger.packet)
                     result["rx_error"] = (yield dut.rx_error)
 

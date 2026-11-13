@@ -270,7 +270,6 @@ that a reader does not chase them as board problems.
 | `butterstick` target fails to build | LiteScope probe on a state machine that the Etherbone sender does not have |
 | PTP targets and `test_ptp.py` fail | They pass `monitor_debug` and read `ptp_monitor_*` registers, which `LiteEthPTP` does not have |
 | Generator DHCP requests with a zero MAC | The generator does not connect the client MAC address |
-| Generator `data_width: 16` fails to elaborate | The generator puts a 16-bit datapath in `sys`, where the CRC stages take 8, 32 or 64 bits only |
 | `udp_raw_ecp5rgmii` streamers with dynamic ports | The example uses `port:`, the generator reads `udp_port` |
 | ARP requests after an idle second | The ARP cache is cleared after one second without lookup (`clear_enable`) |
 | Short gap between frames on MII and RMII | The gap is counted in clock cycles of a byte stream |

@@ -53,7 +53,7 @@ The MAC flavours build a 32-bit MAC with the `ethmac`, `ethmac_rx` and `ethmac_t
 | `ip_address` | input pins | IP address; absent: an `ip_address` input; not with `dhcp` |
 | `netmask`, `gateway_ip` | none | Subnet and gateway; both or none |
 | `dhcp` | `False` | DHCP client with a `dhcp` group of signals |
-| `data_width` | 8 | Width of the core; 32 puts the datapath in `sys`; 16 does not build (the CRC stages take 8, 32 and 64 bits only) |
+| `data_width` | 8 | Width of the core; 32 puts the datapath in `sys` |
 | `icmp_fifo_depth` | 128 | ICMP echo buffer, in bytes |
 | `etherbone` | `False` | Etherbone master on an AXI-Lite `mmap` interface |
 | `etherbone_port` | 1234 | UDP port of the Etherbone |
