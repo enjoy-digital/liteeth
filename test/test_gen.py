@@ -155,6 +155,27 @@ class TestGeneratedCore(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ValueError", result.stderr)
         self.assertIn("udp_port", result.stderr)
+
+    def test_unsupported_phy_error(self):
+        # A PHY that the generator cannot build (exported by liteeth.phy or not) must be rejected
+        # with an error that names it.
+        with open(_examples_dir / "udp_s7phyrgmii.yml", "r", encoding="utf-8") as f:
+            config = yaml.load(f, Loader=yaml.Loader)
+        for phy in ["LiteEthS6PHYRGMII", "GW5_10G_BASER", "GW5_1000BASEX", "NotAPHY"]:
+            with self.subTest(phy=phy):
+                config["phy"] = phy
+                with tempfile.TemporaryDirectory() as tmp:
+                    tmp        = Path(tmp)
+                    config_yml = tmp / "config.yml"
+                    with open(config_yml, "w", encoding="utf-8") as f:
+                        yaml.dump(config, f)
+                    gen_cmd = [sys.executable, str(_repo_root / "liteeth" / "gen.py"), str(config_yml)]
+                    gen_cmd += ["--output-dir", str(tmp / "build")]
+                    result = subprocess.run(gen_cmd, cwd=tmp, env=generator_env(), capture_output=True, text=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ValueError: Unsupported PHY: {}".format(phy), result.stderr)
+                self.assertIn("doc/gen.md", result.stderr)
+
     def test_dhcp_mac_address(self):
         # The DHCP client must send the core MAC address (fixed or from the mac_address pins).
         verilog  = generate_config("udp_s7phyrgmii", dhcp=True, ip_address=None)

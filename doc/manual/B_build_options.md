@@ -76,8 +76,8 @@ packet on its pins.
 
 ### PHY keys {#opt-gen-phy}
 
-The generator accepts the PHYs below; the others need a LiteX SoC
-([Supported FPGAs and boards](#boards)).
+The generator accepts the PHYs below; it rejects the others with an `Unsupported PHY` error, and
+they need a LiteX SoC ([Supported FPGAs and boards](#boards)).
 
 | `phy` values | Pins | Keys |
 |--------------------------------------------------|--------------|----------------------------------------|
@@ -86,7 +86,7 @@ The generator accepts the PHYs below; the others need a LiteX SoC
 | `LiteEthPHYGMII`, `LiteEthPHYGMIIMII` | `gmii` | none |
 | `LiteEthS7PHYRGMII`, `LiteEthECP5PHYRGMII`, `LiteEthUSPHYRGMII` | `rgmii` | RGMII keys |
 | `A7_1000BASEX`, `A7_2500BASEX` | `sgmii` | BASE-X and QPLL keys |
-| `K7_*`, `KU_*`, `USP_GTH_*`, `USP_GTY_*` (1000/2500BASE-X) | `sgmii` | BASE-X keys |
+| `K7_*`, `V7_*`, `KU_*`, `USP_GTH_*`, `USP_GTY_*` (1000/2500BASE-X) | `sgmii` | BASE-X keys |
 | `K7_GTX_*`, `USP_GTH_*`, `USP_GTY_*` (5/10/25G BASE-R) | `baser` | BASE-R keys |
 | `LiteEthPHYXGMII` | `xgmii` | none (64-bit) |
 

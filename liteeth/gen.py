@@ -259,6 +259,12 @@ def get_eth_mtu(core_config):
 
 # PHY Core -----------------------------------------------------------------------------------------
 
+def unsupported_phy_error(phy):
+    # Name the PHY as in liteeth.phy (the RGMII classes are exported under per-family aliases).
+    names = [name for name in dir(liteeth_phys) if getattr(liteeth_phys, name) is phy]
+    name  = names[0] if names else phy
+    return ValueError(f"Unsupported PHY: {name} (the PHYs of the generator are listed in doc/gen.md).")
+
 class PHYCore(SoCMini):
     SoCMini.csr_map = {
         "ctrl"   : 0,
@@ -476,7 +482,7 @@ class PHYCore(SoCMini):
                 dw         = 64,
             )
         else:
-            raise ValueError("Unsupported PHY")
+            raise unsupported_phy_error(phy)
         self.ethphy = ethphy
 
         # Timing constaints.
@@ -792,6 +798,8 @@ def main():
             if v == r:
                 core_config[k] = replaces[r]
         if k == "phy":
+            if not hasattr(liteeth_phys, str(v)):
+                raise unsupported_phy_error(v)
             core_config[k] = getattr(liteeth_phys, core_config[k])
         if k in ["refclk_freq", "clk_freq", "iodelay_clk_freq", "eth_mtu", "icmp_fifo_depth"]:
             core_config[k] = int(float(core_config[k]))
