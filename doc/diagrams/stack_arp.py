@@ -34,7 +34,7 @@ def build():
     d.add(Arrow((430, idle.y + idle.h), (creq, "l"), via=[(430, creq.cy)], label="every 100 ms",
         label_pos=(510, creq.cy - 9)))
     d.add(Arrow((creq, "t"), (sreq, "b"), label="retry", label_pos=(673, 222), label_anchor="start"))
-    d.add(Arrow((640, creq.y + creq.h), (pres, "r"), via=[(640, pres.cy)], label="7 requests",
+    d.add(Arrow((640, creq.y + creq.h), (pres, "r"), via=[(640, pres.cy)], label="8 requests",
         label_pos=(540, pres.cy - 9)))
     d.add(Arrow((chk, "r"), (380, pres.y + pres.h), via=[(752, chk.cy), (752, 395), (380, 395)],
         label="hit", label_pos=(744, 200), label_anchor="end"))

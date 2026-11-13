@@ -13,7 +13,7 @@ from test.stream_helpers import *
 
 from liteeth.common import *
 from liteeth.mac import LiteEthMAC
-from liteeth.core.arp import LiteEthARP, LiteEthARPCache
+from liteeth.core.arp import LiteEthARP, LiteEthARPCache, LiteEthARPTable
 
 from test.model import phy, mac, arp
 
@@ -108,3 +108,47 @@ class TestARPCache(unittest.TestCase):
                     requests = [ip for ip, _ in updates] + [0xc0a801ff]
                     results  = self.cache_test(entries, _updates, requests)
                     self.assertEqual(results, [(0, mac) for _, mac in updates] + [(1, results[-1][1])])
+
+# Test ARP Table -----------------------------------------------------------------------------------
+
+class TestARPTable(unittest.TestCase):
+    def requests_before_failure(self, max_requests):
+        # 100 Hz clock: 10 cycles between two requests.
+        dut      = LiteEthARPTable(clk_freq=100, max_requests=max_requests)
+        requests = []
+        failed   = []
+
+        def generator():
+            yield dut.source.ready.eq(1)
+            yield dut.response.ready.eq(1)
+            for _ in range(8):
+                yield
+            # Look up an address that nobody answers for.
+            yield dut.request.valid.eq(1)
+            yield dut.request.ip_address.eq(0xc0a80164)
+            yield
+            while (yield dut.request.ready) != 1:
+                yield
+            yield dut.request.valid.eq(0)
+            for _ in range(32*(max_requests + 2)):
+                if (yield dut.response.valid):
+                    failed.append((yield dut.response.failed))
+                    break
+                yield
+
+        @passive
+        def monitor():
+            while True:
+                if (yield dut.source.valid) and (yield dut.source.ready) and (yield dut.source.request):
+                    requests.append((yield dut.source.ip_address))
+                yield
+
+        run_simulation(dut, [generator(), monitor()])
+        return requests, failed
+
+    def test_max_requests(self):
+        for max_requests in [1, 2, 7, 8]:
+            with self.subTest(max_requests=max_requests):
+                requests, failed = self.requests_before_failure(max_requests)
+                self.assertEqual(failed, [1])
+                self.assertEqual(requests, [0xc0a80164]*max_requests)
