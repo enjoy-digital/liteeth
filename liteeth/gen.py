@@ -720,7 +720,7 @@ class UDPCore(PHYCore):
             dw                = data_width,
             gateway_ip        = core_config.get("gateway_ip", None),
             netmask           = core_config.get("netmask", None),
-            with_sys_datapath = data_width in [16, 32],
+            with_sys_datapath = data_width == 32,
             tx_cdc_depth      = tx_cdc_depth,
             tx_cdc_buffered   = tx_cdc_buffered,
             rx_cdc_depth      = rx_cdc_depth,

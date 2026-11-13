@@ -185,8 +185,8 @@ PHYs, 64 bits for XGMII and BASE-R. The core width is the `dw` argument of the c
 The framing path therefore runs at 8, 32 or 64 bits. With `with_sys_datapath`, that width is the
 core width; without it, it is the PHY width, and the core can be wider. With `with_sys_datapath`,
 the core width must therefore be 8, 32 or 64: a 16-bit core only works with the framing in the PHY
-domains. The generator sets `with_sys_datapath` for a `data_width` of 16, so a 16-bit generator
-configuration does not build ([Configuration keys](#integ-gen-keys)).
+domains. The generator sets `with_sys_datapath` for a `data_width` of 32 only, so a 16-bit
+generator configuration keeps the framing at the PHY width ([Configuration keys](#integ-gen-keys)).
 
 A 256-bit core on a 25G PHY keeps the MAC framing at 64 bits and converts the width in the MAC
 crossing. The IPv4 checksum switches to a parallel form above 64 bits; see [Wide

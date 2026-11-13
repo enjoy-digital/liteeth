@@ -121,6 +121,12 @@ class TestGeneratedCore(unittest.TestCase):
                 self.assertIsNotNone(match, "Missing TX_CLK25_DIV parameter")
                 self.assertEqual(int(match[1]), divider)
 
+    def test_data_width_16(self):
+        # A 16-bit core keeps the MAC framing at the PHY width in the PHY clock domains (the MAC
+        # CRC only handles 8, 32 and 64 bits).
+        verilog = generate_config("udp_s7phyrgmii", data_width=16)
+        self.assertIn("module liteeth_core", verilog)
+
     def test_udp_streamer_tkeep_pins(self):
         # tkeep pins are exposed by default and removed with with_tkeep: False.
         verilog = generate_config("udp_xgmii_jumbo")
