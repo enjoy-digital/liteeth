@@ -24,7 +24,7 @@ Main keys (see `liteeth/gen.py` for the complete list and the PHY tuning keys):
 
 | Key                                                  | Description                                                   | Default           |
 |------------------------------------------------------|---------------------------------------------------------------|-------------------|
-| `phy`                                                | PHY class name from `liteeth.phy` (`LiteEthPHYMII`, `LiteEthS7PHYRGMII`, `A7_1000BASEX`, `USP_GTY_10G_BASER`, `LiteEthPHYXGMII`, ...) | required |
+| `phy`                                                | PHY class name from `liteeth.phy` (`LiteEthPHYMII`, `LiteEthS6PHYRGMII, LiteEthS7PHYRGMII`, `A7_1000BASEX`, `USP_GTY_10G_BASER`, `LiteEthPHYXGMII`, ...) | required |
 | `vendor`, `device`, `toolchain`                      | `xilinx` (`vivado`) or `lattice` (`diamond`) platform         | required / `""` / per vendor |
 | `clk_freq`, `refclk_freq`                            | System clock / transceiver reference clock (Hz)               | required / per PHY |
 | `core`                                               | `wishbone`, `axi-lite` or `udp`                               | required          |
@@ -51,7 +51,7 @@ pads/clocking and are used from a LiteX SoC):
 | `LiteEthPHYRMII`                                                      | `rmii_clocks`, `rmii` |
 | `LiteEthPHY10BASET`                                                   | `baset`               |
 | `LiteEthPHYGMII`, `LiteEthPHYGMIIMII`                                 | `gmii_clocks`, `gmii` |
-| `LiteEthS7PHYRGMII`, `LiteEthECP5PHYRGMII`, `LiteEthUSPHYRGMII`       | `rgmii_clocks`, `rgmii` |
+| `LiteEthS6PHYRGMII, LiteEthS7PHYRGMII`, `LiteEthECP5PHYRGMII`, `LiteEthUSPHYRGMII`       | `rgmii_clocks`, `rgmii` |
 | `A7_1000BASEX`, `A7_2500BASEX`                                        | `sgmii` (`sgmii_qpll` with `qpll: False`) |
 | `K7_1000BASEX`, `K7_2500BASEX`, `V7_1000BASEX`, `V7_2500BASEX`        | `sgmii`               |
 | `KU_1000BASEX`, `KU_2500BASEX`                                        | `sgmii`               |

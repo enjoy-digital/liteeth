@@ -325,6 +325,7 @@ class PHYCore(SoCMini):
                 clk_freq   = self.clk_freq)
         # RGMII.
         elif phy in [
+            liteeth_phys.LiteEthS6PHYRGMII,
             liteeth_phys.LiteEthS7PHYRGMII,
             liteeth_phys.LiteEthECP5PHYRGMII,
             liteeth_phys.LiteEthUSPHYRGMII,
