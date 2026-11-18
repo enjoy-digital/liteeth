@@ -46,10 +46,6 @@ from liteeth.phy.serial.baset import LiteEthPHY10BASET
 
 from liteeth.phy.serial.basex.wrappers.a7_gtp  import A7_1000BASEX
 from liteeth.phy.serial.basex.wrappers.a7_gtp  import A7_2500BASEX
-from liteeth.phy.serial.basex.wrappers.k7_gtx  import K7_1000BASEX
-from liteeth.phy.serial.basex.wrappers.k7_gtx  import K7_2500BASEX
-from liteeth.phy.serial.basex.wrappers.v7_gth  import V7_1000BASEX
-from liteeth.phy.serial.basex.wrappers.v7_gth  import V7_2500BASEX
 from liteeth.phy.serial.basex.wrappers.ku_gth  import KU_1000BASEX
 from liteeth.phy.serial.basex.wrappers.ku_gth  import KU_2500BASEX
 from liteeth.phy.serial.basex.wrappers.usp_gth import USP_GTH_1000BASEX
@@ -58,12 +54,23 @@ from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_1000BASEX
 from liteeth.phy.serial.basex.wrappers.usp_gty import USP_GTY_2500BASEX
 from liteeth.phy.serial.basex.wrappers.us_lvds import US_LVDS_1000BASEX
 
-from liteeth.phy.serial.baser.wrappers.k7_gtx import K7_GTX_5G_BASER, K7_GTX_10G_BASER
-from liteeth.phy.serial.baser.wrappers.gw5    import GW5_10G_BASER
-from liteeth.phy.serial.baser.wrappers.usp_gt import (
-    USP_GTH_5G_BASER, USP_GTH_10G_BASER,
-    USP_GTY_5G_BASER, USP_GTY_10G_BASER, USP_GTY_25G_BASER,
-)
+# PHYs with External Dependencies ------------------------------------------------------------------
+
+# These PHYs use the transceiver cores of LiteICLink: they are only exported when LiteICLink (in
+# a recent enough version) is installed, so that the other PHYs can be used without it.
+
+try:
+    from liteeth.phy.serial.basex.wrappers.k7_gtx import K7_1000BASEX, K7_2500BASEX
+    from liteeth.phy.serial.basex.wrappers.v7_gth import V7_1000BASEX, V7_2500BASEX
+
+    from liteeth.phy.serial.baser.wrappers.k7_gtx import K7_GTX_5G_BASER, K7_GTX_10G_BASER
+    from liteeth.phy.serial.baser.wrappers.gw5    import GW5_10G_BASER
+    from liteeth.phy.serial.baser.wrappers.usp_gt import (
+        USP_GTH_5G_BASER, USP_GTH_10G_BASER,
+        USP_GTY_5G_BASER, USP_GTY_10G_BASER, USP_GTY_25G_BASER,
+    )
+except ImportError:
+    pass
 
 # Legacy Module Imports ----------------------------------------------------------------------------
 
@@ -79,8 +86,6 @@ _legacy_modules = {
     "a7_gtp"                  : "serial.gtp_7series",
     "pcs_1000basex"           : "serial.basex.pcs",
     "a7_1000basex"            : "serial.basex.wrappers.a7_gtp",
-    "k7_1000basex"            : "serial.basex.wrappers.k7_gtx",
-    "v7_1000basex"            : "serial.basex.wrappers.v7_gth",
     "ku_1000basex"            : "serial.basex.wrappers.ku_gth",
     "usp_gth_1000basex"       : "serial.basex.wrappers.usp_gth",
     "usp_gty_1000basex"       : "serial.basex.wrappers.usp_gty",
@@ -98,6 +103,19 @@ _legacy_modules = {
 }
 for _legacy_name, _module_name in _legacy_modules.items():
     _module = _importlib.import_module(f"{__name__}.{_module_name}")
+    _sys.modules[f"{__name__}.{_legacy_name}"] = _module
+    globals()[_legacy_name] = _module
+
+# Legacy modules with external dependencies (LiteICLink), see above.
+_legacy_optional_modules = {
+    "k7_1000basex"            : "serial.basex.wrappers.k7_gtx",
+    "v7_1000basex"            : "serial.basex.wrappers.v7_gth",
+}
+for _legacy_name, _module_name in _legacy_optional_modules.items():
+    try:
+        _module = _importlib.import_module(f"{__name__}.{_module_name}")
+    except ImportError:
+        continue
     _sys.modules[f"{__name__}.{_legacy_name}"] = _module
     globals()[_legacy_name] = _module
 del _legacy_name, _module_name, _module
