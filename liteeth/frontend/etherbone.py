@@ -360,7 +360,7 @@ class LiteEthEtherboneRecordSender(LiteXModule):
 
 
 class LiteEthEtherboneRecord(LiteXModule):
-    def __init__(self, endianness="big", buffer_depth=4):
+    def __init__(self, endianness="big", buffer_depth=4, remote_ip=None, remote_port=None):
         self.sink   = sink   = stream.Endpoint(eth_etherbone_packet_user_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_packet_user_description(32))
 
@@ -405,8 +405,8 @@ class LiteEthEtherboneRecord(LiteXModule):
             source.length.eq(etherbone_record_header.length +
                 (sender.source.wcount != 0)*4 + sender.source.wcount*4 +
                 (sender.source.rcount != 0)*4 + sender.source.rcount*4),
-            source.ip_address.eq(last_ip_address),
-            source.src_port.eq(last_src_port),
+            source.ip_address.eq(last_ip_address if remote_ip   is None else remote_ip),
+            source.src_port.eq(  last_src_port   if remote_port is None else remote_port),
         ]
         if endianness == "big":
             self.comb += packetizer.sink.data.eq(reverse_bytes(sender.source.data))
@@ -488,12 +488,14 @@ class LiteEthEtherboneWishboneMaster(LiteXModule):
 # Etherbone Wishbone Slave -------------------------------------------------------------------------
 
 class LiteEthEtherboneWishboneSlave(LiteXModule):
-    def __init__(self):
+    def __init__(self, timeout=2**20):
         self.bus    = bus    = wishbone.Interface()
         self.sink   = sink   = stream.Endpoint(eth_etherbone_mmap_description(32))
         self.source = source = stream.Endpoint(eth_etherbone_mmap_description(32))
 
         # # #
+
+        timer = Signal(max=timeout)
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
@@ -530,15 +532,24 @@ class LiteEthEtherboneWishboneSlave(LiteXModule):
             source.we.eq(0),
             source.data[2:].eq(bus.adr),
             If(source.valid & source.ready,
+                NextValue(timer, 0),
                 NextState("WAIT_READ")
             )
         )
         fsm.act("WAIT_READ",
             sink.ready.eq(1),
-            If(sink.valid & sink.we,
+            If(~bus.cyc,
+                NextState("IDLE")
+            ).Elif(sink.valid & sink.we,
                 bus.ack.eq(1),
                 bus.dat_r.eq(sink.data),
                 NextState("IDLE")
+            ).Elif(timer == timeout - 1,
+                bus.ack.eq(1),
+                bus.err.eq(1),
+                NextState("IDLE")
+            ).Else(
+                NextValue(timer, timer + 1)
             )
         )
 
@@ -546,7 +557,10 @@ class LiteEthEtherboneWishboneSlave(LiteXModule):
 # Etherbone ----------------------------------------------------------------------------------------
 
 class LiteEthEtherbone(LiteXModule):
-    def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys"):
+    def __init__(self, udp, udp_port, mode="master", buffer_depth=4, cd="sys",
+                 remote_ip=None, remote_port=None, timeout=2**20):
+        if (remote_ip is not None or remote_port is not None) and mode != "slave":
+            raise ValueError("Etherbone: remote_ip/remote_port are only valid in slave mode.")
         # Encode/encode etherbone packets. Largest packet sent: a record with buffer_depth words
         # (packet header + record header + base address + data).
         max_packet_length  = etherbone_packet_header_length + etherbone_record_header_length
@@ -557,7 +571,10 @@ class LiteEthEtherbone(LiteXModule):
 
         # Packets can be probe (etherbone discovering) or records with writes and reads.
         self.probe  = probe  = LiteEthEtherboneProbe()
-        self.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth)
+        self.record = record = LiteEthEtherboneRecord(buffer_depth=buffer_depth,
+            remote_ip   = remote_ip,
+            remote_port = remote_port,
+        )
 
         # Arbitrate/dispatch probe/records packets.
         dispatcher = Dispatcher(packet.source, [probe.sink, record.sink])
@@ -568,7 +585,7 @@ class LiteEthEtherbone(LiteXModule):
         # Create MMAP wishbone.
         self.wishbone = {
             "master": LiteEthEtherboneWishboneMaster(),
-            "slave":  LiteEthEtherboneWishboneSlave(),
+            "slave":  LiteEthEtherboneWishboneSlave(timeout=timeout),
         }[mode]
         self.comb += [
             record.receiver.source.connect(self.wishbone.sink),
