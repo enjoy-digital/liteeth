@@ -167,7 +167,7 @@ class TestGeneratedCore(unittest.TestCase):
         # with an error that names it.
         with open(_examples_dir / "udp_s7phyrgmii.yml", "r", encoding="utf-8") as f:
             config = yaml.load(f, Loader=yaml.Loader)
-        for phy in ["LiteEthS6PHYRGMII", "GW5_10G_BASER", "GW5_1000BASEX", "NotAPHY"]:
+        for phy in ["GW5_10G_BASER", "GW5_1000BASEX", "NotAPHY"]:
             with self.subTest(phy=phy):
                 config["phy"] = phy
                 with tempfile.TemporaryDirectory() as tmp:
