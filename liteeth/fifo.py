@@ -46,16 +46,30 @@ class PacketDropFIFO(LiteXModule):
         rd_ptr     = Signal(addr_bits + 1) # Next word to fetch out of the memory.
         out_valid  = Signal()              # rd_port.dat_r holds a fetched word.
         used       = Signal(addr_bits + 1)
-        full       = Signal()
+        full       = Signal()              # Registered: used == payload_depth.
+        readable   = Signal()              # Registered: rd_ptr != commit_ptr.
         overflow   = Signal()              # This packet has already lost a word.
         invalid    = Signal()              # This packet has been explicitly discarded.
         commit     = Signal()
         fetch      = Signal()
 
+        # Next pointer values: full and readable are registered from them (timing).
+        wr_ptr_next     = Signal(addr_bits + 1)
+        commit_ptr_next = Signal(addr_bits + 1)
+        rd_ptr_next     = Signal(addr_bits + 1)
+        out_valid_next  = Signal()
+
         self.comb += [
-            used.eq(wr_ptr - (rd_ptr - out_valid)),
-            full.eq(used == payload_depth),
+            used.eq(wr_ptr_next - (rd_ptr_next - out_valid_next)),
             sink.ready.eq(1), # Cannot backpressure!
+        ]
+        self.sync += [
+            wr_ptr.eq(wr_ptr_next),
+            commit_ptr.eq(commit_ptr_next),
+            rd_ptr.eq(rd_ptr_next),
+            out_valid.eq(out_valid_next),
+            full.eq(used == payload_depth),
+            readable.eq(rd_ptr_next != commit_ptr_next),
         ]
 
         # Write side
@@ -75,19 +89,28 @@ class PacketDropFIFO(LiteXModule):
         self.sync += [
             If(sink.valid,
                 invalid.eq(invalid | self.discard),
-                If(~overflow & ~full,
-                    wr_ptr.eq(wr_ptr + 1),
-                ).Else(
+                If(full | overflow,
                     overflow.eq(1),
                 ),
                 If(sink.last,
                     overflow.eq(0),
                     invalid.eq(0),
+                ),
+            ),
+        ]
+        self.comb += [
+            wr_ptr_next.eq(wr_ptr),
+            commit_ptr_next.eq(commit_ptr),
+            If(sink.valid,
+                If(~overflow & ~full,
+                    wr_ptr_next.eq(wr_ptr + 1),
+                ),
+                If(sink.last,
                     If(commit,
-                        commit_ptr.eq(wr_ptr + 1),
+                        commit_ptr_next.eq(wr_ptr + 1),
                     ).Else(
                         # Rewind: as far as the read side knows, this packet never arrived.
-                        wr_ptr.eq(commit_ptr),
+                        wr_ptr_next.eq(commit_ptr),
                     ),
                 ),
             ),
@@ -96,7 +119,7 @@ class PacketDropFIFO(LiteXModule):
         # Read side
         # ---------
         self.comb += [
-            fetch.eq((rd_ptr != commit_ptr) & (~out_valid | (source.valid & source.ready))),
+            fetch.eq(readable & (~out_valid | (source.valid & source.ready))),
             rd_port.adr.eq(rd_ptr[:addr_bits]),
             rd_port.re.eq(fetch),
             param_fifo.source.connect(source, omit={"valid", "ready", "first", "last", "dummy"}),
@@ -106,11 +129,13 @@ class PacketDropFIFO(LiteXModule):
             source.valid.eq(out_valid & param_fifo.source.valid),
             param_fifo.source.ready.eq(source.valid & source.last & source.ready),
         ]
-        self.sync += [
+        self.comb += [
+            rd_ptr_next.eq(rd_ptr),
+            out_valid_next.eq(out_valid),
             If(fetch,
-                rd_ptr.eq(rd_ptr + 1),
-                out_valid.eq(1),
+                rd_ptr_next.eq(rd_ptr + 1),
+                out_valid_next.eq(1),
             ).Elif(source.valid & source.ready,
-                out_valid.eq(0),
+                out_valid_next.eq(0),
             ),
         ]
