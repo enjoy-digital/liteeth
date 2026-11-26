@@ -34,17 +34,17 @@ class PCSTX32(LiteXModule):
 
 
         # PHY ports output
-        self.char_is_k = Signal(4) # is K output
-        self.data = Signal(32) # Data output
+        self.char_is_k = Signal(4, reset_less=True) # is K output
+        self.data = Signal(32, reset_less=True) # Data output
+        self.data.attr.add('keep')
+        self.char_is_k.attr.add('keep')
 
         # Signals.
         # --------
         ctype  = Signal() # Toggles config type.
         
-        char_is_k = Signal(4)
-        data = Signal(32)
-        data.attr.add('keep')
-        char_is_k.attr.add('keep')
+        char_is_k = Signal(4, reset_less=True)
+        data = Signal(32, reset_less=True)
         self.sync += [
                 self.data.eq(data),
                 self.char_is_k.eq(char_is_k),
@@ -87,10 +87,11 @@ class PCSTX32(LiteXModule):
         fsm.act("DATA",
             # Send Data.
             sink.ready.eq(1),
+            NextValue(data, sink.data),
+            NextValue(char_is_k, 0b0000),
             If(sink.last,
                 If(sink.be == 0b1111,
                     NextValue(char_is_k, 0b0000),
-                    NextValue(data, sink.data),
                     NextState("END-TRAM")
                 ),
                 If(sink.be == 0b0111,
@@ -120,9 +121,6 @@ class PCSTX32(LiteXModule):
                         )),
                     NextState("START")
                 ),
-            ).Else(
-                NextValue(char_is_k, 0b0000),
-                NextValue(data, sink.data),
             ),
         )
         fsm.act('CARRIER-EXT',
@@ -172,20 +170,39 @@ class PCSRX32(LiteXModule):
         # Pre Buffer.
         # To ease routing around the CC_SERDES this buffer allow the logic to be placed further away
         # -----------
-        data          = Signal.like(self.data)
-        char_is_k     = Signal.like(self.char_is_k)
-        disparity_err = Signal.like(self.disparity_err)
-        table_err     = Signal.like(self.table_err)
+        data          = Signal.like(self.data,          reset_less=True)
+        char_is_k     = Signal.like(self.char_is_k,     reset_less=True)
+        disparity_err = Signal.like(self.disparity_err, reset_less=True)
+        table_err     = Signal.like(self.table_err,     reset_less=True)
         data.attr.add('keep')
         char_is_k.attr.add('keep')
-        disparity_err.attr.add('keep')
-        table_err.attr.add('keep')
         self.sync += [
             data.eq(self.data),
             char_is_k.eq(self.char_is_k),
             disparity_err.eq(self.disparity_err),
             table_err.eq(self.table_err),
         ]
+
+        # Decode.
+        # Second register stage with the byte comparisons pre-computed, to keep the FSM shallow.
+        # -------
+        #_data      = data
+        #_char_is_k = char_is_k
+        #data       = Signal.like(_data,      reset_less=True)
+        #char_is_k  = Signal.like(_char_is_k, reset_less=True)
+        #self.sync += [
+        #    data.eq(_data),
+        #    char_is_k.eq(_char_is_k),
+        #]
+        matches = {}
+        def match(lane, code):
+            key = (lane, code.value)
+            if key not in matches:
+                #matches[key] = Signal(reset_less=True)
+                #self.sync += matches[key].eq(_data[8*lane:8*(lane + 1)] == code)
+                #self.comb += matches[key].eq(data[8*lane:8*(lane + 1)] == code)
+                matches[key] = (data[8*lane:8*(lane + 1)] == code)
+            return matches[key]
 
         # Buffer.
         # -------
@@ -200,89 +217,38 @@ class PCSRX32(LiteXModule):
         self.fsm = fsm = FSM()
         fsm.act("START",
             NextValue(buffer.sink.valid, 0),
+            NextValue(buffer.sink.data, data),
+            NextValue(buffer.sink.be, 0b0000),
             # Wait for a K-character.
-            If(char_is_k == 0x0001,
+            If(char_is_k == 1,
                 # K-character is Config or Idle K28.5.
-                If(data[0:8] == K(28, 5),
-                    If((data[8:16] == D(21, 5)) | # /C1/.
-                       (data[8:16] == D( 2, 2)),  # /C2/.
+                If(match(0, K(28, 5)),
+                    If(match(1, D(21, 5)) | # /C1/.
+                       match(1, D( 2, 2)),  # /C2/.
                         self.seen_valid_ci.eq(1),
                         self.seen_config_reg.eq(1),
                         self.config_reg.eq(data[16:32]),
                     ),
-                    # Check for Idle Word.
-                    If((data[8:16] == D( 5, 6)) | # /I1/.
-                       (data[8:16] == D(16, 2)),  # /I2/.
+                ),
+            ),
+            *(If(char_is_k[i:] == 1,
+                # K-character is Start-of-packet /S/.
+                If(match(i, K(27, 7)),
+                    NextValue(buffer.sink.valid, 1),
+                    NextValue(buffer.sink.be, (0b1111 << i) & 0b1111),
+                    NextValue(buffer.sink.data[i*8:(i+1)*8], C(0x55, 8)), # First Preamble Byte.
+                    NextState("DATA")
+                )
+            ) for i in range(4)),
+            # check for Idle word
+            *(If(char_is_k[i],
+                If(match(i, K(28, 5)),
+                    If(match(i+1, D( 5, 6)) | # /I1/.
+                       match(i+1, D( 16, 2)), # /I2/.
                         self.seen_valid_ci.eq(1),
-                    ),
+                    )
                 ),
-                # K-character is Start-of-packet /S/.
-                If(data[0:8] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1111),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0x55, 8), # First Preamble Byte.
-                        data[8:32]
-                    )),
-                    NextState("DATA")
-                )
-            ),
-            If(char_is_k[1:] == 0x001,
-               If(data[8:16] == K(28, 5),
-                    # Check for Idle Word.
-                    If((data[16:24] == D( 5, 6)) | # /I1/.
-                       (data[16:24] == D(16, 2)),  # /I2/.
-                        self.seen_valid_ci.eq(1),
-                    ),
-                ),
-                # K-character is Start-of-packet /S/.
-               If(data[8:16] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1110),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0, 8), # First Preamble Byte.
-                        C(0x55, 8), # First Preamble Byte.
-                        data[16:32]
-                    )),
-                    NextState("DATA")
-                )
-            ),
-            If(char_is_k[2:] == 0x01,
-               If(data[16:24] == K(28, 5),
-                    # Check for Idle Word.
-                    If((data[24:] == D( 5, 6)) | # /I1/.
-                       (data[24:] == D(16, 2)),  # /I2/.
-                        self.seen_valid_ci.eq(1),
-                    ),
-                ),
-                # K-character is Start-of-packet /S/.
-               If(data[16:24] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1100),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0, 16), # First Preamble Byte.
-                        C(0x55, 8), # First Preamble Byte.
-                        data[24:32]
-                    )),
-                    NextState("DATA")
-                )
-            ),
-            If(char_is_k[3:] == 0x1,
-               If(data[24:] == K(28, 5),
-                    # Check for Idle Word. (next cycle) maybe not usfull
-                    self.seen_valid_ci.eq(1),
-                ),
-                # K-character is Start-of-packet /S/.
-               If(data[24:] == K(27, 7),
-                    NextValue(buffer.sink.valid, 1),
-                    NextValue(buffer.sink.be, 0b1000),
-                    NextValue(buffer.sink.data, Cat(
-                        C(0, 24), # First Preamble Byte.
-                        C(0x55, 8), # First Preamble Byte.
-                    )),
-                    NextState("DATA")
-                )
-            ),
+            ) for i in range(3))# don't check IDLE word if it requiere another state on the FSM, routing is already too tight
         )
         fsm.act("DATA",
             self.seen_valid_ci.eq(1),
@@ -291,21 +257,21 @@ class PCSRX32(LiteXModule):
                 # Receive Data.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b1111),
-            ).Elif((char_is_k[0] == 1) & (data[0:8] == K(29, 7)),
+            ).Elif((char_is_k[0] == 1) & match(0, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 0),
                 NextState("START"),
-            ).Elif((char_is_k[:2] == 0b0010) & (data[8:16] == K(29, 7)),
+            ).Elif((char_is_k[:2] == 0b0010) & match(1, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0001),
                 NextState("START"),
-            ).Elif((char_is_k[:3] == 0b0100) & (data[16:24] == K(29, 7)),
+            ).Elif((char_is_k[:3] == 0b0100) & match(2, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0011),
                 NextState("START"),
-            ).Elif((char_is_k == 0b1000) & (data[24:32] == K(29, 7)),
+            ).Elif((char_is_k == 0b1000) & match(3, K(29, 7)),
                 # K-character is End-of-packet /S/.
                 NextValue(buffer.sink.valid, 1),
                 NextValue(buffer.sink.be, 0b0111),
@@ -321,74 +287,54 @@ class Realiner32(LiteXModule):
     def __init__(self,):
         self.sink      = stream.Endpoint(eth_phy_description(32))
         self.source    = stream.Endpoint(eth_phy_description(32))
-
-        rem = Signal(32)
-        rem_be = Signal(4)
-
         self.comb += self.sink.ready.eq(1)
+
+
+        rem = Signal(32, reset_less=True)
+        rem_be = Signal(4, reset_less=True)
+
+        align = Signal(2)
+        buf = Signal(64)
+        buf_be = Signal(8)
+        
+        self.sync += rem.eq(self.sink.data)
+        self.comb += buf.eq(Cat(rem, self.sink.data))
+        self.sync += Case(align, {
+            shift: self.source.data.eq(buf >> (8*shift))
+            for shift in range(4)
+            })
+        
+        self.sync += rem_be.eq(self.sink.be)
+        self.comb += buf_be.eq(Cat(rem_be, Mux(self.sink.valid, self.sink.be, 0)))
+        self.sync += Case(align, {
+            shift: self.source.be.eq(buf_be >> (shift))
+            for shift in range(4)
+            })
 
         self.fsm = fsm = FSM()
         fsm.act('IDLE',
                 NextValue(self.source.valid, 0),
                 NextValue(self.source.last, 0),
                 If(self.sink.valid,
-                   If(self.sink.be == 0b1111,
-                      NextValue(self.source.be, 0b1111),
-                      NextValue(self.source.data, self.sink.data),
-                      NextValue(self.source.valid, 1),
-                      NextState('ALIGN_0'),
-                    ),
-                   If(self.sink.be == 0b1110,
-                      NextValue(self.source.be, 0b0000),
-                      NextValue(rem, self.sink.data[8:]),
-                      NextState('ALIGN_1'),
-                    ),
-                   If(self.sink.be == 0b1100,
-                      NextValue(self.source.be, 0b0000),
-                      NextValue(rem, self.sink.data[16:]),
-                      NextState('ALIGN_2'),
-                    ),
-                   If(self.sink.be == 0b1000,
-                      NextValue(self.source.be, 0b0000),
-                      NextValue(rem, self.sink.data[24:]),
-                      NextState('ALIGN_3'),
-                    ),
+                    Case(self.sink.be, {
+                        (0b1111 << i) & 0b1111: NextValue(align, i)
+                        for i in range(4)
+                        }),
+                    NextState('RUN'),
                 ),
         )
-        fsm.act('ALIGN_0',
-                If(self.sink.valid,
-                    NextValue(self.source.be, self.sink.be),
-                    NextValue(self.source.data, self.sink.data),
-                    NextValue(self.source.valid, 1),
-                    If(self.sink.last,
-                       NextValue(self.source.last, 1),
-                       NextState('IDLE'),
-                    ),
+        fsm.act('RUN',
+                NextValue(self.source.valid, 1),
+                If(self.sink.last,
+                    If((self.sink.be >> align) == 0,
+                        NextValue(self.source.last, 1),
+                        NextState('IDLE'),
+                    ).Else(
+                        NextState('END'),
+                    )
                 ),
             )
-        for i in range(1, 4):
-            j = i * 8 # for bytes index
-            fsm.act(f'ALIGN_{i}',
-                    If(self.sink.valid,
-                        NextValue(self.source.be, Cat((1 << (4-i)) - 1, self.sink.be[:i])),
-                        NextValue(self.source.valid, 1),
-                        NextValue(self.source.data, Cat(rem[:-j], self.sink.data[:j])),
-                        NextValue(rem, self.sink.data[j:]),
-                        If(self.sink.last,
-                           If(self.sink.be[i:],
-                               NextValue(rem_be, self.sink.be[i:]),
-                               NextState(f'END_{i}'),
-                           ).Else(
-                               NextValue(self.source.last, 1),
-                               NextState('IDLE'),
-                           )
-                        ),
-                    ),
-                )
-            fsm.act(f'END_{i}',
-                    NextValue(self.source.be, rem_be),
-                    NextValue(self.source.valid, 1),
-                    NextValue(self.source.data, rem[:-j]),
-                    NextValue(self.source.last, 1),
-                    NextState('IDLE'),
-                )
+        fsm.act('END',
+                NextValue(self.source.last, 1),
+                NextState('IDLE'),
+            )
