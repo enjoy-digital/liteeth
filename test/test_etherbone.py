@@ -85,6 +85,7 @@ class DUT(LiteXModule):
                     self.tx_params.append((
                         (yield self.tx_port.sink.src_port),
                         (yield self.tx_port.sink.dst_port),
+                        (yield self.tx_port.sink.length),
                     ))
                 first = (yield self.tx_port.sink.last)
             yield
@@ -114,6 +115,24 @@ class TestEtherbone(unittest.TestCase):
 
         response = yield from self.receive(dut)
         self.assertEqual(response.pr, 1)
+
+    def do_oversized_probe(self, dut):
+        # Probe with more than one payload word: must be answered, not stall the core.
+        packet = etherbone.EtherbonePacket()
+        packet.pf = 1
+        packet.encode()
+        packet.bytes += bytes([0x00]*12)
+        packet = encode_packet(packet)
+        yield dut.streamer.source.src_port.eq(src_port)
+        yield dut.streamer.source.dst_port.eq(udp_port)
+        yield dut.streamer.source.ip_address.eq(ip_address)
+        yield dut.streamer.source.length.eq(len(packet))
+        dut.streamer.send(packet) # Non-blocking, a stalled core shows up as a receive timeout.
+
+        response = yield from self.receive(dut)
+        self.assertEqual(response.pr, 1)
+        self.assertEqual(len(dut.logger.packet), 12)
+        self.assertEqual(dut.tx_params[-1][2], 12)
 
     def do_writes(self, dut, datas):
         for i in range(len(datas)):
@@ -168,6 +187,20 @@ class TestEtherbone(unittest.TestCase):
         yield from self.do_writes(dut, [0x0c000000 | i for i in range(8)])
         yield from self.do_reads(dut, [0x0d000000 | i for i in range(8)])
 
+    def test_oversized_probe(self):
+        dut = DUT()
+        def generator(dut):
+            yield from self.do_oversized_probe(dut)
+            yield from self.do_probe(dut)
+            yield from self.do_writes(dut, [0x12345678])
+            yield from self.do_reads(dut, [0x87654321])
+        run_simulation(dut, [
+            generator(dut),
+            dut.streamer.generator(),
+            dut.logger.generator(),
+            dut.tx_params_logger(),
+        ])
+
     def test_probe_write_read(self):
         dut = DUT()
         run_simulation(dut, [
@@ -177,6 +210,6 @@ class TestEtherbone(unittest.TestCase):
             dut.tx_params_logger(),
         ])
         self.assertTrue(len(dut.tx_params) > 0)
-        for tx_src_port, tx_dst_port in dut.tx_params:
+        for tx_src_port, tx_dst_port, _ in dut.tx_params:
             self.assertEqual(tx_src_port, udp_port)
             self.assertEqual(tx_dst_port, src_port)

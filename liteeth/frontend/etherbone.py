@@ -152,7 +152,17 @@ class LiteEthEtherboneProbe(LiteXModule):
             param_depth   = 1,
             buffered      = False
         )
-        self.comb += sink.connect(fifo.sink)
+        # Only the first payload word is answered: drain the rest so a longer probe cannot stall
+        # the 1-word FIFO (and the whole Etherbone RX path) waiting for last.
+        first = Signal(reset=1)
+        self.sync += If(sink.valid & sink.ready, first.eq(sink.last))
+        self.comb += [
+            sink.connect(fifo.sink, omit={"valid", "ready", "last", "length"}),
+            fifo.sink.valid.eq(sink.valid & first),
+            fifo.sink.last.eq(1),
+            fifo.sink.length.eq(Mux(sink.length > 4, 4, sink.length)),
+            sink.ready.eq(fifo.sink.ready | ~first),
+        ]
 
         self.fsm = fsm = FSM(reset_state="IDLE")
         fsm.act("IDLE",
